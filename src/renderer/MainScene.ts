@@ -21,8 +21,12 @@ export class MainScene extends Phaser.Scene {
     // Class properties for UI Text
     p1GoldText!: Phaser.GameObjects.Text;
     p2GoldText!: Phaser.GameObjects.Text;
-    feedbackText!: Phaser.GameObjects.Text;
     costText!: Phaser.GameObjects.Text;
+    feedbackText!: Phaser.GameObjects.Text;
+    p1TitleText!: Phaser.GameObjects.Text;
+    p2TitleText!: Phaser.GameObjects.Text;
+    p1Coin!: Phaser.GameObjects.Image;
+    p2Coin!: Phaser.GameObjects.Image;
 
     create() {
         this.cameras.main.setBackgroundColor('#2d2d2d');
@@ -51,34 +55,27 @@ export class MainScene extends Phaser.Scene {
             fontStyle: 'bold'
         });
 
-        // Turn Info
-        this.add.text(sidebarX + 20, 70, 'Turn:', {
-            fontFamily: 'Arial',
-            fontSize: '18px',
-            color: '#aaaaaa'
-        });
-        this.uiText = this.add.text(sidebarX + 80, 70, '', {
-            fontFamily: 'Arial',
-            fontSize: '22px',
-            color: '#ffffff',
-            fontStyle: 'bold'
-        });
+        // Turn Info (Removed raw text, integrated into player highlight)
+        // Kept for simple turn count if needed, but requested UI emphasizes player.
+        this.uiText = this.add.text(sidebarX + 220, 20, '', {
+            fontFamily: 'Arial', fontSize: '14px', color: '#aaaaaa'
+        }); // Maybe use for Turn #?
 
         // P1 Gold Info
-        this.add.text(sidebarX + 20, 120, 'Player 1', {
-            fontFamily: 'Arial', fontSize: '16px', color: '#ff4444', fontStyle: 'bold'
+        this.p1TitleText = this.add.text(sidebarX + 20, 80, 'Player 1', {
+            fontFamily: 'Arial', fontSize: '24px', color: '#ff4444', fontStyle: 'bold'
         });
-        this.add.image(sidebarX + 30, 150, 'coin').setDisplaySize(24, 24);
-        this.p1GoldText = this.add.text(sidebarX + 55, 140, '0', {
+        this.p1Coin = this.add.image(sidebarX + 30, 115, 'coin').setDisplaySize(24, 24);
+        this.p1GoldText = this.add.text(sidebarX + 55, 105, '0', {
             fontFamily: 'Arial', fontSize: '20px', color: '#ffd700'
         });
 
         // P2 Gold Info
-        this.add.text(sidebarX + 20, 190, 'Player 2', {
-            fontFamily: 'Arial', fontSize: '16px', color: '#4444ff', fontStyle: 'bold'
+        this.p2TitleText = this.add.text(sidebarX + 20, 160, 'Player 2', {
+            fontFamily: 'Arial', fontSize: '24px', color: '#4444ff', fontStyle: 'bold'
         });
-        this.add.image(sidebarX + 30, 220, 'coin').setDisplaySize(24, 24);
-        this.p2GoldText = this.add.text(sidebarX + 55, 210, '0', {
+        this.p2Coin = this.add.image(sidebarX + 30, 195, 'coin').setDisplaySize(24, 24);
+        this.p2GoldText = this.add.text(sidebarX + 55, 185, '0', {
             fontFamily: 'Arial', fontSize: '20px', color: '#ffd700'
         });
 
@@ -145,6 +142,28 @@ export class MainScene extends Phaser.Scene {
             this.drawMap();
             this.updateUI();
         });
+        this.engine.on('gameOver', (winner: string) => {
+            this.updateUI(); // Final update
+
+            // Victory Overlay
+            const w = this.sys.game.config.width as number;
+            const h = this.sys.game.config.height as number;
+
+            const overlay = this.add.graphics();
+            overlay.fillStyle(0x000000, 0.8);
+            overlay.fillRect(0, 0, w, h);
+
+            this.add.text(w / 2, h / 2, `${winner === 'P1' ? 'PLAYER 1' : 'PLAYER 2'} WINS!`, {
+                fontSize: '64px',
+                color: winner === 'P1' ? '#ff4444' : '#4444ff',
+                fontStyle: 'bold',
+                stroke: '#ffffff',
+                strokeThickness: 6
+            }).setOrigin(0.5);
+
+            // Disable input?
+            this.input.enabled = false;
+        });
 
         // Initial Draw
         this.drawMap();
@@ -191,8 +210,14 @@ export class MainScene extends Phaser.Scene {
                 // Highlight Pending Moves
                 const isPending = this.engine.pendingMoves.some(m => m.r === r && m.c === c);
                 if (isPending) {
-                    // Draw a yellow border or overlay
-                    this.gridGraphics.lineStyle(4, 0xffff00);
+                    const cost = this.engine.getMoveCost(r, c);
+                    if (cost === GameConfig.COST_ATTACK) {
+                        // Attack: Red Border
+                        this.gridGraphics.lineStyle(4, 0xff0000);
+                    } else {
+                        // Capture: Yellow Border
+                        this.gridGraphics.lineStyle(4, 0xffff00);
+                    }
                     this.gridGraphics.strokeRect(x + 2, y + 2, this.tileSize - 6, this.tileSize - 6);
                 }
             }
@@ -204,20 +229,53 @@ export class MainScene extends Phaser.Scene {
         const p2 = this.engine.state.players['P2'];
         const curr = this.engine.state.currentPlayerId;
 
-        // Update Phaser Text
-        if (this.uiText) this.uiText.setText(curr || '-');
+        // Update Turn Counter
+        if (this.uiText) this.uiText.setText(`Turn ${this.engine.state.turnCount}`);
+
+        // Update Gold Text
         if (this.p1GoldText) this.p1GoldText.setText(p1.gold.toString());
         if (this.p2GoldText) this.p2GoldText.setText(p2.gold.toString());
 
+        // Highlight Active Player
+        if (curr === 'P1') {
+            this.p1TitleText.setAlpha(1).setScale(1.2);
+            this.p1GoldText.setAlpha(1);
+            this.p1Coin.setAlpha(1);
+
+            this.p2TitleText.setAlpha(0.3).setScale(1.0);
+            this.p2GoldText.setAlpha(0.3);
+            this.p2Coin.setAlpha(0.3);
+        } else {
+            this.p2TitleText.setAlpha(1).setScale(1.2);
+            this.p2GoldText.setAlpha(1);
+            this.p2Coin.setAlpha(1);
+
+            this.p1TitleText.setAlpha(0.3).setScale(1.0);
+            this.p1GoldText.setAlpha(0.3);
+            this.p1Coin.setAlpha(0.3);
+        }
+
         // Update Cost
-        const cost = this.engine.pendingMoves.length * GameConfig.COST_CAPTURE;
-        if (this.costText) this.costText.setText(`${cost} G`);
+        let totalCost = 0;
+        let hasHighCost = false;
+
+        for (const m of this.engine.pendingMoves) {
+            const cost = this.engine.getMoveCost(m.r, m.c);
+            totalCost += cost;
+            if (cost > GameConfig.COST_ATTACK) {
+                hasHighCost = true;
+            }
+        }
+        if (this.costText) this.costText.setText(`${totalCost} G`);
 
         // Update Feedback
         if (this.feedbackText) {
             if (this.engine.lastError) {
                 this.feedbackText.setText(`⚠️ ${this.engine.lastError}`);
                 this.feedbackText.setColor('#ff5555');
+            } else if (hasHighCost) {
+                this.feedbackText.setText('⚠️ Distance Penalty: Attack cost doubled!');
+                this.feedbackText.setColor('#ffff00');
             } else {
                 this.feedbackText.setText('Select cells to plan. Click "END TURN" to build.');
                 this.feedbackText.setColor('#eeeeee');

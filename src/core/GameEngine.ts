@@ -1,7 +1,7 @@
 import { GameState } from './GameState';
 import { type PlayerID, GameConfig } from './GameConfig';
 
-type EventCallback = () => void;
+type EventCallback = (data?: any) => void;
 
 export class GameEngine {
     state: GameState;
@@ -18,9 +18,9 @@ export class GameEngine {
         this.listeners[event].push(callback);
     }
 
-    emit(event: string) {
+    emit(event: string, data?: any) {
         if (this.listeners[event]) {
-            this.listeners[event].forEach(cb => cb());
+            this.listeners[event].forEach(cb => cb(data)); // Pass data
         }
     }
 
@@ -62,6 +62,24 @@ export class GameEngine {
         this.emit('planUpdate');
     }
 
+    // Helper to get cost of a specific move
+    getMoveCost(row: number, col: number): number {
+        const cell = this.state.getCell(row, col);
+        if (!cell) return 0;
+
+        // If owned by enemy, it's an attack
+        if (cell.owner !== null && cell.owner !== this.state.currentPlayerId) {
+            // Distance Rule: If adjacent to OWNED land, normal cost.
+            // If only adjacent to PENDING land (chained), double cost.
+            if (this.isAdjacentToOwned(row, col, this.state.currentPlayerId)) {
+                return GameConfig.COST_ATTACK;
+            } else {
+                return GameConfig.COST_ATTACK * 2;
+            }
+        }
+        return GameConfig.COST_CAPTURE;
+    }
+
     validateMove(row: number, col: number): { valid: boolean, reason?: string } {
         const playerId = this.state.currentPlayerId;
         const player = this.state.players[playerId];
@@ -69,20 +87,22 @@ export class GameEngine {
         // 1. Basic Cell Checks
         const cell = this.state.getCell(row, col);
         if (!cell) return { valid: false, reason: "Out of bounds" };
-        if (cell.owner !== null) return { valid: false, reason: "Already owned" };
+        if (cell.owner === playerId) return { valid: false, reason: "Already owned" }; // Self-own check
 
         // 2. Cost Check
-        // Cost = (current pending count + 1) * COST ? No, cost is constant per cell for now.
-        const currentCost = this.pendingMoves.length * GameConfig.COST_CAPTURE;
-        if (player.gold < currentCost + GameConfig.COST_CAPTURE) {
-            return { valid: false, reason: "Not enough gold" };
+        // Calculate total cost of pending moves + this move
+        let plannedCost = 0;
+        for (const m of this.pendingMoves) {
+            plannedCost += this.getMoveCost(m.r, m.c);
+        }
+        const thisMoveCost = this.getMoveCost(row, col);
+
+        if (player.gold < plannedCost + thisMoveCost) {
+            return { valid: false, reason: `Not enough gold (Need ${thisMoveCost})` };
         }
 
         // 3. Adjacency Check
-        // Must be adjacent to (Owned Land OR Pending Land)
-        // We temporarily treat pending moves as "owned" for this check's purpose?
-        // Or simple check: Is it adjacent to any owned cell OR any pending cell?
-
+        // must be adjacent to OWNED or PENDING
         const isAdjToOwned = this.isAdjacentToOwned(row, col, playerId);
         const isAdjToPending = this.isAdjacentToPending(row, col);
 
@@ -106,25 +126,35 @@ export class GameEngine {
 
     commitMoves() {
         const pid = this.state.currentPlayerId;
-        // Execute all pending moves
-        // We re-verify? No, assuming they were valid when added, 
-        // BUT ordering might matter if we supported chaining which we do.
-        // Actually, if we just set them all to owned, it's fine.
 
-        let cost = 0;
+        let totalCost = 0;
+        let gameWon = false;
+
         for (const move of this.pendingMoves) {
+            const cost = this.getMoveCost(move.r, move.c);
+            const cell = this.state.getCell(move.r, move.c);
+
+            // Win Condition Check: Capture Enemy Base
+            if (cell && cell.building === 'base' && cell.owner !== pid) {
+                gameWon = true;
+            }
+
             this.state.setOwner(move.r, move.c, pid);
-            cost += GameConfig.COST_CAPTURE;
+            totalCost += cost;
         }
 
-        if (cost > 0) {
-            this.state.players[pid].gold -= cost;
-            this.emit('mapUpdate'); // Global map refresh
+        if (totalCost > 0) {
+            this.state.players[pid].gold -= totalCost;
+            this.emit('mapUpdate');
         }
 
         this.pendingMoves = []; // Clear
         this.lastError = null;
         this.emit('planUpdate');
+
+        if (gameWon) {
+            this.emit('gameOver', pid); // Winner is current player
+        }
     }
 
     // Kept for internal logic if needed, but mostly unused
