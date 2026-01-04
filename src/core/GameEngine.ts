@@ -12,6 +12,12 @@ export class GameEngine {
     pendingMoves: { r: number, c: number }[];
     lastError: string | null = null;
 
+    // AI Visualization
+    lastAiMoves: { r: number, c: number }[] = [];
+
+    // Game Config State
+    isSwapped: boolean = false;
+
     // AI
     ai: AIController;
 
@@ -36,6 +42,19 @@ export class GameEngine {
     }
 
     // Actions
+    restartGame() {
+        this.isSwapped = !this.isSwapped;
+        this.state.reset(this.isSwapped);
+        this.pendingMoves = [];
+        this.lastAiMoves = [];
+        this.lastError = null;
+
+        this.emit('mapUpdate'); // Redraw grid
+        this.emit('turnChange'); // Update UI text
+        this.emit('gameOver', null); // Clear overlay if any? No, we need a specific 'gameRestart' event
+        this.emit('gameRestart');
+    }
+
     endTurn() {
         // Auto-commit valid moves before ending turn?
         // Or should we clear them? User usually expects "End Turn" to "Finish up".

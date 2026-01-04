@@ -15,6 +15,7 @@ export class AIController {
 
         const player = this.engine.state.players[playerId];
         let attempts = 0;
+        const movesMade: { r: number, c: number }[] = [];
 
         // Simple Loop: Try to find valid moves until out of gold or no valid moves
         while (player.gold >= GameConfig.COST_CAPTURE && attempts < 20) {
@@ -35,11 +36,15 @@ export class AIController {
 
                 // Commit immediately to update state for next calculation
                 this.engine.commitMoves();
+                movesMade.push({ r: move.r, c: move.c });
             } else {
                 break; // No move found
             }
             attempts++;
         }
+
+        this.engine.lastAiMoves = movesMade;
+        this.engine.emit('mapUpdate'); // Ensure UI updates to show highlights
 
         // End Turn
         this.engine.endTurn();

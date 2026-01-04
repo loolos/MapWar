@@ -142,6 +142,17 @@ export class MainScene extends Phaser.Scene {
             this.drawMap();
             this.updateUI();
         });
+        let overlayContainer: Phaser.GameObjects.Container;
+
+        this.engine.on('gameRestart', () => {
+            if (overlayContainer) {
+                overlayContainer.destroy();
+            }
+            this.input.enabled = true;
+            this.updateUI();
+            this.drawMap();
+        });
+
         this.engine.on('gameOver', (winner: string) => {
             this.updateUI(); // Final update
 
@@ -149,17 +160,38 @@ export class MainScene extends Phaser.Scene {
             const w = this.sys.game.config.width as number;
             const h = this.sys.game.config.height as number;
 
-            const overlay = this.add.graphics();
-            overlay.fillStyle(0x000000, 0.8);
-            overlay.fillRect(0, 0, w, h);
+            overlayContainer = this.add.container(0, 0);
 
-            this.add.text(w / 2, h / 2, `${winner === 'P1' ? 'PLAYER 1' : 'PLAYER 2'} WINS!`, {
+            const bg = this.add.graphics();
+            bg.fillStyle(0x000000, 0.8);
+            bg.fillRect(0, 0, w, h);
+            overlayContainer.add(bg);
+
+            const title = this.add.text(w / 2, h / 2 - 50, `${winner === 'P1' ? 'PLAYER 1' : 'PLAYER 2'} WINS!`, {
                 fontSize: '64px',
                 color: winner === 'P1' ? '#ff4444' : '#4444ff',
                 fontStyle: 'bold',
                 stroke: '#ffffff',
                 strokeThickness: 6
             }).setOrigin(0.5);
+            overlayContainer.add(title);
+
+            // Restart Button
+            const restartBtn = this.add.text(w / 2, h / 2 + 60, 'PLAY AGAIN (SWAP)', {
+                fontSize: '32px',
+                color: '#ffffff',
+                backgroundColor: '#333333',
+                padding: { x: 20, y: 10 }
+            })
+                .setOrigin(0.5)
+                .setInteractive({ useHandCursor: true })
+                .on('pointerdown', () => {
+                    this.engine.restartGame();
+                })
+                .on('pointerover', () => restartBtn.setStyle({ backgroundColor: '#555555' }))
+                .on('pointerout', () => restartBtn.setStyle({ backgroundColor: '#333333' }));
+
+            overlayContainer.add(restartBtn);
 
             // Disable input?
             this.input.enabled = false;
@@ -221,21 +253,35 @@ export class MainScene extends Phaser.Scene {
                     this.gridGraphics.fillStyle(0xffffff);
                     this.gridGraphics.fillCircle(x + this.tileSize / 2, y + this.tileSize / 2, 10);
                 }
-
-                // Highlight Pending Moves
-                const isPending = this.engine.pendingMoves.some(m => m.r === r && m.c === c);
-                if (isPending) {
-                    const cost = this.engine.getMoveCost(r, c);
-                    if (cost === GameConfig.COST_ATTACK) {
-                        // Attack: Red Border
-                        this.gridGraphics.lineStyle(4, 0xff0000);
-                    } else {
-                        // Capture: Yellow Border
-                        this.gridGraphics.lineStyle(4, 0xffff00);
-                    }
-                    this.gridGraphics.strokeRect(x + 2, y + 2, this.tileSize - 6, this.tileSize - 6);
-                }
             }
+        }
+
+        // Draw pending moves (selection)
+        // This section replaces the old "Highlight Pending Moves" logic that was inside the loop.
+        for (const p of this.engine.pendingMoves) {
+            const x = p.c * this.tileSize;
+            const y = p.r * this.tileSize;
+
+            // Different color for Attack vs Capture?
+            // Pending move doesn't store type, but we can check owner
+            const cell = this.engine.state.getCell(p.r, p.c);
+            if (cell && cell.owner && cell.owner !== this.engine.state.currentPlayerId) {
+                this.gridGraphics.lineStyle(4, 0xff0000, 1); // Red for attack
+            } else {
+                this.gridGraphics.lineStyle(4, 0xffff00, 1); // Yellow for capture
+            }
+
+            this.gridGraphics.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
+        }
+
+        // Draw Last AI Moves Highlight
+        this.gridGraphics.lineStyle(4, 0xffffff, 0.8); // White, semi-transparent
+        for (const m of this.engine.lastAiMoves) {
+            const x = m.c * this.tileSize;
+            const y = m.r * this.tileSize;
+            this.gridGraphics.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
+
+            // Optional: Add a small "!" text? Or just border is enough.
         }
     }
 

@@ -18,7 +18,7 @@ export class GameState {
         this.initializeGrid();
     }
 
-    private initializeGrid() {
+    private initializeGrid(swapped: boolean = false) {
         for (let r = 0; r < GameConfig.GRID_SIZE; r++) {
             this.grid[r] = [];
             for (let c = 0; c < GameConfig.GRID_SIZE; c++) {
@@ -26,12 +26,29 @@ export class GameState {
             }
         }
 
-        // Initial setup
-        this.setOwner(0, 0, 'P1');
-        this.setBuilding(0, 0, 'base');
+        // Setup Positions
+        // User Request: Red (P1) at Bottom-Right by default. Blue (P2) at Top-Left.
+        // If swapped=true (via UI toggle), we revert to Top-Left/Bottom-Right.
 
-        this.setOwner(GameConfig.GRID_SIZE - 1, GameConfig.GRID_SIZE - 1, 'P2');
-        this.setBuilding(GameConfig.GRID_SIZE - 1, GameConfig.GRID_SIZE - 1, 'base');
+        const p1Start = swapped ? { r: 0, c: 0 } : { r: GameConfig.GRID_SIZE - 1, c: GameConfig.GRID_SIZE - 1 };
+        const p2Start = swapped ? { r: GameConfig.GRID_SIZE - 1, c: GameConfig.GRID_SIZE - 1 } : { r: 0, c: 0 };
+
+        // Initial setup
+        this.setOwner(p1Start.r, p1Start.c, 'P1');
+        this.setBuilding(p1Start.r, p1Start.c, 'base');
+
+        this.setOwner(p2Start.r, p2Start.c, 'P2');
+        this.setBuilding(p2Start.r, p2Start.c, 'base');
+    }
+
+    // Reset Game State
+    reset(swapped: boolean) {
+        this.grid = [];
+        this.players['P1'].gold = GameConfig.INITIAL_GOLD;
+        this.players['P2'].gold = GameConfig.INITIAL_GOLD;
+        this.currentPlayerId = 'P1';
+        this.turnCount = 1;
+        this.initializeGrid(swapped);
     }
 
     getCell(row: number, col: number): Cell | null {
