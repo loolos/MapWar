@@ -13,6 +13,10 @@ export class MainScene extends Phaser.Scene {
         this.engine = new GameEngine();
     }
 
+    preload() {
+        this.load.image('coin', 'assets/coin.png');
+    }
+
     create() {
         this.cameras.main.setBackgroundColor('#2d2d2d');
 
@@ -23,7 +27,54 @@ export class MainScene extends Phaser.Scene {
 
         // Graphics Container
         this.gridGraphics = this.add.graphics();
-        this.uiText = this.add.text(10, 10, '', { font: '16px Courier', color: '#ffffff' });
+
+        // Sidebar UI Container
+        const sidebarX = GameConfig.GRID_SIZE * this.tileSize;
+
+        // Draw Sidebar Background
+        const sidebarBg = this.add.graphics();
+        sidebarBg.fillStyle(0x222222); // Darker sidebar background
+        sidebarBg.fillRect(sidebarX, 0, 250, this.sys.game.config.height as number);
+
+        // Sidebar Header
+        this.add.text(sidebarX + 20, 20, 'GAME STATUS', {
+            fontFamily: 'Arial',
+            fontSize: '24px',
+            color: '#ffffff',
+            fontStyle: 'bold'
+        });
+
+        // Turn Info
+        this.add.text(sidebarX + 20, 70, 'Turn:', {
+            fontFamily: 'Arial',
+            fontSize: '18px',
+            color: '#aaaaaa'
+        });
+        this.uiText = this.add.text(sidebarX + 80, 70, '', {
+            fontFamily: 'Arial',
+            fontSize: '22px',
+            color: '#ffffff',
+            fontStyle: 'bold'
+        });
+
+        // P1 Gold Info
+        this.add.text(sidebarX + 20, 120, 'Player 1', {
+            fontFamily: 'Arial', fontSize: '16px', color: '#ff4444', fontStyle: 'bold'
+        });
+        this.add.image(sidebarX + 30, 150, 'coin').setDisplaySize(24, 24);
+        this.p1GoldText = this.add.text(sidebarX + 55, 140, '0', {
+            fontFamily: 'Arial', fontSize: '20px', color: '#ffd700'
+        });
+
+        // P2 Gold Info
+        this.add.text(sidebarX + 20, 190, 'Player 2', {
+            fontFamily: 'Arial', fontSize: '16px', color: '#4444ff', fontStyle: 'bold'
+        });
+        this.add.image(sidebarX + 30, 220, 'coin').setDisplaySize(24, 24);
+        this.p2GoldText = this.add.text(sidebarX + 55, 210, '0', {
+            fontFamily: 'Arial', fontSize: '20px', color: '#ffd700'
+        });
+
 
         // Event Listeners (View -> Model binding)
         this.engine.on('mapUpdate', () => this.drawMap());
@@ -36,18 +87,21 @@ export class MainScene extends Phaser.Scene {
         this.drawMap();
         this.updateUI();
 
-        // End Turn Button (Simple Text for now)
-        this.add.text(GameConfig.GRID_SIZE * this.tileSize + 20, 50, 'END TURN', {
-            fontSize: '24px',
-            backgroundColor: '#444',
-            padding: { x: 10, y: 5 }
-        })
-            .setInteractive()
-            .on('pointerdown', () => this.engine.endTurn());
+        // Bind DOM UI
+        const btnEndTurn = document.getElementById('btn-end-turn');
+        if (btnEndTurn) {
+            btnEndTurn.onclick = () => this.engine.endTurn();
+        }
     }
 
+    // Class properties for UI Text
+    p1GoldText!: Phaser.GameObjects.Text;
+    p2GoldText!: Phaser.GameObjects.Text;
+
     handleInput(pointer: Phaser.Input.Pointer) {
-        // Simple hit test
+        // Simple hit test - Only process clicks on the grid
+        if (pointer.x >= GameConfig.GRID_SIZE * this.tileSize) return; // Ignore clicks on sidebar
+
         const col = Math.floor(pointer.x / this.tileSize);
         const row = Math.floor(pointer.y / this.tileSize);
 
@@ -88,11 +142,9 @@ export class MainScene extends Phaser.Scene {
         const p2 = this.engine.state.players['P2'];
         const curr = this.engine.state.currentPlayerId;
 
-        this.uiText.setText(
-            `Turn: ${curr}\n` +
-            `P1 Gold: ${p1.gold}\n` +
-            `P2 Gold: ${p2.gold}\n` +
-            `Cost to Capture: ${GameConfig.COST_CAPTURE}`
-        );
+        // Update Phaser Text
+        if (this.uiText) this.uiText.setText(curr || '-');
+        if (this.p1GoldText) this.p1GoldText.setText(p1.gold.toString());
+        if (this.p2GoldText) this.p2GoldText.setText(p2.gold.toString());
     }
 }

@@ -4,7 +4,7 @@ import { GameConfig } from './core/GameConfig';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
-  width: GameConfig.GRID_SIZE * 64 + 200, // Extra space for UI
+  width: GameConfig.GRID_SIZE * 64 + 250, // Extra space for graphical sidebar
   height: GameConfig.GRID_SIZE * 64,
   parent: 'app',
   scene: [MainScene],
