@@ -28,7 +28,7 @@ export class MainScene extends Phaser.Scene {
     }
 
     create() {
-        this.cameras.main.setBackgroundColor('#2d2d2d');
+        this.cameras.main.setBackgroundColor(GameConfig.COLORS.BG);
 
         // Input
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
@@ -52,7 +52,7 @@ export class MainScene extends Phaser.Scene {
 
         // Draw Action Bar Background
         const actionBg = this.add.graphics();
-        actionBg.fillStyle(0x333333);
+        actionBg.fillStyle(GameConfig.COLORS.ACTION_BG);
         actionBg.fillRect(0, actionBarY, (this.sys.game.config.width as number), actionBarHeight);
 
         // Initialize UI Systems
@@ -156,9 +156,9 @@ export class MainScene extends Phaser.Scene {
                     alpha = 0.5;
                 }
 
-                if (cell.owner === 'P1') this.gridGraphics.fillStyle(0x880000, alpha);
-                else if (cell.owner === 'P2') this.gridGraphics.fillStyle(0x000088, alpha);
-                else this.gridGraphics.fillStyle(0x555555, 1.0);
+                if (cell.owner === 'P1') this.gridGraphics.fillStyle(GameConfig.COLORS.P1, alpha);
+                else if (cell.owner === 'P2') this.gridGraphics.fillStyle(GameConfig.COLORS.P2, alpha);
+                else this.gridGraphics.fillStyle(GameConfig.COLORS.NEUTRAL, 1.0);
 
                 this.gridGraphics.fillRect(x, y, this.tileSize - 2, this.tileSize - 2);
 
@@ -166,7 +166,7 @@ export class MainScene extends Phaser.Scene {
 
 
                 if (cell.building === 'base') {
-                    this.gridGraphics.fillStyle(0xffffff);
+                    this.gridGraphics.fillStyle(GameConfig.COLORS.BASE);
                     this.gridGraphics.fillCircle(x + this.tileSize / 2, y + this.tileSize / 2, 10);
                 }
             }
@@ -180,15 +180,15 @@ export class MainScene extends Phaser.Scene {
 
             // Highlight color based on action type
             if (cell && cell.owner && cell.owner !== this.engine.state.currentPlayerId) {
-                this.gridGraphics.lineStyle(4, 0xff0000, 1); // Attack
+                this.gridGraphics.lineStyle(4, GameConfig.COLORS.HIGHLIGHT_ATTACK, 1); // Attack
             } else {
-                this.gridGraphics.lineStyle(4, 0xffff00, 1); // Move/Capture
+                this.gridGraphics.lineStyle(4, GameConfig.COLORS.HIGHLIGHT_MOVE, 1); // Move/Capture
             }
             this.gridGraphics.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
         }
 
         // Highlight AI Moves
-        this.gridGraphics.lineStyle(4, 0xffffff, 0.8);
+        this.gridGraphics.lineStyle(4, GameConfig.COLORS.HIGHLIGHT_AI, 0.8);
         for (const m of this.engine.lastAiMoves) {
             const x = m.c * this.tileSize;
             const y = m.r * this.tileSize;
@@ -248,7 +248,7 @@ export class MainScene extends Phaser.Scene {
 
         const title = this.add.text(w / 2, h / 2 - 50, `${winner === 'P1' ? 'PLAYER 1' : 'PLAYER 2'} WINS!`, {
             fontSize: '64px',
-            color: winner === 'P1' ? '#ff4444' : '#4444ff',
+            color: winner === 'P1' ? '#ff4444' : '#4444ff', // Keep winning colors dynamic/specific
             fontStyle: 'bold',
             stroke: '#ffffff',
             strokeThickness: 6
@@ -258,7 +258,7 @@ export class MainScene extends Phaser.Scene {
         const restartBtn = this.add.text(w / 2, h / 2 + 60, 'PLAY AGAIN (SWAP)', {
             fontSize: '32px',
             color: '#ffffff',
-            backgroundColor: '#333333',
+            backgroundColor: '#333333', // Could use UI_BG but #333333 is fine for button specific
             padding: { x: 20, y: 10 }
         })
             .setOrigin(0.5)

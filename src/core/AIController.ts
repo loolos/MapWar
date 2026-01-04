@@ -1,5 +1,5 @@
 import { GameEngine } from './GameEngine';
-import { GameConfig } from './GameConfig';
+import { GameConfig, type PlayerID } from './GameConfig';
 
 export class AIController {
     engine: GameEngine;
@@ -75,7 +75,7 @@ export class AIController {
                 if (cell.owner === playerId) continue;
 
                 // Check direct adjacency (Cheap logic, Engine will re-validate)
-                if (!this.isAdjacentToOwned(r, c, playerId)) continue;
+                if (!this.engine.state.isAdjacentToOwned(r, c, playerId as PlayerID)) continue;
 
                 let score = 0;
                 let cost = 0;
@@ -103,18 +103,5 @@ export class AIController {
         }
 
         return null; // No valid move
-    }
-
-    // Duplicate adjacency logic purely for heuristic pre-filter
-    private isAdjacentToOwned(row: number, col: number, playerId: string): boolean {
-        const neighbors = [
-            { r: row - 1, c: col }, { r: row + 1, c: col },
-            { r: row, c: col - 1 }, { r: row, c: col + 1 }
-        ];
-
-        return neighbors.some(n => {
-            const cell = this.engine.state.getCell(n.r, n.c);
-            return cell && cell.owner === playerId;
-        });
     }
 }

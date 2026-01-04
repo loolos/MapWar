@@ -175,6 +175,18 @@ export class GameState {
         }
     }
 
+    public isAdjacentToOwned(row: number, col: number, playerId: PlayerID): boolean {
+        const neighbors = [
+            { r: row - 1, c: col }, { r: row + 1, c: col },
+            { r: row, c: col - 1 }, { r: row, c: col + 1 }
+        ];
+
+        return neighbors.some(n => {
+            const cell = this.getCell(n.r, n.c);
+            return cell && cell.owner === playerId;
+        });
+    }
+
     serialize(): string {
         return JSON.stringify({
             grid: this.grid.map(row => row.map(cell => cell.serialize())),
