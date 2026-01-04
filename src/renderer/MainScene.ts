@@ -15,6 +15,7 @@ export class MainScene extends Phaser.Scene {
 
     preload() {
         this.load.image('coin', 'assets/coin.png');
+        this.load.image('ui_button', 'assets/ui_button.png');
     }
 
     create() {
@@ -28,7 +29,7 @@ export class MainScene extends Phaser.Scene {
         // Graphics Container
         this.gridGraphics = this.add.graphics();
 
-        // Sidebar UI Container
+        // --- Graphical Sidebar ---
         const sidebarX = GameConfig.GRID_SIZE * this.tileSize;
 
         // Draw Sidebar Background
@@ -75,6 +76,45 @@ export class MainScene extends Phaser.Scene {
             fontFamily: 'Arial', fontSize: '20px', color: '#ffd700'
         });
 
+        // --- Bottom Action Bar ---
+        const mapHeight = GameConfig.GRID_SIZE * this.tileSize;
+        const actionBarHeight = 100;
+        const totalWidth = this.sys.game.config.width as number;
+
+        // Draw Action Bar Background
+        const actionBg = this.add.graphics();
+        actionBg.fillStyle(0x333333);
+        actionBg.fillRect(0, mapHeight, totalWidth, actionBarHeight);
+
+        // End Turn Button
+        const btnX = totalWidth / 2;
+        const btnY = mapHeight + actionBarHeight / 2;
+
+        const endTurnBtn = this.add.image(btnX, btnY, 'ui_button')
+            .setInteractive()
+            .setDisplaySize(200, 60);
+
+        const btnText = this.add.text(btnX, btnY, 'END TURN', {
+            fontFamily: 'Arial',
+            fontSize: '24px',
+            color: '#ffffff',
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
+
+        // Button Interactions
+        endTurnBtn.on('pointerover', () => {
+            endTurnBtn.setTint(0xcccccc);
+        });
+        endTurnBtn.on('pointerout', () => {
+            endTurnBtn.clearTint();
+        });
+        endTurnBtn.on('pointerdown', () => {
+            endTurnBtn.setTint(0x888888);
+            this.engine.endTurn();
+        });
+        endTurnBtn.on('pointerup', () => {
+            endTurnBtn.setTint(0xcccccc);
+        });
 
         // Event Listeners (View -> Model binding)
         this.engine.on('mapUpdate', () => this.drawMap());
@@ -86,12 +126,6 @@ export class MainScene extends Phaser.Scene {
         // Initial Draw
         this.drawMap();
         this.updateUI();
-
-        // Bind DOM UI
-        const btnEndTurn = document.getElementById('btn-end-turn');
-        if (btnEndTurn) {
-            btnEndTurn.onclick = () => this.engine.endTurn();
-        }
     }
 
     // Class properties for UI Text

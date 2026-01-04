@@ -62,32 +62,6 @@ h1 {
   border-radius: 8px;
 }
 
-#action-panel {
-  margin-top: 20px;
-  padding: 15px;
-  background-color: #333;
-  border-radius: 8px;
-  display: flex;
-  justify-content: center;
-  /* Center buttons */
-  gap: 10px;
-  width: 100%;
-}
-
-#btn-end-turn {
-  padding: 15px 40px;
-  /* Wider button */
-  background-color: #2a2a2a;
-  color: white;
-  border: 1px solid #555;
-  font-size: 1.2em;
-  font-weight: bold;
-}
-
-#btn-end-turn:hover {
-  background-color: #444;
-  border-color: #888;
-}
 
 .logo {
   height: 6em;
