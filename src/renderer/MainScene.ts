@@ -14,8 +14,11 @@ export class MainScene extends Phaser.Scene {
     }
 
     preload() {
+        // this.load.image('ground', 'assets/ground.png'); // Placeholder
         this.load.image('coin', 'assets/coin.png');
         this.load.image('ui_button', 'assets/ui_button.png');
+        this.load.image('robot', 'assets/robot.png'); // AI
+        this.load.image('human', 'assets/human.png'); // Human
     }
 
     // Class properties for UI Text
@@ -27,6 +30,8 @@ export class MainScene extends Phaser.Scene {
     p2TitleText!: Phaser.GameObjects.Text;
     p1Coin!: Phaser.GameObjects.Image;
     p2Coin!: Phaser.GameObjects.Image;
+    p1TypeIcon!: Phaser.GameObjects.Image; // Player Type Icon (Robot/Human)
+    p2TypeIcon!: Phaser.GameObjects.Image; // Player Type Icon (Robot/Human)
 
     create() {
         this.cameras.main.setBackgroundColor('#2d2d2d');
@@ -69,6 +74,11 @@ export class MainScene extends Phaser.Scene {
         this.p1GoldText = this.add.text(sidebarX + 55, 105, '0', {
             fontFamily: 'Arial', fontSize: '20px', color: '#ffd700'
         });
+
+        // Player Type Icons (Next to name)
+        // Name is at ~20, length ~100? Put icon at 130.
+        this.p1TypeIcon = this.add.image(sidebarX + 130, 92, 'human').setDisplaySize(24, 24); // Adjusted Y to align with P1TitleText
+        this.p2TypeIcon = this.add.image(sidebarX + 130, 172, 'human').setDisplaySize(24, 24); // Adjusted Y to align with P2TitleText
 
         // P2 Gold Info
         this.p2TitleText = this.add.text(sidebarX + 20, 160, 'Player 2', {
@@ -295,26 +305,29 @@ export class MainScene extends Phaser.Scene {
 
         // Update Gold Text
         if (this.p1GoldText) this.p1GoldText.setText(p1.gold.toString());
-        if (this.p2GoldText) this.p2GoldText.setText(p2.gold.toString());
+        if (this.p2GoldText) this.p2GoldText.setText(`${p2.gold}`);
 
-        // Highlight Active Player
-        if (curr === 'P1') {
-            this.p1TitleText.setAlpha(1).setScale(1.2);
-            this.p1GoldText.setAlpha(1);
-            this.p1Coin.setAlpha(1);
+        // Update active player highlight
 
-            this.p2TitleText.setAlpha(0.3).setScale(1.0);
-            this.p2GoldText.setAlpha(0.3);
-            this.p2Coin.setAlpha(0.3);
-        } else {
-            this.p2TitleText.setAlpha(1).setScale(1.2);
-            this.p2GoldText.setAlpha(1);
-            this.p2Coin.setAlpha(1);
+        // P1 Visuals
+        const p1Alpha = curr === 'P1' ? 1 : 0.5;
+        this.p1TitleText.setAlpha(p1Alpha);
+        this.p1GoldText.setAlpha(p1Alpha);
+        this.p1Coin.setAlpha(p1Alpha);
 
-            this.p1TitleText.setAlpha(0.3).setScale(1.0);
-            this.p1GoldText.setAlpha(0.3);
-            this.p1Coin.setAlpha(0.3);
-        }
+        // Update Icon Type & Alpha
+        this.p1TypeIcon.setTexture(p1.isAI ? 'robot' : 'human');
+        this.p1TypeIcon.setAlpha(p1Alpha);
+
+        // P2 Visuals
+        const p2Alpha = curr === 'P2' ? 1 : 0.5;
+        this.p2TitleText.setAlpha(p2Alpha);
+        this.p2GoldText.setAlpha(p2Alpha);
+        this.p2Coin.setAlpha(p2Alpha);
+
+        // Update Icon Type & Alpha
+        this.p2TypeIcon.setTexture(p2.isAI ? 'robot' : 'human');
+        this.p2TypeIcon.setAlpha(p2Alpha);
 
         // Update Cost
         let totalCost = 0;
