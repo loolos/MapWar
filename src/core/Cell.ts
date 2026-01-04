@@ -18,4 +18,20 @@ export class Cell {
     isOwnedBy(playerId: PlayerID): boolean {
         return this.owner === playerId;
     }
+
+    serialize(): any {
+        return {
+            row: this.row,
+            col: this.col,
+            owner: this.owner,
+            building: this.building
+        };
+    }
+
+    static deserialize(data: any): Cell {
+        const cell = new Cell(data.row, data.col);
+        cell.owner = data.owner;
+        cell.building = data.building;
+        return cell;
+    }
 }

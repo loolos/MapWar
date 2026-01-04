@@ -115,6 +115,11 @@ export class MainScene extends Phaser.Scene {
     }
 
     handleInput(pointer: Phaser.Input.Pointer) {
+        // Block input if game over
+        if (this.engine.isGameOver) {
+            return;
+        }
+
         // Ignore clicks outside the map grid
         const mapWidth = GameConfig.GRID_SIZE * this.tileSize;
         const mapHeight = GameConfig.GRID_SIZE * this.tileSize;
@@ -250,6 +255,6 @@ export class MainScene extends Phaser.Scene {
             .on('pointerout', () => restartBtn.setStyle({ backgroundColor: '#333333' }));
 
         this.overlayContainer.add(restartBtn);
-        this.input.enabled = false; // Disable map interaction
+        // Input blocked via handleInput check
     }
 }

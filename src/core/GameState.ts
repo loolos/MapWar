@@ -83,7 +83,7 @@ export class GameState {
         return this.accrueResources(this.currentPlayerId!);
     }
 
-    private accrueResources(playerId: PlayerID) {
+    public accrueResources(playerId: PlayerID) {
         if (!playerId) return null;
         let landCount = 0;
         for (let r = 0; r < GameConfig.GRID_SIZE; r++) {
@@ -106,5 +106,29 @@ export class GameState {
         this.players[playerId].gold += total;
 
         return { total, base: baseIncome, land: landIncome, landCount };
+    }
+
+    serialize(): string {
+        return JSON.stringify({
+            grid: this.grid.map(row => row.map(cell => cell.serialize())),
+            players: this.players,
+            turnCount: this.turnCount,
+            currentPlayerId: this.currentPlayerId
+        });
+    }
+
+    deserialize(json: string) {
+        const data = JSON.parse(json);
+        this.players = data.players;
+        this.turnCount = data.turnCount;
+        this.currentPlayerId = data.currentPlayerId;
+
+        // Reconstruct Grid
+        for (let r = 0; r < GameConfig.GRID_SIZE; r++) {
+            if (!this.grid[r]) this.grid[r] = [];
+            for (let c = 0; c < GameConfig.GRID_SIZE; c++) {
+                this.grid[r][c] = Cell.deserialize(data.grid[r][c]);
+            }
+        }
     }
 }

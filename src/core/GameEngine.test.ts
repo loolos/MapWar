@@ -7,12 +7,18 @@ describe('GameEngine', () => {
 
     beforeEach(() => {
         engine = new GameEngine();
+        // Force P1 to (0,0) for coordinate tests that assume it
+        // Manually override
+        engine.state.setOwner(9, 9, 'P2');
+        engine.state.setOwner(0, 0, 'P1');
+
     });
 
     it('initializes with correct defaults', () => {
         expect(engine.state.turnCount).toBe(1);
         expect(engine.state.currentPlayerId).toBe('P1');
-        expect(engine.state.players['P1'].gold).toBe(GameConfig.INITIAL_GOLD);
+        // Initial 0 + Base Income (10) + Land Income (1) = 11
+        expect(engine.state.players['P1'].gold).toBe(11);
     });
 
     it('accrues gold on turn end', () => {
@@ -108,6 +114,25 @@ describe('GameEngine', () => {
             engine.commitMoves();
 
             expect(gameOverSpy).toHaveBeenCalledWith('P1');
+            expect(engine.isGameOver).toBe(true);
+        });
+
+        it('blocks actions when game is over', () => {
+            // Force Game Over
+            engine.isGameOver = true;
+            const initialTurn = engine.state.turnCount;
+
+            // Attempt End Turn
+            engine.endTurn();
+
+            // Verify Turn did NOT change
+            expect(engine.state.turnCount).toBe(initialTurn);
+        });
+
+        it('blocks planning when game is over', () => {
+            engine.isGameOver = true;
+            engine.togglePlan(5, 5);
+            expect(engine.pendingMoves).toHaveLength(0);
         });
     });
 

@@ -1,6 +1,7 @@
 import { GameState } from './GameState';
 import { type PlayerID, GameConfig } from './GameConfig';
 import { AIController } from './AIController';
+import type { Action, EndTurnAction } from './Actions';
 
 type EventCallback = (data?: any) => void;
 
@@ -17,6 +18,7 @@ export class GameEngine {
 
     // Game Config State
     isSwapped: boolean = false;
+    isGameOver: boolean = false;
 
     // AI
     ai: AIController;
@@ -26,6 +28,9 @@ export class GameEngine {
         this.listeners = {};
         this.pendingMoves = [];
         this.ai = new AIController(this);
+
+        // Initial Income for P1 (Start of Game)
+        this.state.accrueResources('P1');
     }
 
     on(event: string, callback: EventCallback) {
@@ -42,26 +47,74 @@ export class GameEngine {
     }
 
     // Actions
+    // Actions
     restartGame() {
         this.isSwapped = !this.isSwapped;
         this.state.reset(this.isSwapped);
         this.pendingMoves = [];
         this.lastAiMoves = [];
         this.lastError = null;
+        this.isGameOver = false;
+
+        // Initial Income for P1 (Restart)
+        this.state.accrueResources('P1');
 
         this.emit('mapUpdate'); // Redraw grid
         this.emit('turnChange'); // Update UI text
-        this.emit('gameOver', null); // Clear overlay if any? No, we need a specific 'gameRestart' event
+        this.emit('gameOver', null);
         this.emit('gameRestart');
     }
 
+    // Execute an Action (Command Pattern)
+    executeAction(action: Action) {
+        if (this.isGameOver) return; // Block actions if game over
+
+        switch (action.type) {
+            case 'END_TURN':
+                this.handleEndTurn(action as EndTurnAction);
+                break;
+            // Future actions: PLAN_MOVE, CHAT, etc.
+        }
+    }
+
     endTurn() {
-        // Auto-commit valid moves before ending turn?
-        // Or should we clear them? User usually expects "End Turn" to "Finish up".
-        // Let's try to commit. If fails, we might just end turn anyway (discarding moves) or block?
-        // Rules assumption: End Turn executes what it can or just ends. 
-        // Better UX: Commit pending if possible.
+        if (this.isGameOver) return;
+        // Construct the Action
+        // In the future, this is what gets sent to the server.
+        const action: EndTurnAction = {
+            type: 'END_TURN',
+            playerId: this.state.currentPlayerId!, // Assume not null for local
+            payload: {
+                moves: [...this.pendingMoves] // Copy pending moves
+            }
+        };
+
+        // For local game, execute immediately
+        this.executeAction(action);
+    }
+
+    private handleEndTurn(action: EndTurnAction) {
+        // Validate Player? (Server authority would do this)
+        if (action.playerId !== this.state.currentPlayerId) {
+            console.warn("Action received for wrong player");
+            return;
+        }
+
+        // Apply Moves from Payload (Architecture Recommendation)
+        // Note: Currently pendingMoves is local state. 
+        // If we trust the payload, we calculate costs/apply based on THAT.
+        // For now, let's keep using local pendingMoves for consistency in single player,
+        // but ideally we'd use action.payload.moves for replayability.
+
+        // Let's use the payload moves to be "Multiplayer Ready"
+        // Need to set pendingMoves to the payload's moves (if they differ?)
+        // Or just iteration over payload.moves?
+        this.pendingMoves = action.payload.moves;
+
         this.commitMoves();
+
+        // Check if game ended in commitMoves
+        if (this.isGameOver) return;
 
         const incomeReport = this.state.endTurn();
         this.emit('turnChange');
@@ -75,15 +128,17 @@ export class GameEngine {
 
         if (nextPlayer.isAI) {
             console.log("Triggering AI Turn...");
-            // Small delay for UX
             setTimeout(() => {
-                this.ai.playTurn();
+                if (!this.isGameOver) {
+                    this.ai.playTurn();
+                }
             }, 500);
         }
     }
 
     // New: Toggle a move in the plan
     togglePlan(row: number, col: number) {
+        if (this.isGameOver) return;
         const existingIndex = this.pendingMoves.findIndex(m => m.r === row && m.c === col);
 
         if (existingIndex >= 0) {
@@ -197,6 +252,7 @@ export class GameEngine {
         this.emit('planUpdate');
 
         if (gameWon) {
+            this.isGameOver = true;
             this.emit('gameOver', pid); // Winner is current player
         }
     }
