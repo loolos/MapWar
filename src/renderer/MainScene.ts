@@ -18,6 +18,12 @@ export class MainScene extends Phaser.Scene {
         this.load.image('ui_button', 'assets/ui_button.png');
     }
 
+    // Class properties for UI Text
+    p1GoldText!: Phaser.GameObjects.Text;
+    p2GoldText!: Phaser.GameObjects.Text;
+    feedbackText!: Phaser.GameObjects.Text;
+    costText!: Phaser.GameObjects.Text;
+
     create() {
         this.cameras.main.setBackgroundColor('#2d2d2d');
 
@@ -76,6 +82,14 @@ export class MainScene extends Phaser.Scene {
             fontFamily: 'Arial', fontSize: '20px', color: '#ffd700'
         });
 
+        // Planning Cost Info
+        this.add.text(sidebarX + 20, 260, 'Planned Cost:', {
+            fontFamily: 'Arial', fontSize: '16px', color: '#aaaaaa'
+        });
+        this.costText = this.add.text(sidebarX + 20, 285, '0 G', {
+            fontFamily: 'Arial', fontSize: '22px', color: '#ff8888', fontStyle: 'bold'
+        });
+
         // --- Bottom Action Bar ---
         const mapHeight = GameConfig.GRID_SIZE * this.tileSize;
         const actionBarHeight = 100;
@@ -86,8 +100,13 @@ export class MainScene extends Phaser.Scene {
         actionBg.fillStyle(0x333333);
         actionBg.fillRect(0, mapHeight, totalWidth, actionBarHeight);
 
+        // Feedback Text Area (Bottom Left)
+        this.feedbackText = this.add.text(20, mapHeight + 20, 'Select cells to plan your move.', {
+            fontFamily: 'Arial', fontSize: '16px', color: '#eeeeee', wordWrap: { width: totalWidth - 250 }
+        });
+
         // End Turn Button
-        const btnX = totalWidth / 2;
+        const btnX = totalWidth - 150; // Move button to right
         const btnY = mapHeight + actionBarHeight / 2;
 
         const endTurnBtn = this.add.image(btnX, btnY, 'ui_button')
@@ -119,7 +138,11 @@ export class MainScene extends Phaser.Scene {
         // Event Listeners (View -> Model binding)
         this.engine.on('mapUpdate', () => this.drawMap());
         this.engine.on('turnChange', () => {
-            this.drawMap(); // Re-draw to show active player context if needed
+            this.drawMap();
+            this.updateUI();
+        });
+        this.engine.on('planUpdate', () => {
+            this.drawMap();
             this.updateUI();
         });
 
@@ -127,10 +150,6 @@ export class MainScene extends Phaser.Scene {
         this.drawMap();
         this.updateUI();
     }
-
-    // Class properties for UI Text
-    p1GoldText!: Phaser.GameObjects.Text;
-    p2GoldText!: Phaser.GameObjects.Text;
 
     handleInput(pointer: Phaser.Input.Pointer) {
         // Simple hit test - Only process clicks on the grid
@@ -141,7 +160,8 @@ export class MainScene extends Phaser.Scene {
 
         if (col >= 0 && col < GameConfig.GRID_SIZE && row >= 0 && row < GameConfig.GRID_SIZE) {
             console.log(`Clicked Cell: ${row}, ${col}`);
-            this.engine.captureLand(row, col);
+            // this.engine.captureLand(row, col); // Old direct capture
+            this.engine.togglePlan(row, col); // New planning toggle
         }
     }
 
@@ -167,6 +187,14 @@ export class MainScene extends Phaser.Scene {
                     this.gridGraphics.fillStyle(0xffffff);
                     this.gridGraphics.fillCircle(x + this.tileSize / 2, y + this.tileSize / 2, 10);
                 }
+
+                // Highlight Pending Moves
+                const isPending = this.engine.pendingMoves.some(m => m.r === r && m.c === c);
+                if (isPending) {
+                    // Draw a yellow border or overlay
+                    this.gridGraphics.lineStyle(4, 0xffff00);
+                    this.gridGraphics.strokeRect(x + 2, y + 2, this.tileSize - 6, this.tileSize - 6);
+                }
             }
         }
     }
@@ -180,5 +208,20 @@ export class MainScene extends Phaser.Scene {
         if (this.uiText) this.uiText.setText(curr || '-');
         if (this.p1GoldText) this.p1GoldText.setText(p1.gold.toString());
         if (this.p2GoldText) this.p2GoldText.setText(p2.gold.toString());
+
+        // Update Cost
+        const cost = this.engine.pendingMoves.length * GameConfig.COST_CAPTURE;
+        if (this.costText) this.costText.setText(`${cost} G`);
+
+        // Update Feedback
+        if (this.feedbackText) {
+            if (this.engine.lastError) {
+                this.feedbackText.setText(`⚠️ ${this.engine.lastError}`);
+                this.feedbackText.setColor('#ff5555');
+            } else {
+                this.feedbackText.setText('Select cells to plan. Click "END TURN" to build.');
+                this.feedbackText.setColor('#eeeeee');
+            }
+        }
     }
 }
