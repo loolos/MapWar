@@ -10,8 +10,8 @@ export class GameState {
     constructor() {
         this.grid = [];
         this.players = {
-            'P1': { id: 'P1', color: 0xff0000, gold: GameConfig.INITIAL_GOLD },
-            'P2': { id: 'P2', color: 0x0000ff, gold: GameConfig.INITIAL_GOLD }
+            'P1': { id: 'P1', color: 0xff0000, gold: GameConfig.INITIAL_GOLD, isAI: false },
+            'P2': { id: 'P2', color: 0x0000ff, gold: GameConfig.INITIAL_GOLD, isAI: true }
         };
         this.currentPlayerId = 'P1';
         this.turnCount = 1;

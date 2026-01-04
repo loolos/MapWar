@@ -167,8 +167,11 @@ export class MainScene extends Phaser.Scene {
 
         this.engine.on('incomeReport', (report: any) => {
             if (this.feedbackText) {
-                this.feedbackText.setText(`Income: +${report.total}G (Base: ${report.base}, Land: ${report.land})`);
-                this.feedbackText.setColor('#00ff00'); // Green for income
+                const isAI = this.engine.state.getCurrentPlayer().isAI;
+                const prefix = isAI ? "🤖 AI Thinking... " : "Income: ";
+
+                this.feedbackText.setText(`${prefix}+${report.total}G (Base: ${report.base}, Land: ${report.land})`);
+                this.feedbackText.setColor(isAI ? '#00ffff' : '#00ff00');
             }
         });
 
@@ -181,11 +184,16 @@ export class MainScene extends Phaser.Scene {
         // Simple hit test - Only process clicks on the grid
         if (pointer.x >= GameConfig.GRID_SIZE * this.tileSize) return; // Ignore clicks on sidebar
 
+        // Block input if AI turn
+        const currentPlayer = this.engine.state.getCurrentPlayer();
+        if (currentPlayer.isAI) {
+            return;
+        }
+
         const col = Math.floor(pointer.x / this.tileSize);
         const row = Math.floor(pointer.y / this.tileSize);
 
         if (col >= 0 && col < GameConfig.GRID_SIZE && row >= 0 && row < GameConfig.GRID_SIZE) {
-            console.log(`Clicked Cell: ${row}, ${col}`);
             // this.engine.captureLand(row, col); // Old direct capture
             this.engine.togglePlan(row, col); // New planning toggle
         }
@@ -277,7 +285,13 @@ export class MainScene extends Phaser.Scene {
 
         // Update Feedback
         if (this.feedbackText) {
-            if (this.engine.lastError) {
+            const currentPlayer = this.engine.state.getCurrentPlayer();
+
+            if (currentPlayer.isAI) {
+                this.feedbackText.setText('🤖 AI Thinking...');
+                this.feedbackText.setColor('#00ffff');
+
+            } else if (this.engine.lastError) {
                 this.feedbackText.setText(`⚠️ ${this.engine.lastError}`);
                 this.feedbackText.setColor('#ff5555');
             } else if (hasHighCost) {

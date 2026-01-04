@@ -1,14 +1,25 @@
 import { GameState } from './GameState';
 import { type PlayerID, GameConfig } from './GameConfig';
+import { AIController } from './AIController';
 
 type EventCallback = (data?: any) => void;
 
 export class GameEngine {
     state: GameState;
-    private listeners: Record<string, EventCallback[]> = {};
+    listeners: Record<string, EventCallback[]>;
+
+    // State for Planning Phase
+    pendingMoves: { r: number, c: number }[];
+    lastError: string | null = null;
+
+    // AI
+    ai: AIController;
 
     constructor() {
         this.state = new GameState();
+        this.listeners = {};
+        this.pendingMoves = [];
+        this.ai = new AIController(this);
     }
 
     on(event: string, callback: EventCallback) {
@@ -24,10 +35,6 @@ export class GameEngine {
         }
     }
 
-    // State for Planning Phase
-    pendingMoves: { r: number, c: number }[] = [];
-    lastError: string | null = null;
-
     // Actions
     endTurn() {
         // Auto-commit valid moves before ending turn?
@@ -41,6 +48,18 @@ export class GameEngine {
         this.emit('turnChange');
         if (incomeReport) {
             this.emit('incomeReport', incomeReport);
+        }
+
+        // AI Check
+        const nextPlayer = this.state.getCurrentPlayer();
+        console.log(`Turn Ended. Next Player: ${nextPlayer.id}, isAI: ${nextPlayer.isAI}`);
+
+        if (nextPlayer.isAI) {
+            console.log("Triggering AI Turn...");
+            // Small delay for UX
+            setTimeout(() => {
+                this.ai.playTurn();
+            }, 500);
         }
     }
 
@@ -103,7 +122,7 @@ export class GameEngine {
         const thisMoveCost = this.getMoveCost(row, col);
 
         if (player.gold < plannedCost + thisMoveCost) {
-            return { valid: false, reason: `Not enough gold (Need ${thisMoveCost})` };
+            return { valid: false, reason: `Not enough gold(Need ${thisMoveCost})` };
         }
 
         // 3. Adjacency Check

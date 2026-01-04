@@ -14,4 +14,5 @@ export interface Player {
     id: PlayerID;
     color: number;
     gold: number;
+    isAI: boolean;
 }
