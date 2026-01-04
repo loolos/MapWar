@@ -37,8 +37,11 @@ export class GameEngine {
         // Better UX: Commit pending if possible.
         this.commitMoves();
 
-        this.state.endTurn();
+        const incomeReport = this.state.endTurn();
         this.emit('turnChange');
+        if (incomeReport) {
+            this.emit('incomeReport', incomeReport);
+        }
     }
 
     // New: Toggle a move in the plan

@@ -165,6 +165,13 @@ export class MainScene extends Phaser.Scene {
             this.input.enabled = false;
         });
 
+        this.engine.on('incomeReport', (report: any) => {
+            if (this.feedbackText) {
+                this.feedbackText.setText(`Income: +${report.total}G (Base: ${report.base}, Land: ${report.land})`);
+                this.feedbackText.setColor('#00ff00'); // Green for income
+            }
+        });
+
         // Initial Draw
         this.drawMap();
         this.updateUI();

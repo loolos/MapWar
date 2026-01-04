@@ -55,7 +55,7 @@ export class GameState {
         return this.players[this.currentPlayerId!];
     }
 
-    endTurn() {
+    endTurn(): { total: number, base: number, land: number, landCount: number } | null {
         // Switch player
         this.currentPlayerId = this.currentPlayerId === 'P1' ? 'P2' : 'P1';
 
@@ -63,11 +63,11 @@ export class GameState {
         if (this.currentPlayerId === 'P1') {
             this.turnCount++;
         }
-        this.accrueResources(this.currentPlayerId!);
+        return this.accrueResources(this.currentPlayerId!);
     }
 
     private accrueResources(playerId: PlayerID) {
-        if (!playerId) return;
+        if (!playerId) return null;
         let landCount = 0;
         for (let r = 0; r < GameConfig.GRID_SIZE; r++) {
             for (let c = 0; c < GameConfig.GRID_SIZE; c++) {
@@ -76,6 +76,18 @@ export class GameState {
                 }
             }
         }
-        this.players[playerId].gold += GameConfig.GOLD_PER_TURN_BASE + (landCount * GameConfig.GOLD_PER_LAND);
+
+        // Logic: Base Income (Includes the Fortress/Base tile? Or is Base separate?)
+        // Currently: Base Income is constant. Land Income is per tile.
+        // Usually "Base" tile is also a tile. So it counts towards landCount?
+        // Let's assume Base Income is EXTRA from the Fortress building/Funding, and Land is taxes.
+
+        const baseIncome = GameConfig.GOLD_PER_TURN_BASE;
+        const landIncome = landCount * GameConfig.GOLD_PER_LAND;
+        const total = baseIncome + landIncome;
+
+        this.players[playerId].gold += total;
+
+        return { total, base: baseIncome, land: landIncome, landCount };
     }
 }
