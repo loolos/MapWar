@@ -68,10 +68,11 @@ export class GameEngine {
         if (!cell) return 0;
 
         // If owned by enemy, it's an attack
-        if (cell.owner !== null && cell.owner !== this.state.currentPlayerId) {
+        const curr = this.state.currentPlayerId;
+        if (cell.owner !== null && cell.owner !== curr) {
             // Distance Rule: If adjacent to OWNED land, normal cost.
             // If only adjacent to PENDING land (chained), double cost.
-            if (this.isAdjacentToOwned(row, col, this.state.currentPlayerId)) {
+            if (curr && this.isAdjacentToOwned(row, col, curr)) {
                 return GameConfig.COST_ATTACK;
             } else {
                 return GameConfig.COST_ATTACK * 2;
@@ -82,6 +83,7 @@ export class GameEngine {
 
     validateMove(row: number, col: number): { valid: boolean, reason?: string } {
         const playerId = this.state.currentPlayerId;
+        if (!playerId) return { valid: false, reason: "No active player" };
         const player = this.state.players[playerId];
 
         // 1. Basic Cell Checks
@@ -126,6 +128,7 @@ export class GameEngine {
 
     commitMoves() {
         const pid = this.state.currentPlayerId;
+        if (!pid) return;
 
         let totalCost = 0;
         let gameWon = false;
@@ -158,7 +161,7 @@ export class GameEngine {
     }
 
     // Kept for internal logic if needed, but mostly unused
-    canCapture(row: number, col: number, playerId: PlayerID): boolean {
+    canCapture(row: number, col: number): boolean {
         return this.validateMove(row, col).valid;
     }
 

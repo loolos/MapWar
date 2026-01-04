@@ -110,7 +110,7 @@ export class MainScene extends Phaser.Scene {
             .setInteractive()
             .setDisplaySize(200, 60);
 
-        const btnText = this.add.text(btnX, btnY, 'END TURN', {
+        this.add.text(btnX, btnY, 'END TURN', {
             fontFamily: 'Arial',
             fontSize: '24px',
             color: '#ffffff',
