@@ -150,11 +150,20 @@ export class MainScene extends Phaser.Scene {
                 const x = c * this.tileSize;
                 const y = r * this.tileSize;
 
-                if (cell.owner === 'P1') this.gridGraphics.fillStyle(0x880000);
-                else if (cell.owner === 'P2') this.gridGraphics.fillStyle(0x000088);
-                else this.gridGraphics.fillStyle(0x555555);
+                let alpha = 1.0;
+                // Disconnected Effect: Lighter/Fade
+                if (cell.owner && !cell.isConnected) {
+                    alpha = 0.5;
+                }
+
+                if (cell.owner === 'P1') this.gridGraphics.fillStyle(0x880000, alpha);
+                else if (cell.owner === 'P2') this.gridGraphics.fillStyle(0x000088, alpha);
+                else this.gridGraphics.fillStyle(0x555555, 1.0);
 
                 this.gridGraphics.fillRect(x, y, this.tileSize - 2, this.tileSize - 2);
+
+                // Reset alpha implicit by next loop iteration
+
 
                 if (cell.building === 'base') {
                     this.gridGraphics.fillStyle(0xffffff);
@@ -221,6 +230,12 @@ export class MainScene extends Phaser.Scene {
     // Overlay for Game Over
     overlayContainer!: Phaser.GameObjects.Container;
     showVictoryOverlay(winner: string) {
+        // Safety: Ensure only one overlay exists
+        if (this.overlayContainer) {
+            this.overlayContainer.destroy();
+            this.overlayContainer = null!;
+        }
+
         const w = this.sys.game.config.width as number;
         const h = this.sys.game.config.height as number;
 

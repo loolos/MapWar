@@ -61,7 +61,6 @@ export class GameEngine {
 
         this.emit('mapUpdate'); // Redraw grid
         this.emit('turnChange'); // Update UI text
-        this.emit('gameOver', null);
         this.emit('gameRestart');
     }
 
@@ -244,6 +243,11 @@ export class GameEngine {
 
         if (totalCost > 0) {
             this.state.players[pid].gold -= totalCost;
+
+            // Update Connectivity for visuals immediately
+            this.state.updateConnectivity('P1');
+            this.state.updateConnectivity('P2');
+
             this.emit('mapUpdate');
         }
 

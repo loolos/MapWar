@@ -85,27 +85,94 @@ export class GameState {
 
     public accrueResources(playerId: PlayerID) {
         if (!playerId) return null;
+
+        // User Request: Determine connectivity state BEFORE calculating income
+        this.updateConnectivity(playerId);
+
         let landCount = 0;
+        let landIncome = 0;
+
         for (let r = 0; r < GameConfig.GRID_SIZE; r++) {
             for (let c = 0; c < GameConfig.GRID_SIZE; c++) {
-                if (this.grid[r][c].owner === playerId) {
+                const cell = this.grid[r][c];
+                if (cell.owner === playerId) {
                     landCount++;
+                    // Income Logic: Full (1) if connected, Half (0.5) if disconnected
+                    if (cell.isConnected) {
+                        landIncome += GameConfig.GOLD_PER_LAND;
+                    } else {
+                        landIncome += GameConfig.GOLD_PER_LAND * 0.5;
+                    }
                 }
             }
         }
 
-        // Logic: Base Income (Includes the Fortress/Base tile? Or is Base separate?)
-        // Currently: Base Income is constant. Land Income is per tile.
-        // Usually "Base" tile is also a tile. So it counts towards landCount?
-        // Let's assume Base Income is EXTRA from the Fortress building/Funding, and Land is taxes.
-
         const baseIncome = GameConfig.GOLD_PER_TURN_BASE;
-        const landIncome = landCount * GameConfig.GOLD_PER_LAND;
-        const total = baseIncome + landIncome;
+        const total = baseIncome + landIncome; // landIncome can now be float? 0.5?
+        // Let's ceil or floor? Or keep float? Gold is number. 
+        // Usually games floor income.
+        const finalTotal = Math.floor(total);
 
-        this.players[playerId].gold += total;
+        this.players[playerId].gold += finalTotal;
 
-        return { total, base: baseIncome, land: landIncome, landCount };
+        return { total: finalTotal, base: baseIncome, land: landIncome, landCount };
+    }
+
+    public updateConnectivity(playerId: PlayerID) {
+        if (!playerId) return;
+
+        // 1. Find Base(s) and Reset Connectivity
+        const queue: { r: number, c: number }[] = [];
+        const ownedCells: { r: number, c: number }[] = [];
+
+        for (let r = 0; r < GameConfig.GRID_SIZE; r++) {
+            for (let c = 0; c < GameConfig.GRID_SIZE; c++) {
+                const cell = this.grid[r][c];
+                if (cell.owner === playerId) {
+                    ownedCells.push({ r, c });
+                    // Default to false first, we will mark true if found
+                    cell.isConnected = false;
+
+                    if (cell.building === 'base') {
+                        cell.isConnected = true; // Base is always connected to itself
+                        queue.push({ r, c });
+                    }
+                }
+            }
+        }
+
+        // 2. BFS
+        const visited = new Set<string>();
+        queue.forEach(q => visited.add(`${q.r},${q.c}`));
+
+        // Directions: Up, Down, Left, Right
+        const dirs = [
+            { r: -1, c: 0 }, { r: 1, c: 0 },
+            { r: 0, c: -1 }, { r: 0, c: 1 }
+        ];
+
+        let head = 0;
+        while (head < queue.length) {
+            const curr = queue[head++];
+
+            for (const d of dirs) {
+                const nr = curr.r + d.r;
+                const nc = curr.c + d.c;
+
+                // Bounds Check
+                if (nr >= 0 && nr < GameConfig.GRID_SIZE && nc >= 0 && nc < GameConfig.GRID_SIZE) {
+                    const key = `${nr},${nc}`;
+                    const neighbor = this.grid[nr][nc];
+
+                    // If owned by same player and not visited
+                    if (neighbor.owner === playerId && !visited.has(key)) {
+                        visited.add(key);
+                        neighbor.isConnected = true;
+                        queue.push({ r: nr, c: nc });
+                    }
+                }
+            }
+        }
     }
 
     serialize(): string {

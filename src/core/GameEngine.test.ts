@@ -144,4 +144,67 @@ describe('GameEngine', () => {
         expect(engine.pendingMoves).toHaveLength(2);
         expect(engine.lastError).toBeNull();
     });
+    describe('Connectivity Logic', () => {
+        it('marks connected cells as true', () => {
+            // P1 Base is at (0,0) due to beforeEach override
+            const base = engine.state.getCell(0, 0);
+            expect(base?.isConnected).toBe(true);
+
+            // Add an adjacent cell
+            engine.state.setOwner(0, 1, 'P1');
+            engine.state.updateConnectivity('P1');
+
+            const cell = engine.state.getCell(0, 1);
+            expect(cell?.isConnected).toBe(true);
+        });
+
+        it('marks disconnected cells as false', () => {
+            // P1 at (0,0)
+            // Add a disconnected cell at (5,5)
+            engine.state.setOwner(5, 5, 'P1');
+            engine.state.updateConnectivity('P1');
+
+            const cell = engine.state.getCell(5, 5);
+            expect(cell?.isConnected).toBe(false);
+        });
+
+        it('halves income for disconnected cells', () => {
+            // Base (0,0) = Connected (Income 10 Base + ??? Land)
+            // Disconnected (5,5) = Disconnected
+            engine.state.setOwner(5, 5, 'P1');
+
+            // Trigger Income
+            const report = engine.state.accrueResources('P1')!;
+
+            // Calculation:
+            // Base: 10
+            // Land (0,0): Connected = 1
+            // Land (5,5): Disconnected = 0.5
+            // Total = 11.5 -> floor(11.5) = 11
+
+            expect(report.total).toBe(11);
+            expect(report.land).toBe(1.5);
+        });
+
+        it('restores connection and income', () => {
+            // Create a chain: (0,0) -> (0,1) -> (0,2)
+            engine.state.setOwner(0, 1, 'P1');
+            engine.state.setOwner(0, 2, 'P1');
+            engine.state.updateConnectivity('P1');
+
+            expect(engine.state.getCell(0, 2)?.isConnected).toBe(true);
+
+            // Cut the link (0,1)
+            engine.state.setOwner(0, 1, 'P2'); // Enemy takes it
+            engine.state.updateConnectivity('P1');
+
+            expect(engine.state.getCell(0, 2)?.isConnected).toBe(false);
+
+            // Restore the link
+            engine.state.setOwner(0, 1, 'P1');
+            engine.state.updateConnectivity('P1');
+
+            expect(engine.state.getCell(0, 2)?.isConnected).toBe(true);
+        });
+    });
 });

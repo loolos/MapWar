@@ -6,6 +6,7 @@ export class Cell {
     owner: PlayerID;
     unit: any | null; // Placeholder for Unit class
     building: 'base' | 'none';
+    isConnected: boolean;
 
     constructor(row: number, col: number) {
         this.row = row;
@@ -13,6 +14,7 @@ export class Cell {
         this.owner = null;
         this.unit = null;
         this.building = 'none';
+        this.isConnected = true;
     }
 
     isOwnedBy(playerId: PlayerID): boolean {
@@ -24,7 +26,8 @@ export class Cell {
             row: this.row,
             col: this.col,
             owner: this.owner,
-            building: this.building
+            building: this.building,
+            isConnected: this.isConnected
         };
     }
 
@@ -32,6 +35,7 @@ export class Cell {
         const cell = new Cell(data.row, data.col);
         cell.owner = data.owner;
         cell.building = data.building;
+        cell.isConnected = data.isConnected ?? true; // Default to true if missing
         return cell;
     }
 }
