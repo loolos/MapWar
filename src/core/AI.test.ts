@@ -26,8 +26,9 @@ describe('AI Simulation', () => {
         // Now run loop
         while (turns < maxTurns) {
             // AI Play Turn calls `endTurn`, which sets timeout for next AI.
-            // We advance timers to trigger it.
-            vi.runAllTimers();
+            // We advance timers just enough to trigger the NEXT turn, not infinite recursive turns.
+            // The delay is 500ms in GameEngine.
+            await vi.advanceTimersByTimeAsync(1000);
             turns++;
 
             // Safety checks

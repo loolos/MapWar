@@ -45,6 +45,8 @@ describe('GameEngine', () => {
 
         it('prevents non-adjacent moves', () => {
             // P1 (0,0). Try (5,5).
+            // Give enough gold so that 'Not enough gold' doesn't trigger first if it happens to be a Hill
+            engine.state.players['P1'].gold = 100;
             engine.togglePlan(5, 5);
             expect(engine.pendingMoves).toHaveLength(0);
             expect(engine.lastError).toContain('adjacent');
