@@ -13,6 +13,7 @@ export class CellInfoSystem {
     ownerText: Phaser.GameObjects.Text;
     costText: Phaser.GameObjects.Text;
     descText: Phaser.GameObjects.Text;
+    maskShape: Phaser.GameObjects.Graphics;
 
     constructor(scene: Phaser.Scene, x: number, y: number, width: number) {
         this.scene = scene;
@@ -23,6 +24,12 @@ export class CellInfoSystem {
         bg.fillStyle(GameConfig.COLORS.UI_BG, 1);
         bg.fillRect(0, 0, width, 220); // Increased height for description
         this.container.add(bg);
+
+        // Strict Mask
+        const maskShape = scene.make.graphics({});
+        this.container.setMask(maskShape.createGeometryMask());
+        this.maskShape = maskShape;
+        this.updateMask(width, 220, x, y);
 
         // Header
         this.headerText = scene.add.text(10, 10, 'CELL INFO', {
@@ -94,18 +101,31 @@ export class CellInfoSystem {
         this.container.setPosition(x, y);
     }
 
-    public resize(width: number) {
+    public resize(width: number, x: number, y: number) {
+        const height = 220;
         // Redraw Background
         const bgIndex = 0;
         const bg = this.container.getAt(bgIndex) as Phaser.GameObjects.Graphics;
         if (bg) {
             bg.clear();
             bg.fillStyle(GameConfig.COLORS.UI_BG, 1);
-            bg.fillRect(0, 0, width, 220);
+            bg.fillRect(0, 0, width, height);
         }
 
         // Update Wrap
         this.descText.setStyle({ wordWrap: { width: width - 20 } });
+
+        // Update Mask
+        this.updateMask(width, height, x, y);
+    }
+
+    private updateMask(w: number, h: number, x: number, y: number) {
+        if (this.maskShape) {
+            this.maskShape.clear();
+            this.maskShape.fillStyle(0xffffff);
+            // GeometryMask world coords
+            this.maskShape.fillRect(x, y, w * this.container.scaleX, h * this.container.scaleY);
+        }
     }
 
     public setScale(scale: number) {

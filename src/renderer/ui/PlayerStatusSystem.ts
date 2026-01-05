@@ -17,6 +17,9 @@ export class PlayerStatusSystem {
     private p2TypeIcon!: Phaser.GameObjects.Image;
 
     private costText!: Phaser.GameObjects.Text;
+    private maskShape!: Phaser.GameObjects.Graphics;
+
+    public readonly BASE_WIDTH = 260;
 
     constructor(scene: Phaser.Scene, x: number, y: number, height: number) {
         this.container = scene.add.container(x, y);
@@ -26,6 +29,12 @@ export class PlayerStatusSystem {
         sidebarBg.fillStyle(0x222222);
         sidebarBg.fillRect(0, 0, 260, height);
         this.container.add(sidebarBg);
+
+        // Strict Mask
+        const maskShape = scene.make.graphics({});
+        this.container.setMask(maskShape.createGeometryMask());
+        this.maskShape = maskShape;
+        this.updateMask(260, height, x, y);
 
         // Header
         const header = scene.add.text(20, 20, 'GAME STATUS', {
@@ -42,7 +51,7 @@ export class PlayerStatusSystem {
         });
         this.container.add(this.uiText);
 
-        const startY = 90;
+        const startY = 85;
 
         // P1 Info
         this.p1TitleText = scene.add.text(20, startY, 'Player 1', {
@@ -62,7 +71,7 @@ export class PlayerStatusSystem {
         this.container.add(this.p1TypeIcon);
 
         // P2 Info
-        const p2Y = startY + 80;
+        const p2Y = startY + 70;
         this.p2TitleText = scene.add.text(20, p2Y, 'Player 2', {
             fontFamily: 'Arial', fontSize: '24px', color: '#4444ff', fontStyle: 'bold'
         });
@@ -80,7 +89,7 @@ export class PlayerStatusSystem {
         this.container.add(this.p2TypeIcon);
 
         // Cost Info
-        const costY = p2Y + 100;
+        const costY = p2Y + 70;
         const costHeader = scene.add.text(20, costY, 'Planned Cost:', {
             fontFamily: 'Arial', fontSize: '16px', color: '#aaaaaa'
         });
@@ -138,14 +147,29 @@ export class PlayerStatusSystem {
         this.container.setPosition(x, y);
     }
 
-    public resize(height: number) {
+    public resize(width: number, height: number, x: number, y: number) {
         // Clear background
         const bgIndex = 0; // Assuming bg is first child
         const bg = this.container.getAt(bgIndex) as Phaser.GameObjects.Graphics;
         if (bg) {
             bg.clear();
             bg.fillStyle(0x222222);
-            bg.fillRect(0, 0, 260, height);
+            bg.fillRect(0, 0, width, height);
+        }
+
+        // Update Mask
+        this.updateMask(width, height, x, y);
+    }
+
+    private updateMask(w: number, h: number, x: number, y: number) {
+        if (this.maskShape) {
+            this.maskShape.clear();
+            this.maskShape.fillStyle(0xffffff);
+            // Mask needs absolute world coordinates if not child of container? 
+            // GeometryMask uses world coordinates usually.
+            // If we use setMask on container, the mask shape should be in world coords.
+            // Container x/y + internal 0,0
+            this.maskShape.fillRect(x, y, w * this.container.scaleX, h * this.container.scaleY);
         }
     }
 

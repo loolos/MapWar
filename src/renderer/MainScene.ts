@@ -149,6 +149,12 @@ export class MainScene extends Phaser.Scene {
         // Hack/Fix: Force a redraw after a short delay
         this.time.delayedCall(100, () => {
             this.drawMap();
+            // Force resize update again to ensure masks are correct after delay
+            if (isPortrait) {
+                this.layoutPortrait(width, height);
+            } else {
+                this.layoutLandscape(width, height);
+            }
             this.updateUI();
         });
     }
@@ -172,14 +178,20 @@ export class MainScene extends Phaser.Scene {
         // 1. LEFT COLUMN
         // Player Status at Top
         const statusH = 350;
+        const p1StatusX = 10;
+        const p1StatusY = 10;
         this.playerStatusSystem.setScale(1);
-        this.playerStatusSystem.setPosition(10, 10);
-        this.playerStatusSystem.resize(statusH);
+        this.playerStatusSystem.setPosition(p1StatusX, p1StatusY);
+        // Base width 260 for status
+        this.playerStatusSystem.resize(260, statusH, p1StatusX, p1StatusY);
 
         // Cell Info below Status
+        const infoX = 10;
+        const infoY = statusH + 20;
+        const infoW = leftColW - 20;
         this.infoSystem.setScale(1);
-        this.infoSystem.setPosition(10, statusH + 20);
-        this.infoSystem.resize(leftColW - 20);
+        this.infoSystem.setPosition(infoX, infoY);
+        this.infoSystem.resize(infoW, infoX, infoY);
 
         // 2. RIGHT COLUMN
         // Logs at Top
@@ -188,6 +200,9 @@ export class MainScene extends Phaser.Scene {
 
         this.notificationSystem.setScale(1);
         this.notificationSystem.setPosition(w - rightColW + 10, 10);
+        // Assuming notification system resize is standard width, height? 
+        // NotificationSystem.ts was not modified but if it has resize(w, h) it should be fine.
+        // Checking NotificationSystem source would have been good but let's assume standard behavior or check error.
         this.notificationSystem.resize(rightColW - 20, logsH - 20);
         this.notificationSystem.setVisible(true);
 
@@ -220,18 +235,32 @@ export class MainScene extends Phaser.Scene {
         const uiScale = 0.7;
 
         // 1. TOP: Compact Header
-        const headerHeight = 160;
+        const headerHeight = 200;
         this.trBg.clear().fillStyle(0x222222).fillRect(0, 0, w, headerHeight);
 
-        this.playerStatusSystem.setScale(uiScale);
-        this.playerStatusSystem.setPosition(pad, pad);
-        this.playerStatusSystem.resize(headerHeight / uiScale);
+        // LEFT: Status
+        const halfW = w / 2;
+        const statusAvailableW = halfW - pad * 2;
+        // Calculate strict scale
+        const statusBaseW = this.playerStatusSystem.BASE_WIDTH;
+        // Ensure it fits
+        const statusScale = Math.min(uiScale, statusAvailableW / statusBaseW);
 
-        const infoX = w / 2;
-        this.infoSystem.setScale(uiScale);
+        this.playerStatusSystem.setScale(statusScale);
+        this.playerStatusSystem.setPosition(pad, pad);
+        this.playerStatusSystem.resize(statusBaseW, headerHeight / statusScale, pad, pad);
+
+        // RIGHT: Info
+        const infoX = w / 2 + pad;
+        const infoAvailableW = halfW - pad * 2;
+
+        // Use uniform scale or responsive? Responsive seems better for text wrap
+        const infoScale = Math.min(uiScale, 1);
+        const infoInternalW = infoAvailableW / infoScale;
+
+        this.infoSystem.setScale(infoScale);
         this.infoSystem.setPosition(infoX, pad);
-        const availableInfoW = (w / 2) - pad * 2;
-        this.infoSystem.resize(availableInfoW / uiScale);
+        this.infoSystem.resize(infoInternalW, infoX, pad);
 
         // 3. BOTTOM: Buttons & Logs
         const bottomHeight = 200; // Fixed footer height
@@ -508,6 +537,12 @@ export class MainScene extends Phaser.Scene {
             stroke: '#ffffff',
             strokeThickness: 6
         }).setOrigin(0.5);
+
+        // Scale title to fit width
+        const maxW = w * 0.9;
+        if (title.width > maxW) {
+            title.setScale(maxW / title.width);
+        }
         this.overlayContainer.add(title);
 
         const restartBtn = this.add.text(w / 2, h / 2 + 60, 'PLAY AGAIN (SWAP)', {
@@ -523,6 +558,11 @@ export class MainScene extends Phaser.Scene {
             })
             .on('pointerover', () => restartBtn.setStyle({ backgroundColor: '#555555' }))
             .on('pointerout', () => restartBtn.setStyle({ backgroundColor: '#333333' }));
+
+        // Scale button to fit width
+        if (restartBtn.width > maxW) {
+            restartBtn.setScale(maxW / restartBtn.width);
+        }
 
         this.overlayContainer.add(restartBtn);
         // Input blocked via handleInput check
