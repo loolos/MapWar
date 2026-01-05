@@ -19,26 +19,84 @@ export class GameState {
     }
 
     private initializeGrid(swapped: boolean = false) {
+        // 1. Initialize empty plain grid
         for (let r = 0; r < GameConfig.GRID_SIZE; r++) {
             this.grid[r] = [];
             for (let c = 0; c < GameConfig.GRID_SIZE; c++) {
                 this.grid[r][c] = new Cell(r, c);
+                this.grid[r][c].type = 'plain';
             }
         }
 
-        // Setup Positions
-        // User Request: Red (P1) at Bottom-Right by default. Blue (P2) at Top-Left.
-        // If swapped=true (via UI toggle), we revert to Top-Left/Bottom-Right.
+        // 2. Generate Clustered Terrain
+        this.generateTerrain();
 
+        // 3. Setup Bases
         const p1Start = swapped ? { r: 0, c: 0 } : { r: GameConfig.GRID_SIZE - 1, c: GameConfig.GRID_SIZE - 1 };
         const p2Start = swapped ? { r: GameConfig.GRID_SIZE - 1, c: GameConfig.GRID_SIZE - 1 } : { r: 0, c: 0 };
 
-        // Initial setup
         this.setOwner(p1Start.r, p1Start.c, 'P1');
         this.setBuilding(p1Start.r, p1Start.c, 'base');
+        this.grid[p1Start.r][p1Start.c].type = 'plain'; // Force plain
 
         this.setOwner(p2Start.r, p2Start.c, 'P2');
         this.setBuilding(p2Start.r, p2Start.c, 'base');
+        this.grid[p2Start.r][p2Start.c].type = 'plain'; // Force plain
+    }
+
+    private generateTerrain() {
+        // Config for Clusters
+        const waterClusters = 2;
+        const waterSize = 6;
+        const hillClusters = 3;
+        const hillSize = 5;
+
+        // Generate Water
+        for (let i = 0; i < waterClusters; i++) {
+            this.growCluster('water', waterSize);
+        }
+
+        // Generate Hills
+        for (let i = 0; i < hillClusters; i++) {
+            this.growCluster('hill', hillSize);
+        }
+    }
+
+    private growCluster(type: 'water' | 'hill', targetSize: number) {
+        // Pick random start (avoid corners roughly to save bases)
+        let r = Math.floor(Math.random() * (GameConfig.GRID_SIZE - 2)) + 1;
+        let c = Math.floor(Math.random() * (GameConfig.GRID_SIZE - 2)) + 1;
+
+        let size = 0;
+        const queue: { r: number, c: number }[] = [{ r, c }];
+
+        while (size < targetSize && queue.length > 0) {
+            // Pick random from queue (frontier)
+            const index = Math.floor(Math.random() * queue.length);
+            const curr = queue.splice(index, 1)[0];
+
+            const cell = this.grid[curr.r][curr.c];
+            if (cell.type === 'plain') { // Only overwrite plains
+                cell.type = type;
+                size++;
+
+                // Add neighbors to frontier
+                const neighbors = [
+                    { r: curr.r + 1, c: curr.c }, { r: curr.r - 1, c: curr.c },
+                    { r: curr.r, c: curr.c + 1 }, { r: curr.r, c: curr.c - 1 }
+                ];
+
+                for (const n of neighbors) {
+                    if (this.isValidCell(n.r, n.c) && this.grid[n.r][n.c].type === 'plain') {
+                        queue.push(n);
+                    }
+                }
+            }
+        }
+    }
+
+    private isValidCell(r: number, c: number): boolean {
+        return r >= 0 && r < GameConfig.GRID_SIZE && c >= 0 && c < GameConfig.GRID_SIZE;
     }
 
     // Reset Game State

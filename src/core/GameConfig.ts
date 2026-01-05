@@ -6,6 +6,16 @@ export const GameConfig = {
     COST_MOVE: 5,
     COST_ATTACK: 20,
     COST_CAPTURE: 10,
+    TERRAIN_COSTS: {
+        PLAIN: 1,
+        HILL: 2,
+        WATER: Infinity // Impassable
+    },
+    TERRAIN_DESCRIPTIONS: {
+        PLAIN: "Normal terrain. Standard movement cost.",
+        HILL: "Rugged terrain. Movement cost is DOUBLED.",
+        WATER: "Deep water. Impassable."
+    },
     COLORS: {
         P1: 0x880000,
         P2: 0x000088,
@@ -17,7 +27,11 @@ export const GameConfig = {
         TEXT: 0xffffff,
         HIGHLIGHT_ATTACK: 0xff0000,
         HIGHLIGHT_MOVE: 0xffff00,
-        HIGHLIGHT_AI: 0xffffff
+        HIGHLIGHT_AI: 0xffffff,
+        // Terrain Colors
+        TERRAIN_WATER: 0x224488,
+        TERRAIN_HILL: 0x666644,
+        TERRAIN_PLAIN: 0x555555 // Logic re-use: Neutral plain is this color
     },
     UI: {
         TILE_SIZE: 64,
@@ -27,6 +41,7 @@ export const GameConfig = {
 };
 
 export type PlayerID = 'P1' | 'P2' | null;
+export type CellType = 'plain' | 'water' | 'hill';
 
 export interface Player {
     id: PlayerID;

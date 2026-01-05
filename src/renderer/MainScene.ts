@@ -4,16 +4,24 @@ import { GameConfig } from '../core/GameConfig';
 import { NotificationSystem } from './ui/NotificationSystem';
 import { ActionButtonSystem } from './ui/ActionButtonSystem';
 import { PlayerStatusSystem } from './ui/PlayerStatusSystem';
+import { CellInfoSystem } from './ui/CellInfoSystem';
 
 export class MainScene extends Phaser.Scene {
     engine: GameEngine;
     tileSize: number = 64;
+    // Graphical Layers
     gridGraphics!: Phaser.GameObjects.Graphics;
+    terrainGroup!: Phaser.GameObjects.Group;
 
     // UI Systems
     notificationSystem!: NotificationSystem;
     buttonSystem!: ActionButtonSystem;
     playerStatusSystem!: PlayerStatusSystem;
+    infoSystem!: CellInfoSystem;
+
+    // Interaction State
+    selectedRow: number | null = null;
+    selectedCol: number | null = null;
 
     constructor() {
         super('MainScene');
@@ -25,10 +33,16 @@ export class MainScene extends Phaser.Scene {
         this.load.image('ui_button', 'assets/ui_button.png');
         this.load.image('robot', 'assets/robot.png'); // AI
         this.load.image('human', 'assets/human.png'); // Human
+        this.load.image('tile_plain', 'assets/tile_plain.png');
+        this.load.image('tile_hill', 'assets/tile_hill.png');
+        this.load.image('tile_water', 'assets/tile_water.png');
     }
 
     create() {
         this.cameras.main.setBackgroundColor(GameConfig.COLORS.BG);
+
+        // Debug Log
+        console.log('MainScene Create: Grid Size', GameConfig.GRID_SIZE);
 
         // Input
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
@@ -37,6 +51,22 @@ export class MainScene extends Phaser.Scene {
 
         // Graphics Container
         this.gridGraphics = this.add.graphics();
+        this.terrainGroup = this.add.group();
+        this.gridGraphics.depth = 1; // Overlay on top of terrain
+
+
+        // Calculate responsive Layout
+        const sidebarWidth = 320; // Reserved width for sidebar
+        const bottomBarHeight = 160; // Reserved height for actions
+        const pad = 20;
+
+        const availableHeight = (this.sys.game.config.height as number) - bottomBarHeight - pad;
+        const availableWidth = (this.sys.game.config.width as number) - sidebarWidth - pad;
+
+        const maxTileHeight = Math.floor(availableHeight / GameConfig.GRID_SIZE);
+        const maxTileWidth = Math.floor(availableWidth / GameConfig.GRID_SIZE);
+
+        this.tileSize = Math.min(maxTileHeight, maxTileWidth, 64); // Cap max size at 64
 
         // Layout Constants
         const mapWidth = GameConfig.GRID_SIZE * this.tileSize;
@@ -44,6 +74,11 @@ export class MainScene extends Phaser.Scene {
         // --- Graphical Sidebar (Player Status System) ---
         // Width ~260, Height = game height
         this.playerStatusSystem = new PlayerStatusSystem(this, mapWidth, 0, this.sys.game.config.height as number);
+
+        // --- Cell Info Panel (Middle Right) ---
+        // Position it below the status panel area? 
+        // Status runs 0 to ~200? Let's give it some space.
+        this.infoSystem = new CellInfoSystem(this, mapWidth + 10, 300, 240);
 
         // --- Bottom Action Bar ---
         const mapHeight = GameConfig.GRID_SIZE * this.tileSize;
@@ -103,8 +138,16 @@ export class MainScene extends Phaser.Scene {
         });
 
         // Initial Draw
+        this.initializeTerrainVisuals();
         this.drawMap();
         this.updateUI();
+
+        // Hack/Fix: Force a redraw after a short delay to ensure rendering catches up
+        // (Fixes issue where map is black until first click)
+        this.time.delayedCall(100, () => {
+            this.drawMap();
+            this.updateUI();
+        });
     }
 
     setupButtons() {
@@ -136,6 +179,11 @@ export class MainScene extends Phaser.Scene {
         const row = Math.floor(pointer.y / this.tileSize);
 
         if (col >= 0 && col < GameConfig.GRID_SIZE && row >= 0 && row < GameConfig.GRID_SIZE) {
+            // Update Selection
+            this.selectedRow = row;
+            this.selectedCol = col;
+            this.infoSystem.update(this.engine, row, col);
+
             this.engine.togglePlan(row, col);
         }
     }
@@ -150,20 +198,30 @@ export class MainScene extends Phaser.Scene {
                 const x = c * this.tileSize;
                 const y = r * this.tileSize;
 
-                let alpha = 1.0;
-                // Disconnected Effect: Lighter/Fade
+                let alpha = 0.6; // Default to semi-transparent to show terrain
+                // Disconnected Effect: even more faint
                 if (cell.owner && !cell.isConnected) {
-                    alpha = 0.5;
+                    alpha = 0.3;
                 }
 
                 if (cell.owner === 'P1') this.gridGraphics.fillStyle(GameConfig.COLORS.P1, alpha);
                 else if (cell.owner === 'P2') this.gridGraphics.fillStyle(GameConfig.COLORS.P2, alpha);
-                else this.gridGraphics.fillStyle(GameConfig.COLORS.NEUTRAL, 1.0);
 
-                this.gridGraphics.fillRect(x, y, this.tileSize - 2, this.tileSize - 2);
+                // Only fill if owned (overlay). unowned = transparent (show terrain texture)
+                if (cell.owner) {
+                    this.gridGraphics.fillRect(x, y, this.tileSize - 2, this.tileSize - 2);
+                }
 
-                // Reset alpha implicit by next loop iteration
+                // ALWAYS draw grid lines so we can see the cells
+                this.gridGraphics.lineStyle(2, 0x444444, 0.5); // Dark grey stroke
+                this.gridGraphics.strokeRect(x, y, this.tileSize - 2, this.tileSize - 2);
 
+                // If owned hill, draw a little marker to distinguish from plain?
+                // Or maybe just texture later. For now, small grey rect in corner?
+                if (cell.type === 'hill') {
+                    this.gridGraphics.fillStyle(0x333333, 0.5);
+                    this.gridGraphics.fillRect(x + 5, y + 5, 10, 10);
+                }
 
                 if (cell.building === 'base') {
                     this.gridGraphics.fillStyle(GameConfig.COLORS.BASE);
@@ -224,6 +282,46 @@ export class MainScene extends Phaser.Scene {
             this.notificationSystem.show('⚠️ Long range attack expensive!', 'warning');
         } else {
             this.notificationSystem.show('Select cells to move. Click End Turn when ready.', 'info');
+        }
+    }
+
+    private hasRenderedOnce: boolean = false;
+
+    update(_time: number, _delta: number) {
+        // Force initial render on first update to avoid black screen
+        if (!this.hasRenderedOnce) {
+            console.log("Forcing initial drawMap");
+            this.drawMap();
+            this.updateUI();
+            this.hasRenderedOnce = true;
+        }
+    }
+
+    initializeTerrainVisuals() {
+        if (!this.terrainGroup) {
+            return;
+        }
+        this.terrainGroup.clear(true, true); // Destroy existing children
+
+        const grid = this.engine.state.grid;
+        if (!grid) return;
+
+        for (let r = 0; r < GameConfig.GRID_SIZE; r++) {
+            for (let c = 0; c < GameConfig.GRID_SIZE; c++) {
+                const cell = grid[r][c];
+                if (!cell) continue;
+
+                const x = c * this.tileSize + this.tileSize / 2; // Center origin
+                const y = r * this.tileSize + this.tileSize / 2;
+
+                let texture = 'tile_plain';
+                if (cell.type === 'hill') texture = 'tile_hill';
+                else if (cell.type === 'water') texture = 'tile_water';
+
+                const img = this.add.image(x, y, texture);
+                img.setDisplaySize(this.tileSize, this.tileSize);
+                this.terrainGroup.add(img);
+            }
         }
     }
 

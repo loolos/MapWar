@@ -1,5 +1,5 @@
 import { GameState } from './GameState';
-import { type PlayerID, GameConfig } from './GameConfig';
+import { GameConfig } from './GameConfig';
 import { AIController } from './AIController';
 import type { Action, EndTurnAction } from './Actions';
 
@@ -162,18 +162,32 @@ export class GameEngine {
         const cell = this.state.getCell(row, col);
         if (!cell) return 0;
 
-        // If owned by enemy, it's an attack
+        // Base Cost (Terrain)
+        let baseCost = GameConfig.COST_CAPTURE;
+        if (cell.type === 'hill') baseCost = GameConfig.COST_CAPTURE * 2;
+        // Plain is default (1x)
+
+        // For Attack, use Attack Cost Base
+        let isAttack = false;
         const curr = this.state.currentPlayerId;
         if (cell.owner !== null && cell.owner !== curr) {
+            isAttack = true;
+            baseCost = GameConfig.COST_ATTACK;
+            if (cell.type === 'hill') baseCost = GameConfig.COST_ATTACK * 2;
+        }
+
+        // Distance Penalty Logic (Double if chained)
+        if (isAttack) {
             // Distance Rule: If adjacent to OWNED land, normal cost.
             // If only adjacent to PENDING land (chained), double cost.
-            if (curr && this.isAdjacentToOwned(row, col, curr)) {
-                return GameConfig.COST_ATTACK;
+            if (curr && this.state.isAdjacentToOwned(row, col, curr)) { // Use state method
+                return baseCost;
             } else {
-                return GameConfig.COST_ATTACK * 2;
+                return baseCost * 2;
             }
         }
-        return GameConfig.COST_CAPTURE;
+
+        return baseCost;
     }
 
     validateMove(row: number, col: number): { valid: boolean, reason?: string } {
@@ -184,6 +198,7 @@ export class GameEngine {
         // 1. Basic Cell Checks
         const cell = this.state.getCell(row, col);
         if (!cell) return { valid: false, reason: "Out of bounds" };
+        if (cell.type === 'water') return { valid: false, reason: "Cannot move to Water" };
         if (cell.owner === playerId) return { valid: false, reason: "Already owned" }; // Self-own check
 
         // 2. Cost Check
@@ -200,7 +215,7 @@ export class GameEngine {
 
         // 3. Adjacency Check
         // must be adjacent to OWNED or PENDING
-        const isAdjToOwned = this.isAdjacentToOwned(row, col, playerId);
+        const isAdjToOwned = this.state.isAdjacentToOwned(row, col, playerId);
         const isAdjToPending = this.isAdjacentToPending(row, col);
 
         if (!isAdjToOwned && !isAdjToPending) {
@@ -266,17 +281,7 @@ export class GameEngine {
         return this.validateMove(row, col).valid;
     }
 
-    private isAdjacentToOwned(row: number, col: number, playerId: PlayerID): boolean {
-        const neighbors = [
-            { r: row - 1, c: col }, { r: row + 1, c: col },
-            { r: row, c: col - 1 }, { r: row, c: col + 1 }
-        ];
 
-        return neighbors.some(n => {
-            const cell = this.state.getCell(n.r, n.c);
-            return cell && cell.owner === playerId;
-        });
-    }
 
     // captureLand(row: number, col: number) { ... } // REMOVED/REPLACED by togglePlan & commit
 }

@@ -12,6 +12,9 @@ describe('GameEngine', () => {
         engine.state.setOwner(9, 9, 'P2');
         engine.state.setOwner(0, 0, 'P1');
 
+        // Force test area to be Plain to avoid random Water blocking moves
+        if (engine.state.getCell(0, 1)) engine.state.getCell(0, 1)!.type = 'plain';
+        if (engine.state.getCell(0, 2)) engine.state.getCell(0, 2)!.type = 'plain';
     });
 
     it('initializes with correct defaults', () => {

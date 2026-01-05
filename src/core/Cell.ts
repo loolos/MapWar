@@ -1,5 +1,7 @@
 import type { PlayerID } from './GameConfig';
 
+import { type CellType } from './GameConfig';
+
 export class Cell {
     row: number;
     col: number;
@@ -7,6 +9,7 @@ export class Cell {
     unit: any | null; // Placeholder for Unit class
     building: 'base' | 'none';
     isConnected: boolean;
+    type: CellType;
 
     constructor(row: number, col: number) {
         this.row = row;
@@ -15,6 +18,7 @@ export class Cell {
         this.unit = null;
         this.building = 'none';
         this.isConnected = true;
+        this.type = 'plain';
     }
 
     isOwnedBy(playerId: PlayerID): boolean {
@@ -27,7 +31,8 @@ export class Cell {
             col: this.col,
             owner: this.owner,
             building: this.building,
-            isConnected: this.isConnected
+            isConnected: this.isConnected,
+            type: this.type
         };
     }
 
@@ -35,7 +40,8 @@ export class Cell {
         const cell = new Cell(data.row, data.col);
         cell.owner = data.owner;
         cell.building = data.building;
-        cell.isConnected = data.isConnected ?? true; // Default to true if missing
+        cell.isConnected = data.isConnected ?? true;
+        cell.type = data.type || 'plain';
         return cell;
     }
 }
