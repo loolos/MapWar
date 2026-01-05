@@ -81,7 +81,13 @@ export class CellInfoSystem {
 
         // Owner
         const owner = cell.owner ? (cell.owner === 'P1' ? 'Player 1' : 'Player 2') : 'Neutral';
-        this.ownerText.setText(`Owner: ${owner}`);
+        let ownerDisplay = `Owner: ${owner}`;
+
+        if (cell.owner && !cell.isConnected) {
+            ownerDisplay += '\n(Disconnected: 50% Income)';
+        }
+
+        this.ownerText.setText(ownerDisplay);
         if (cell.owner === 'P1') this.ownerText.setColor('#ff4444');
         else if (cell.owner === 'P2') this.ownerText.setColor('#4444ff');
         else this.ownerText.setColor('#ffffff');

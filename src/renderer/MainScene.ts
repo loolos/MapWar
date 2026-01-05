@@ -106,6 +106,7 @@ export class MainScene extends Phaser.Scene {
                 this.overlayContainer = null!;
             }
             this.input.enabled = true;
+            this.initializeTerrainVisuals(); // Re-build terrain images for new map
             this.updateUI();
             this.drawMap();
             this.notificationSystem.show("Game Restarted!", 'info');
@@ -378,10 +379,7 @@ export class MainScene extends Phaser.Scene {
 
                 // If owned hill, draw a little marker to distinguish from plain?
                 // Or maybe just texture later. For now, small grey rect in corner?
-                if (cell.type === 'hill') {
-                    this.gridGraphics.fillStyle(0x333333, 0.5);
-                    this.gridGraphics.fillRect(x + 5, y + 5, 10, 10);
-                }
+
 
                 if (cell.building === 'base') {
                     this.gridGraphics.fillStyle(GameConfig.COLORS.BASE);

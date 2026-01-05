@@ -52,18 +52,7 @@ export class AIController {
 
     private findBestMove(playerId: string): { r: number, c: number } | null {
         const grid = this.engine.state.grid;
-        // let bestMove = null;
-        // let bestScore = -Infinity;
-
-        // Iterate all cells
-        // Heuristic:
-        // 1. Must be adjacent to owned.
-        // 2. Prioritize: 
-        //    - Capture Empty (Cheap)
-        //    - Attack Weak Enemy (Costly but good)
-
-        // For simplicity: Just find FIRST valid capture for now, 
-        // or random valid capture to avoid getting stuck.
+        const difficulty = GameConfig.AI_DIFFICULTY;
 
         const validMoves: { r: number, c: number, score: number }[] = [];
 
@@ -74,30 +63,64 @@ export class AIController {
                 // Skip if already owned
                 if (cell.owner === playerId) continue;
 
-                // Check direct adjacency (Cheap logic, Engine will re-validate)
+                // Check direct adjacency
                 if (!this.engine.state.isAdjacentToOwned(r, c, playerId as PlayerID)) continue;
 
                 let score = 0;
                 let cost = 0;
 
+                // --- HEURISTICS ---
                 if (cell.owner === null) {
-                    score = 10; // Capture Empty
+                    // Capture Empty
+                    score = 10;
                     cost = GameConfig.COST_CAPTURE;
                 } else {
-                    score = 20; // Attack Enemy
-                    cost = GameConfig.COST_ATTACK; // Assume adjacent
+                    // Attack Enemy
+                    cost = GameConfig.COST_ATTACK;
+
+                    if (difficulty === 'EASY') {
+                        score = 5; // Easy AI is timid, prefers empty land
+                    } else if (difficulty === 'HARD') {
+                        score = 50; // Hard AI is aggressive!
+                    } else {
+                        score = 20; // Medium AI is balanced
+                    }
                 }
 
                 // Can afford?
                 const player = this.engine.state.players[playerId];
                 if (player.gold >= cost) {
-                    validMoves.push({ r, c, score: score - cost * 0.1 }); // Slight penalty for cost
+                    // Calculate final score with some randomness for lower difficulties
+                    let finalScore = score - (cost * 0.1); // Cost penalty
+
+                    // Add slight random jitter to prevent deterministic loops in same-score scenarios
+                    finalScore += Math.random() * 2;
+
+                    validMoves.push({ r, c, score: finalScore });
                 }
             }
         }
 
         if (validMoves.length > 0) {
-            // Pick based on score, or random top
+            // Difficulty Selection Logic
+            if (difficulty === 'EASY') {
+                // Easy: 50% chance to pick purely random valid move (make mistakes)
+                if (Math.random() < 0.5) {
+                    const randomIndex = Math.floor(Math.random() * validMoves.length);
+                    return validMoves[randomIndex];
+                }
+                // Otherwise pick best (but with timid scores)
+                validMoves.sort((a, b) => b.score - a.score);
+                return validMoves[0];
+            }
+
+            if (difficulty === 'HARD') {
+                // Hard: Always strict best
+                validMoves.sort((a, b) => b.score - a.score);
+                return validMoves[0];
+            }
+
+            // Medium: Standard Sort
             validMoves.sort((a, b) => b.score - a.score);
             return validMoves[0];
         }

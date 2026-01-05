@@ -37,8 +37,11 @@ export const GameConfig = {
         TILE_SIZE: 64,
         SIDEBAR_WIDTH: 260,
         ACTION_BAR_HEIGHT: 150
-    }
+    },
+    AI_DIFFICULTY: 'MEDIUM' as Difficulty
 };
+
+export type Difficulty = 'EASY' | 'MEDIUM' | 'HARD';
 
 export type PlayerID = 'P1' | 'P2' | null;
 export type CellType = 'plain' | 'water' | 'hill';

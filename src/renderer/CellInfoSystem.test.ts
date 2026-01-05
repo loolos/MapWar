@@ -1,0 +1,122 @@
+
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// Mock Phaser before importing usage
+vi.mock('phaser', () => ({
+    default: {
+        GameObjects: {
+            Container: class { },
+            Text: class { },
+            Graphics: class { }
+        }
+    }
+}));
+
+import { CellInfoSystem } from './ui/CellInfoSystem';
+import { GameEngine } from '../core/GameEngine';
+
+// Mock UI Systems imports inside CellInfoSystem if necessary?
+// Actually CellInfoSystem imports Phaser. Since we mocked it above, it should be fine.
+
+// Mock Phaser Scene and Objects
+const mockText = {
+    setText: vi.fn(),
+    setColor: vi.fn(),
+    setStyle: vi.fn()
+};
+
+const mockGraphics = {
+    fillStyle: vi.fn(),
+    fillRect: vi.fn(),
+    clear: vi.fn()
+};
+
+const mockContainer = {
+    add: vi.fn(),
+    setMask: vi.fn(),
+    setPosition: vi.fn(),
+    setScale: vi.fn(),
+    scaleX: 1,
+    scaleY: 1,
+    getAt: vi.fn(() => mockGraphics)
+};
+
+const mockScene = {
+    add: {
+        container: vi.fn(() => mockContainer),
+        text: vi.fn(() => mockText),
+        graphics: vi.fn(() => mockGraphics)
+    },
+    make: {
+        graphics: vi.fn(() => ({
+            createGeometryMask: vi.fn(),
+            clear: vi.fn(),
+            fillStyle: vi.fn(),
+            fillRect: vi.fn()
+        }))
+    }
+} as any;
+
+describe('CellInfoSystem', () => {
+    let system: CellInfoSystem;
+    let engine: GameEngine;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        system = new CellInfoSystem(mockScene, 0, 0, 200);
+        engine = new GameEngine();
+
+        // Mock State because we don't want to rely on full engine logic
+        const grid: any[][] = [];
+        for (let r = 0; r < 10; r++) {
+            grid[r] = [];
+            for (let c = 0; c < 10; c++) {
+                grid[r][c] = {
+                    r, c, type: 'plain', owner: null, isConnected: false, building: 'none'
+                };
+            }
+        }
+
+        // Force overwrite of state
+        engine.state = {
+            grid: grid,
+            getCell: (r: number, c: number) => grid[r] && grid[r][c],
+            // Add other state props if needed by System (none currently)
+        } as any;
+    });
+
+    it('shows disconnected warning for owned but disconnected cells', () => {
+        // Setup: (0,0) is owned by P1 but NOT connected
+        const cell = engine.state.getCell(0, 0)!;
+        cell.owner = 'P1';
+        cell.isConnected = false;
+
+        system.update(engine, 0, 0);
+
+        // Check Owner Text Update
+        expect(mockText.setText).toHaveBeenCalledWith(expect.stringContaining('Disconnected: 50% Income'));
+        expect(mockText.setColor).toHaveBeenCalledWith('#ff4444');
+    });
+
+    it('shows normal text for connected cells', () => {
+        // Setup: (0,0) is owned by P1 AND connected
+        const cell = engine.state.getCell(0, 0)!;
+        cell.owner = 'P1';
+        cell.isConnected = true;
+
+        system.update(engine, 0, 0);
+
+        // Check Owner Text Update - Should NOT contain warning
+        expect(mockText.setText).toHaveBeenCalledWith('Owner: Player 1');
+        expect(mockText.setText).not.toHaveBeenCalledWith(expect.stringContaining('Disconnected'));
+    });
+
+    it('shows neutral for unowned cells', () => {
+        const cell = engine.state.getCell(0, 0)!;
+        cell.owner = null;
+
+        system.update(engine, 0, 0);
+
+        expect(mockText.setText).toHaveBeenCalledWith('Owner: Neutral');
+    });
+});
