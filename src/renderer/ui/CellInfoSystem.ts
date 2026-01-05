@@ -107,4 +107,8 @@ export class CellInfoSystem {
         // Update Wrap
         this.descText.setStyle({ wordWrap: { width: width - 20 } });
     }
+
+    public setScale(scale: number) {
+        this.container.setScale(scale);
+    }
 }

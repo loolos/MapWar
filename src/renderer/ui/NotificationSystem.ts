@@ -65,4 +65,8 @@ export class NotificationSystem {
         // Update Word Wrap
         this.textObj.setStyle({ wordWrap: { width: width - 20 } });
     }
+
+    public setScale(scale: number) {
+        this.container.setScale(scale);
+    }
 }

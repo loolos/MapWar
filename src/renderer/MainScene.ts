@@ -154,98 +154,126 @@ export class MainScene extends Phaser.Scene {
     }
 
     layoutLandscape(w: number, h: number) {
-        const sidebarWidth = 300;
-        const bottomHeight = 180;
+        // 3-Column Layout
+        const leftColW = 220;
+        const rightColW = 220;
+        const centerW = w - leftColW - rightColW;
 
-        // Map takes (W - Sidebar) x (H - Bottom)
-        const availableMapW = w - sidebarWidth;
-        const availableMapH = h - bottomHeight;
+        // Backgrounds
+        // Left (Info/Status)
+        this.trBg.clear().fillStyle(0x222222).fillRect(0, 0, leftColW, h);
+        // Right (Logs/Buttons)
+        this.brBg.clear().fillStyle(0x111111).fillRect(w - rightColW, 0, rightColW, h);
+        // Center (Map bg?) - optional, let's leave it clear or action color?
+        // Let's use Action BG for the map area background if needed, or just let map sit there.
+        // Actually blBg was used for buttons. Let's reuse blBg for the Button area background in the right column?
+        // Or just paint the whole right column dark and put buttons on top.
 
-        const maxTileW = Math.floor(availableMapW / GameConfig.GRID_SIZE);
-        const maxTileH = Math.floor(availableMapH / GameConfig.GRID_SIZE);
-        this.tileSize = Math.min(maxTileW, maxTileH, 64);
+        // 1. LEFT COLUMN
+        // Player Status at Top
+        const statusH = 350;
+        this.playerStatusSystem.setScale(1);
+        this.playerStatusSystem.setPosition(10, 10);
+        this.playerStatusSystem.resize(statusH);
 
-        const mapSize = this.tileSize * GameConfig.GRID_SIZE;
+        // Cell Info below Status
+        this.infoSystem.setScale(1);
+        this.infoSystem.setPosition(10, statusH + 20);
+        this.infoSystem.resize(leftColW - 20);
 
-        // Origins
-        this.mapOffsetX = 0;
-        this.mapOffsetY = 0;
-        this.mapContainer.setPosition(0, 0);
+        // 2. RIGHT COLUMN
+        // Logs at Top
+        const btnH = 200; // Buttons at bottom
+        const logsH = h - btnH;
 
-        const tr_x = mapSize;
-        const tr_y = 0;
-        const bl_x = 0;
-        const bl_y = mapSize;
-        const br_x = mapSize;
-        const br_y = mapSize;
+        this.notificationSystem.setScale(1);
+        this.notificationSystem.setPosition(w - rightColW + 10, 10);
+        this.notificationSystem.resize(rightColW - 20, logsH - 20);
+        this.notificationSystem.setVisible(true);
 
-        // Resize Backgrounds
-        this.trBg.clear().fillStyle(0x222222).fillRect(tr_x, tr_y, sidebarWidth, mapSize);
-        this.blBg.clear().fillStyle(GameConfig.COLORS.ACTION_BG).fillRect(bl_x, bl_y, mapSize, bottomHeight);
-        this.brBg.clear().fillStyle(0x111111).fillRect(br_x, br_y, sidebarWidth, bottomHeight);
+        // Buttons at Bottom of Right Column
+        // Draw Button BG
+        this.blBg.clear().fillStyle(GameConfig.COLORS.ACTION_BG).fillRect(w - rightColW, h - btnH, rightColW, btnH);
+        this.buttonSystem.setScale(1);
+        this.buttonSystem.setPosition(w - rightColW + 10, h - btnH + 10);
 
-        // Update Systems
-        this.playerStatusSystem.setPosition(tr_x, tr_y);
-        this.playerStatusSystem.resize(mapSize); // Height matches map
+        // 3. CENTER (Map)
+        // Center map in the middle area
+        if (centerW > 0) {
+            const maxTileW = Math.floor(centerW / GameConfig.GRID_SIZE);
+            const maxTileH = Math.floor(h / GameConfig.GRID_SIZE);
+            this.tileSize = Math.min(maxTileW, maxTileH, 64);
+            const mapSize = this.tileSize * GameConfig.GRID_SIZE;
 
-        this.infoSystem.setPosition(tr_x + 10, tr_y + 350);
-        this.infoSystem.resize(sidebarWidth - 20);
-
-        this.buttonSystem.setPosition(bl_x + 20, bl_y + 20);
-
-        this.notificationSystem.setPosition(br_x + 10, br_y + 10);
-        this.notificationSystem.resize(sidebarWidth - 20, bottomHeight - 20);
+            this.mapOffsetX = leftColW + (centerW - mapSize) / 2;
+            this.mapOffsetY = (h - mapSize) / 2;
+        } else {
+            this.tileSize = 32;
+            this.mapOffsetX = leftColW;
+            this.mapOffsetY = 0;
+        }
+        this.mapContainer.setPosition(this.mapOffsetX, this.mapOffsetY);
     }
 
     layoutPortrait(w: number, h: number) {
-        // Stacked Layout
-        // Map (Square, Centered)
-        // Status (Below Map)
-        // Buttons (Below Status)
-        // Logs (Bottom Fill)
+        const pad = 10;
+        const uiScale = 0.7;
 
-        const maxTile = Math.floor(w / GameConfig.GRID_SIZE);
-        const maxTileH = Math.floor((h * 0.5) / GameConfig.GRID_SIZE);
-        this.tileSize = Math.min(maxTile, maxTileH, 64);
+        // 1. TOP: Compact Header
+        const headerHeight = 160;
+        this.trBg.clear().fillStyle(0x222222).fillRect(0, 0, w, headerHeight);
 
-        const mapSize = this.tileSize * GameConfig.GRID_SIZE;
+        this.playerStatusSystem.setScale(uiScale);
+        this.playerStatusSystem.setPosition(pad, pad);
+        this.playerStatusSystem.resize(headerHeight / uiScale);
 
-        // Center Map Horizontally
-        this.mapOffsetX = (w - mapSize) / 2;
-        this.mapOffsetY = 10; // Top padding
-        this.mapContainer.setPosition(this.mapOffsetX, this.mapOffsetY);
+        const infoX = w / 2;
+        this.infoSystem.setScale(uiScale);
+        this.infoSystem.setPosition(infoX, pad);
+        const availableInfoW = (w / 2) - pad * 2;
+        this.infoSystem.resize(availableInfoW / uiScale);
 
-        const nextY = this.mapOffsetY + mapSize + 10;
+        // 3. BOTTOM: Buttons & Logs
+        const bottomHeight = 200; // Fixed footer height
+        const bottomY = h - bottomHeight;
 
-        const statusHeight = 300;
-        this.trBg.clear().fillStyle(0x222222).fillRect(0, nextY, w, statusHeight);
+        // Draw Backgrounds
+        this.blBg.clear().fillStyle(GameConfig.COLORS.ACTION_BG).fillRect(0, bottomY, w / 2, bottomHeight);
+        this.brBg.clear().fillStyle(0x111111).fillRect(w / 2, bottomY, w / 2, bottomHeight);
 
-        this.playerStatusSystem.setPosition(10, nextY);
-        this.playerStatusSystem.resize(statusHeight);
+        // Buttons (Left)
+        this.buttonSystem.setScale(uiScale);
+        this.buttonSystem.setPosition(pad, bottomY + pad);
 
-        // Put Cell Info to the right of Player Status
-        this.infoSystem.setPosition(180, nextY);
-        this.infoSystem.resize(w - 190);
+        // Logs (Right)
+        this.notificationSystem.setScale(uiScale);
+        this.notificationSystem.setPosition((w / 2) + pad, bottomY + pad);
+        this.notificationSystem.resize(((w / 2) - pad * 2) / uiScale, (bottomHeight - pad * 2) / uiScale);
+        this.notificationSystem.setVisible(true);
 
-        // Buttons at Bottom Fixed
-        const btnHeight = 120;
-        const btnY = h - btnHeight;
+        // 2. MIDDLE: Map Centered with Margins
+        const mapStartY = headerHeight + pad; // Top Margin
+        const mapEndY = bottomY - pad; // Bottom Margin
+        const availableMapH = mapEndY - mapStartY;
+        const availableMapW = w - pad * 2;
 
-        this.blBg.clear().fillStyle(GameConfig.COLORS.ACTION_BG).fillRect(0, btnY, w, btnHeight);
-        this.buttonSystem.setPosition(10, btnY + 10);
+        if (availableMapW > 0 && availableMapH > 0) {
+            const maxTileW = Math.floor(availableMapW / GameConfig.GRID_SIZE);
+            const maxTileH = Math.floor(availableMapH / GameConfig.GRID_SIZE);
+            this.tileSize = Math.min(maxTileW, maxTileH, 64);
+            const mapSize = this.tileSize * GameConfig.GRID_SIZE;
 
-        // Notifications between Status and Buttons
-        const notifY = nextY + statusHeight;
-        const notifH = btnY - notifY;
-        if (notifH > 0) {
-            this.brBg.clear().fillStyle(0x111111).fillRect(0, notifY, w, notifH);
-            this.notificationSystem.setPosition(10, notifY + 10);
-            this.notificationSystem.resize(w - 20, notifH - 20);
-            this.notificationSystem.setVisible(true);
+            this.mapOffsetX = (w - mapSize) / 2;
+            this.mapOffsetY = mapStartY + (availableMapH - mapSize) / 2;
         } else {
-            this.notificationSystem.setVisible(false); // No space
+            this.tileSize = 32;
+            this.mapOffsetX = 0;
+            this.mapOffsetY = mapStartY;
         }
+        this.mapContainer.setPosition(this.mapOffsetX, this.mapOffsetY);
     }
+
+
 
     setupButtons() {
         // Slot 0 (Row 0, Col 0): End Turn

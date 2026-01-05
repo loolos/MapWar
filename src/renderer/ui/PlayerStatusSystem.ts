@@ -148,4 +148,8 @@ export class PlayerStatusSystem {
             bg.fillRect(0, 0, 260, height);
         }
     }
+
+    public setScale(scale: number) {
+        this.container.setScale(scale);
+    }
 }

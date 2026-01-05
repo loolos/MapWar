@@ -77,4 +77,8 @@ export class ActionButtonSystem {
     public setPosition(x: number, y: number) {
         this.container.setPosition(x, y);
     }
+
+    public setScale(scale: number) {
+        this.container.setScale(scale);
+    }
 }

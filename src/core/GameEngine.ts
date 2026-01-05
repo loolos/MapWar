@@ -198,10 +198,21 @@ export class GameEngine {
         // 1. Basic Cell Checks
         const cell = this.state.getCell(row, col);
         if (!cell) return { valid: false, reason: "Out of bounds" };
-        if (cell.type === 'water') return { valid: false, reason: "Cannot move to Water" };
         if (cell.owner === playerId) return { valid: false, reason: "Already owned" }; // Self-own check
 
-        // 2. Cost Check
+        // 2. Adjacency Check (Prioritize reachability feedback)
+        // must be adjacent to OWNED or PENDING
+        const isAdjToOwned = this.state.isAdjacentToOwned(row, col, playerId);
+        const isAdjToPending = this.isAdjacentToPending(row, col);
+
+        if (!isAdjToOwned && !isAdjToPending) {
+            return { valid: false, reason: "Must be adjacent to your territory" };
+        }
+
+        // 3. Terrain Check
+        if (cell.type === 'water') return { valid: false, reason: "Cannot move to Water" };
+
+        // 4. Cost Check
         // Calculate total cost of pending moves + this move
         let plannedCost = 0;
         for (const m of this.pendingMoves) {
@@ -211,15 +222,6 @@ export class GameEngine {
 
         if (player.gold < plannedCost + thisMoveCost) {
             return { valid: false, reason: `Not enough gold(Need ${thisMoveCost})` };
-        }
-
-        // 3. Adjacency Check
-        // must be adjacent to OWNED or PENDING
-        const isAdjToOwned = this.state.isAdjacentToOwned(row, col, playerId);
-        const isAdjToPending = this.isAdjacentToPending(row, col);
-
-        if (!isAdjToOwned && !isAdjToPending) {
-            return { valid: false, reason: "Must be adjacent to your territory" };
         }
 
         return { valid: true };
