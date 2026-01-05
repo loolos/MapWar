@@ -73,4 +73,8 @@ export class ActionButtonSystem {
         this.texts = [];
         this.container.removeAll(true);
     }
+
+    public setPosition(x: number, y: number) {
+        this.container.setPosition(x, y);
+    }
 }

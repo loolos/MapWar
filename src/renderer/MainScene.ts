@@ -23,6 +23,14 @@ export class MainScene extends Phaser.Scene {
     selectedRow: number | null = null;
     selectedCol: number | null = null;
 
+    // Layout State
+    trBg!: Phaser.GameObjects.Graphics;
+    blBg!: Phaser.GameObjects.Graphics;
+    brBg!: Phaser.GameObjects.Graphics;
+    mapContainer!: Phaser.GameObjects.Container;
+    mapOffsetX: number = 0;
+    mapOffsetY: number = 0;
+
     constructor() {
         super('MainScene');
         this.engine = new GameEngine();
@@ -49,58 +57,38 @@ export class MainScene extends Phaser.Scene {
             this.handleInput(pointer);
         });
 
-        // Graphics Container
+        // ---------------------------------------------------------
+        // INITIALIZE GRAPHICS & SYSTEMS (Empty/Default)
+        // ---------------------------------------------------------
+
+        // Map Container
+        this.mapContainer = this.add.container(0, 0);
+        this.terrainGroup = this.add.group(); // Images will be added to specific coords, but we'll add them to container instead?
+        // Phaser Group cannot be added to Container directly if it's a "Group" of GameObjects. 
+        // We actually add the GameObjects to the container. 
+        // Let's change terrain logic slightly: we'll add images to mapContainer directly if possible, or just use group.
+        // Actually, Group is efficient for pooling. Container is for transforms.
+        // We will make `terrainGroup` just a list tracker, and add valid objects to `mapContainer`.
+
         this.gridGraphics = this.add.graphics();
-        this.terrainGroup = this.add.group();
-        this.gridGraphics.depth = 1; // Overlay on top of terrain
+        this.mapContainer.add(this.gridGraphics); // Grid on top?
+        // Wait, terrain is under grid. 
+        // We'll manage terrain images manually inside mapContainer.
 
+        // UI Backgrounds
+        this.trBg = this.add.graphics();
+        this.blBg = this.add.graphics();
+        this.brBg = this.add.graphics();
 
-        // Calculate responsive Layout
-        const sidebarWidth = 320; // Reserved width for sidebar
-        const bottomBarHeight = 160; // Reserved height for actions
-        const pad = 20;
-
-        const availableHeight = (this.sys.game.config.height as number) - bottomBarHeight - pad;
-        const availableWidth = (this.sys.game.config.width as number) - sidebarWidth - pad;
-
-        const maxTileHeight = Math.floor(availableHeight / GameConfig.GRID_SIZE);
-        const maxTileWidth = Math.floor(availableWidth / GameConfig.GRID_SIZE);
-
-        this.tileSize = Math.min(maxTileHeight, maxTileWidth, 64); // Cap max size at 64
-
-        // Layout Constants
-        const mapWidth = GameConfig.GRID_SIZE * this.tileSize;
-
-        // --- Graphical Sidebar (Player Status System) ---
-        // Width ~260, Height = game height
-        this.playerStatusSystem = new PlayerStatusSystem(this, mapWidth, 0, this.sys.game.config.height as number);
-
-        // --- Cell Info Panel (Middle Right) ---
-        // Position it below the status panel area? 
-        // Status runs 0 to ~200? Let's give it some space.
-        this.infoSystem = new CellInfoSystem(this, mapWidth + 10, 300, 240);
-
-        // --- Bottom Action Bar ---
-        const mapHeight = GameConfig.GRID_SIZE * this.tileSize;
-        const actionBarHeight = 150;
-        const actionBarY = mapHeight;
-
-        // Draw Action Bar Background
-        const actionBg = this.add.graphics();
-        actionBg.fillStyle(GameConfig.COLORS.ACTION_BG);
-        actionBg.fillRect(0, actionBarY, (this.sys.game.config.width as number), actionBarHeight);
-
-        // Initialize UI Systems
-
-        // Button System (Left/Center)
-        this.buttonSystem = new ActionButtonSystem(this, 20, actionBarY + 15);
+        // UI Systems (Init with dummies)
+        this.playerStatusSystem = new PlayerStatusSystem(this, 0, 0, 100);
+        this.infoSystem = new CellInfoSystem(this, 0, 0, 100);
+        this.buttonSystem = new ActionButtonSystem(this, 0, 0);
+        this.notificationSystem = new NotificationSystem(this, 0, 0, 100, 100);
         this.setupButtons();
 
-        // Notification System (Bottom Right)
-        const sidebarX = mapWidth;
-        const notifWidth = (this.sys.game.config.width as number) - sidebarX - 20;
-        this.notificationSystem = new NotificationSystem(this, sidebarX + 10, actionBarY + 10, notifWidth, actionBarHeight - 20);
-        this.notificationSystem.show("Welcome to MapWar! Select cells to move.", 'info');
+        // Handle Resize
+        this.scale.on('resize', this.resize, this);
 
         // Event Listeners
         this.engine.on('mapUpdate', () => this.drawMap());
@@ -112,7 +100,6 @@ export class MainScene extends Phaser.Scene {
             this.drawMap();
             this.updateUI();
         });
-
         this.engine.on('gameRestart', () => {
             if (this.overlayContainer) {
                 this.overlayContainer.destroy();
@@ -137,21 +124,133 @@ export class MainScene extends Phaser.Scene {
             this.notificationSystem.show(msg, 'info');
         });
 
-        // Initial Draw
-        this.initializeTerrainVisuals();
+        // Trigger Initial Layout
+        this.resize(this.scale.gameSize);
+    }
+
+    resize(gameSize: Phaser.Structs.Size) {
+        const width = gameSize.width;
+        const height = gameSize.height;
+
+        this.cameras.main.setViewport(0, 0, width, height);
+
+        // Determine Orientation
+        const isPortrait = height > width;
+
+        if (isPortrait) {
+            this.layoutPortrait(width, height);
+        } else {
+            this.layoutLandscape(width, height);
+        }
+
+        this.initializeTerrainVisuals(); // Re-create terrain images with new tile size
         this.drawMap();
         this.updateUI();
-
-        // Hack/Fix: Force a redraw after a short delay to ensure rendering catches up
-        // (Fixes issue where map is black until first click)
+        // Hack/Fix: Force a redraw after a short delay
         this.time.delayedCall(100, () => {
             this.drawMap();
             this.updateUI();
         });
     }
 
+    layoutLandscape(w: number, h: number) {
+        const sidebarWidth = 300;
+        const bottomHeight = 180;
+
+        // Map takes (W - Sidebar) x (H - Bottom)
+        const availableMapW = w - sidebarWidth;
+        const availableMapH = h - bottomHeight;
+
+        const maxTileW = Math.floor(availableMapW / GameConfig.GRID_SIZE);
+        const maxTileH = Math.floor(availableMapH / GameConfig.GRID_SIZE);
+        this.tileSize = Math.min(maxTileW, maxTileH, 64);
+
+        const mapSize = this.tileSize * GameConfig.GRID_SIZE;
+
+        // Origins
+        this.mapOffsetX = 0;
+        this.mapOffsetY = 0;
+        this.mapContainer.setPosition(0, 0);
+
+        const tr_x = mapSize;
+        const tr_y = 0;
+        const bl_x = 0;
+        const bl_y = mapSize;
+        const br_x = mapSize;
+        const br_y = mapSize;
+
+        // Resize Backgrounds
+        this.trBg.clear().fillStyle(0x222222).fillRect(tr_x, tr_y, sidebarWidth, mapSize);
+        this.blBg.clear().fillStyle(GameConfig.COLORS.ACTION_BG).fillRect(bl_x, bl_y, mapSize, bottomHeight);
+        this.brBg.clear().fillStyle(0x111111).fillRect(br_x, br_y, sidebarWidth, bottomHeight);
+
+        // Update Systems
+        this.playerStatusSystem.setPosition(tr_x, tr_y);
+        this.playerStatusSystem.resize(mapSize); // Height matches map
+
+        this.infoSystem.setPosition(tr_x + 10, tr_y + 350);
+        this.infoSystem.resize(sidebarWidth - 20);
+
+        this.buttonSystem.setPosition(bl_x + 20, bl_y + 20);
+
+        this.notificationSystem.setPosition(br_x + 10, br_y + 10);
+        this.notificationSystem.resize(sidebarWidth - 20, bottomHeight - 20);
+    }
+
+    layoutPortrait(w: number, h: number) {
+        // Stacked Layout
+        // Map (Square, Centered)
+        // Status (Below Map)
+        // Buttons (Below Status)
+        // Logs (Bottom Fill)
+
+        const maxTile = Math.floor(w / GameConfig.GRID_SIZE);
+        const maxTileH = Math.floor((h * 0.5) / GameConfig.GRID_SIZE);
+        this.tileSize = Math.min(maxTile, maxTileH, 64);
+
+        const mapSize = this.tileSize * GameConfig.GRID_SIZE;
+
+        // Center Map Horizontally
+        this.mapOffsetX = (w - mapSize) / 2;
+        this.mapOffsetY = 10; // Top padding
+        this.mapContainer.setPosition(this.mapOffsetX, this.mapOffsetY);
+
+        const nextY = this.mapOffsetY + mapSize + 10;
+
+        const statusHeight = 300;
+        this.trBg.clear().fillStyle(0x222222).fillRect(0, nextY, w, statusHeight);
+
+        this.playerStatusSystem.setPosition(10, nextY);
+        this.playerStatusSystem.resize(statusHeight);
+
+        // Put Cell Info to the right of Player Status
+        this.infoSystem.setPosition(180, nextY);
+        this.infoSystem.resize(w - 190);
+
+        // Buttons at Bottom Fixed
+        const btnHeight = 120;
+        const btnY = h - btnHeight;
+
+        this.blBg.clear().fillStyle(GameConfig.COLORS.ACTION_BG).fillRect(0, btnY, w, btnHeight);
+        this.buttonSystem.setPosition(10, btnY + 10);
+
+        // Notifications between Status and Buttons
+        const notifY = nextY + statusHeight;
+        const notifH = btnY - notifY;
+        if (notifH > 0) {
+            this.brBg.clear().fillStyle(0x111111).fillRect(0, notifY, w, notifH);
+            this.notificationSystem.setPosition(10, notifY + 10);
+            this.notificationSystem.resize(w - 20, notifH - 20);
+            this.notificationSystem.setVisible(true);
+        } else {
+            this.notificationSystem.setVisible(false); // No space
+        }
+    }
+
     setupButtons() {
         // Slot 0 (Row 0, Col 0): End Turn
+        // Use text update if button already exists? ActionButtonSystem recreate clears them.
+        this.buttonSystem.clearButtons();
         this.buttonSystem.addButton(0, 0, "END TURN", () => {
             this.engine.endTurn();
         });
@@ -163,11 +262,15 @@ export class MainScene extends Phaser.Scene {
             return;
         }
 
+        // Adjust pointer by map offset
+        const localX = pointer.x - this.mapOffsetX;
+        const localY = pointer.y - this.mapOffsetY;
+
         // Ignore clicks outside the map grid
         const mapWidth = GameConfig.GRID_SIZE * this.tileSize;
         const mapHeight = GameConfig.GRID_SIZE * this.tileSize;
 
-        if (pointer.x >= mapWidth || pointer.y >= mapHeight) return;
+        if (localX < 0 || localX >= mapWidth || localY < 0 || localY >= mapHeight) return;
 
         // Block input if AI turn
         const currentPlayer = this.engine.state.getCurrentPlayer();
@@ -175,8 +278,8 @@ export class MainScene extends Phaser.Scene {
             return;
         }
 
-        const col = Math.floor(pointer.x / this.tileSize);
-        const row = Math.floor(pointer.y / this.tileSize);
+        const col = Math.floor(localX / this.tileSize);
+        const row = Math.floor(localY / this.tileSize);
 
         if (col >= 0 && col < GameConfig.GRID_SIZE && row >= 0 && row < GameConfig.GRID_SIZE) {
             // Update Selection
@@ -254,6 +357,54 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
+    initializeTerrainVisuals() {
+        console.log("initializeTerrainVisuals: START");
+
+        if (this.terrainGroup) {
+            this.terrainGroup.clear(true, true); // Destroy entities
+        }
+
+        // Also clear mapContainer of images (but keep gridGraphics!)
+        // Since we didn't add images to mapContainer before, we start fresh logic:
+        // Identify images in mapContainer that are terrain and destroy them?
+        // Or just use a Group to track them and destroy them.
+
+        // BETTER: remove all from terrainGroup (which destroys them).
+        // Then create new images and add to terrainGroup AND mapContainer.
+
+        const grid = this.engine.state.grid;
+        if (!grid || grid.length === 0) {
+            console.error("initializeTerrainVisuals: GRID IS EMPTY OR NULL");
+            return;
+        }
+
+        let count = 0;
+        try {
+            for (let r = 0; r < GameConfig.GRID_SIZE; r++) {
+                for (let c = 0; c < GameConfig.GRID_SIZE; c++) {
+                    const cell = grid[r][c];
+                    const x = c * this.tileSize + this.tileSize / 2; // Center origin
+                    const y = r * this.tileSize + this.tileSize / 2;
+
+                    let texture = 'tile_plain';
+                    if (cell.type === 'hill') texture = 'tile_hill';
+                    else if (cell.type === 'water') texture = 'tile_water';
+
+                    const img = this.add.image(x, y, texture);
+                    img.setDisplaySize(this.tileSize, this.tileSize);
+
+                    this.terrainGroup.add(img);
+                    this.mapContainer.add(img); // Now validly placed in container
+                    this.mapContainer.sendToBack(img); // Ensure behind grid
+                    count++;
+                }
+            }
+        } catch (err) {
+            console.error("initializeTerrainVisuals: ERROR in loop", err);
+        }
+        console.log(`initializeTerrainVisuals: END. Created ${count} images.`);
+    }
+
     updateUI() {
         // Delegate to PlayerStatusSystem
         this.playerStatusSystem.update(this.engine);
@@ -273,7 +424,8 @@ export class MainScene extends Phaser.Scene {
         }
 
         if (currentPlayer.isAI) {
-            this.notificationSystem.show('🤖 AI is planning...', 'info');
+            // this.notificationSystem.show('🤖 AI is planning...', 'info');
+            // Don't spam notifications on updateUI
         } else if (this.engine.lastError) {
             this.notificationSystem.show(`⚠️ ${this.engine.lastError}`, 'error');
         } else if (totalCost > currentGold) {
@@ -281,7 +433,8 @@ export class MainScene extends Phaser.Scene {
         } else if (hasHighCost) {
             this.notificationSystem.show('⚠️ Long range attack expensive!', 'warning');
         } else {
-            this.notificationSystem.show('Select cells to move. Click End Turn when ready.', 'info');
+            // Keep last message or show default?
+            // this.notificationSystem.show('Select cells to move. Click End Turn when ready.', 'info');
         }
     }
 
@@ -291,37 +444,13 @@ export class MainScene extends Phaser.Scene {
         // Force initial render on first update to avoid black screen
         if (!this.hasRenderedOnce) {
             console.log("Forcing initial drawMap");
+            // Determine initial layout if not already done? resize calls it.
+            // But if create happened before resize event fired? 
+            // resize calls drawMap. 
+            // If we need another force:
             this.drawMap();
             this.updateUI();
             this.hasRenderedOnce = true;
-        }
-    }
-
-    initializeTerrainVisuals() {
-        if (!this.terrainGroup) {
-            return;
-        }
-        this.terrainGroup.clear(true, true); // Destroy existing children
-
-        const grid = this.engine.state.grid;
-        if (!grid) return;
-
-        for (let r = 0; r < GameConfig.GRID_SIZE; r++) {
-            for (let c = 0; c < GameConfig.GRID_SIZE; c++) {
-                const cell = grid[r][c];
-                if (!cell) continue;
-
-                const x = c * this.tileSize + this.tileSize / 2; // Center origin
-                const y = r * this.tileSize + this.tileSize / 2;
-
-                let texture = 'tile_plain';
-                if (cell.type === 'hill') texture = 'tile_hill';
-                else if (cell.type === 'water') texture = 'tile_water';
-
-                const img = this.add.image(x, y, texture);
-                img.setDisplaySize(this.tileSize, this.tileSize);
-                this.terrainGroup.add(img);
-            }
         }
     }
 
@@ -334,8 +463,8 @@ export class MainScene extends Phaser.Scene {
             this.overlayContainer = null!;
         }
 
-        const w = this.sys.game.config.width as number;
-        const h = this.sys.game.config.height as number;
+        const w = this.scale.width;
+        const h = this.scale.height;
 
         this.overlayContainer = this.add.container(0, 0);
 
@@ -346,7 +475,7 @@ export class MainScene extends Phaser.Scene {
 
         const title = this.add.text(w / 2, h / 2 - 50, `${winner === 'P1' ? 'PLAYER 1' : 'PLAYER 2'} WINS!`, {
             fontSize: '64px',
-            color: winner === 'P1' ? '#ff4444' : '#4444ff', // Keep winning colors dynamic/specific
+            color: winner === 'P1' ? '#ff4444' : '#4444ff',
             fontStyle: 'bold',
             stroke: '#ffffff',
             strokeThickness: 6
@@ -356,7 +485,7 @@ export class MainScene extends Phaser.Scene {
         const restartBtn = this.add.text(w / 2, h / 2 + 60, 'PLAY AGAIN (SWAP)', {
             fontSize: '32px',
             color: '#ffffff',
-            backgroundColor: '#333333', // Could use UI_BG but #333333 is fine for button specific
+            backgroundColor: '#333333',
             padding: { x: 20, y: 10 }
         })
             .setOrigin(0.5)

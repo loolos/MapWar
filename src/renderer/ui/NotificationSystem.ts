@@ -52,4 +52,17 @@ export class NotificationSystem {
     public setVisible(visible: boolean) {
         this.container.setVisible(visible);
     }
+
+    public setPosition(x: number, y: number) {
+        this.container.setPosition(x, y);
+    }
+
+    public resize(width: number, height: number) {
+        this.background.clear();
+        this.background.fillStyle(0x000000, 0.5);
+        this.background.fillRect(0, 0, width, height);
+
+        // Update Word Wrap
+        this.textObj.setStyle({ wordWrap: { width: width - 20 } });
+    }
 }

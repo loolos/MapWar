@@ -1,11 +1,15 @@
 import Phaser from 'phaser';
 import { MainScene } from './renderer/MainScene';
-import { GameConfig } from './core/GameConfig';
+
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
-  width: GameConfig.GRID_SIZE * 64 + 250, // Extra space for graphical sidebar
-  height: GameConfig.GRID_SIZE * 64 + 100, // Extra space for bottom action bar
+  width: '100%',
+  height: '100%',
+  scale: {
+    mode: Phaser.Scale.RESIZE,
+    autoCenter: Phaser.Scale.CENTER_BOTH
+  },
   parent: 'app',
   scene: [MainScene],
   physics: {

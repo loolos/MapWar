@@ -89,4 +89,22 @@ export class CellInfoSystem {
         const desc = GameConfig.TERRAIN_DESCRIPTIONS[cell.type.toUpperCase() as keyof typeof GameConfig.TERRAIN_DESCRIPTIONS];
         this.descText.setText(desc || '');
     }
+
+    public setPosition(x: number, y: number) {
+        this.container.setPosition(x, y);
+    }
+
+    public resize(width: number) {
+        // Redraw Background
+        const bgIndex = 0;
+        const bg = this.container.getAt(bgIndex) as Phaser.GameObjects.Graphics;
+        if (bg) {
+            bg.clear();
+            bg.fillStyle(GameConfig.COLORS.UI_BG, 1);
+            bg.fillRect(0, 0, width, 220);
+        }
+
+        // Update Wrap
+        this.descText.setStyle({ wordWrap: { width: width - 20 } });
+    }
 }

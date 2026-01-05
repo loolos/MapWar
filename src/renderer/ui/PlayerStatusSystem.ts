@@ -131,5 +131,21 @@ export class PlayerStatusSystem {
 
         this.costText.setText(`${totalCost} G`);
         this.costText.setColor(totalCost > currentGold ? '#ff0000' : '#ff8888');
+        this.costText.setColor(totalCost > currentGold ? '#ff0000' : '#ff8888');
+    }
+
+    public setPosition(x: number, y: number) {
+        this.container.setPosition(x, y);
+    }
+
+    public resize(height: number) {
+        // Clear background
+        const bgIndex = 0; // Assuming bg is first child
+        const bg = this.container.getAt(bgIndex) as Phaser.GameObjects.Graphics;
+        if (bg) {
+            bg.clear();
+            bg.fillStyle(0x222222);
+            bg.fillRect(0, 0, 260, height);
+        }
     }
 }
