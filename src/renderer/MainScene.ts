@@ -393,6 +393,9 @@ export class MainScene extends Phaser.Scene {
         // Update Offsets for Input
         this.mapOffsetX = this.mapContainer.x;
         this.mapOffsetY = this.mapContainer.y;
+
+        // Force Redraw of Grid/Overlays to ensure Z-order and freshness
+        this.drawMap();
     }
 
 
@@ -542,7 +545,7 @@ export class MainScene extends Phaser.Scene {
         // resize() handles scale/pos.
         // If this is first draw, we might need to force resize logic?
         if (!this.hasRenderedOnce) {
-            this.resize(this.scale.gameSize);
+            // this.resize(this.scale.gameSize); // Removed to prevent infinite loop
             this.hasRenderedOnce = true;
         }
     }
