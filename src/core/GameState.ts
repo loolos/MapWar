@@ -4,21 +4,39 @@ import { GameConfig, type Player, type PlayerID } from './GameConfig';
 export class GameState {
     grid: Cell[][];
     players: Record<string, Player>;
+    playerOrder: string[];
     currentPlayerId: PlayerID;
     turnCount: number;
 
-    constructor() {
+    constructor(playerConfigs: { id: string, isAI: boolean, color: number }[] = []) {
         this.grid = [];
-        this.players = {
-            'P1': { id: 'P1', color: 0xff0000, gold: GameConfig.INITIAL_GOLD, isAI: false },
-            'P2': { id: 'P2', color: 0x0000ff, gold: GameConfig.INITIAL_GOLD, isAI: true }
-        };
-        this.currentPlayerId = 'P1';
+        this.players = {};
+        this.playerOrder = [];
+
+        // specific default for 2 players if none provided (Backwards compatibility)
+        if (playerConfigs.length === 0) {
+            playerConfigs = [
+                { id: 'P1', isAI: false, color: GameConfig.COLORS.P1 },
+                { id: 'P2', isAI: true, color: GameConfig.COLORS.P2 }
+            ];
+        }
+
+        playerConfigs.forEach(cfg => {
+            this.players[cfg.id] = {
+                id: cfg.id,
+                color: cfg.color,
+                gold: GameConfig.INITIAL_GOLD,
+                isAI: cfg.isAI
+            };
+            this.playerOrder.push(cfg.id);
+        });
+
+        this.currentPlayerId = this.playerOrder[0];
         this.turnCount = 1;
         this.initializeGrid();
     }
 
-    private initializeGrid(swapped: boolean = false) {
+    private initializeGrid() {
         // 1. Initialize empty plain grid
         for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
             this.grid[r] = [];
@@ -31,20 +49,106 @@ export class GameState {
         // 2. Generate Clustered Terrain
         this.generateTerrain();
 
-        this.setupBases(swapped);
+        this.setupBases();
     }
 
-    private setupBases(swapped: boolean) {
-        const p1Start = swapped ? { r: 0, c: 0 } : { r: GameConfig.GRID_HEIGHT - 1, c: GameConfig.GRID_WIDTH - 1 };
-        const p2Start = swapped ? { r: GameConfig.GRID_HEIGHT - 1, c: GameConfig.GRID_WIDTH - 1 } : { r: 0, c: 0 };
+    private setupBases() {
+        // Distributed Spawning Logic
+        // Place players evenly along an inset rectangle/ellipse
+        const count = this.playerOrder.length;
+        if (count === 0) return;
 
-        this.setOwner(p1Start.r, p1Start.c, 'P1');
-        this.setBuilding(p1Start.r, p1Start.c, 'base');
-        this.grid[p1Start.r][p1Start.c].type = 'plain'; // Force plain
+        const w = GameConfig.GRID_WIDTH;
+        const h = GameConfig.GRID_HEIGHT;
 
-        this.setOwner(p2Start.r, p2Start.c, 'P2');
-        this.setBuilding(p2Start.r, p2Start.c, 'base');
-        this.grid[p2Start.r][p2Start.c].type = 'plain'; // Force plain
+        // Inset by 2 tiles
+        const margin = 2;
+        const boundedW = w - 2 * margin;
+        const boundedH = h - 2 * margin;
+
+        // Calculate positions
+        // For 2 players: Corners (TL, BR)
+        // For 4: Corners
+        // For others: Circular calculation mapped to rectangle
+
+        for (let i = 0; i < count; i++) {
+            const playerId = this.playerOrder[i];
+
+            // Angle fraction
+            const angle = (i / count) * 2 * Math.PI - (Math.PI / 2); // Start top -PI/2 (Actually P1 is usually Top Left?)
+            // Let's adjust angle so P1 is roughly Top Left (Angle -3PI/4?)
+            // Or just follow standard circle: 0 = Right, PI/2 = Down, PI = Left, -PI/2 = Up.
+            // If we want P1 at Top Left: That is roughly -3PI/4 or 5PI/4.
+            const startOffset = -3 * Math.PI / 4;
+            const finalAngle = angle + startOffset;
+
+            // Simple Ellipse Projection
+            // x = center + cos(a) * w/2
+            const cx = w / 2;
+            const cy = h / 2;
+
+            // Use round to snap to grid
+            let r = Math.round(cy + (boundedH / 2) * Math.sin(finalAngle));
+            let c = Math.round(cx + (boundedW / 2) * Math.cos(finalAngle));
+
+            // Clamp just in case
+            r = Math.max(0, Math.min(h - 1, r));
+            c = Math.max(0, Math.min(w - 1, c));
+
+            // Set Base
+            this.setOwner(r, c, playerId);
+            this.setBuilding(r, c, 'base');
+            this.grid[r][c].type = 'plain'; // Force plain
+        }
+    }
+
+    // Reset Game State
+    reset(configs?: { id: string, isAI: boolean, color: number }[], keepMap: boolean = false) {
+        if (configs) {
+            // Full Reset with new configs
+            this.players = {};
+            this.playerOrder = [];
+            configs.forEach(cfg => {
+                this.players[cfg.id] = {
+                    id: cfg.id,
+                    color: cfg.color,
+                    gold: GameConfig.INITIAL_GOLD,
+                    isAI: cfg.isAI
+                };
+                this.playerOrder.push(cfg.id);
+            });
+            // If new configs, we probably shouldn't keep map? Or maybe we can?
+            // Usually Setup -> New Game logic implies total reset.
+            // But if just swapping players on same map?
+        } else {
+            // Soft Reset (Keep Players)
+            this.playerOrder.forEach(pid => {
+                this.players[pid].gold = GameConfig.INITIAL_GOLD;
+            });
+        }
+
+        this.currentPlayerId = this.playerOrder[0];
+        this.turnCount = 1;
+
+        if (keepMap) {
+            // Preserve Terrain Types, Reset Ownership/Buildings
+            for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+                for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+                    const cell = this.grid[r][c];
+                    cell.owner = null;
+                    cell.building = 'none';
+                    cell.isConnected = false;
+                    // Type (water/hill/plain) remains
+                    if (cell.type === 'bridge') cell.type = 'water'; // Revert bridges
+                }
+            }
+            // Re-spawn Bases
+            this.setupBases();
+        } else {
+            // Full Map Regenerate
+            this.grid = [];
+            this.initializeGrid();
+        }
     }
 
     private generateTerrain() {
@@ -109,33 +213,7 @@ export class GameState {
         return r >= 0 && r < GameConfig.GRID_HEIGHT && c >= 0 && c < GameConfig.GRID_WIDTH;
     }
 
-    // Reset Game State
-    reset(swapped: boolean, keepTerrain: boolean = false) {
-        this.players['P1'].gold = GameConfig.INITIAL_GOLD;
-        this.players['P2'].gold = GameConfig.INITIAL_GOLD;
-        this.currentPlayerId = 'P1';
-        this.turnCount = 1;
 
-        if (keepTerrain) {
-            // Reset existing grid state
-            for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-                for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
-                    const cell = this.grid[r][c];
-                    cell.owner = null;
-                    cell.building = 'none';
-                    cell.isConnected = false;
-                    // Reset Bridges to Water
-                    if (cell.type === 'bridge') {
-                        cell.type = 'water';
-                    }
-                }
-            }
-            this.setupBases(swapped);
-        } else {
-            this.grid = [];
-            this.initializeGrid(swapped);
-        }
-    }
 
     getCell(row: number, col: number): Cell | null {
         if (row < 0 || row >= GameConfig.GRID_HEIGHT || col < 0 || col >= GameConfig.GRID_WIDTH) {
@@ -160,10 +238,14 @@ export class GameState {
 
     endTurn(): { total: number, base: number, land: number, landCount: number } | null {
         // Switch player
-        this.currentPlayerId = this.currentPlayerId === 'P1' ? 'P2' : 'P1';
+        const currentIndex = this.playerOrder.indexOf(this.currentPlayerId!);
+        const nextIndex = (currentIndex + 1) % this.playerOrder.length;
+        this.currentPlayerId = this.playerOrder[nextIndex];
 
         // Resource Accrual
-        if (this.currentPlayerId === 'P1') {
+        // Increment turn count only when cycling back to first player? 
+        // Or just global turn count? Usually "Day 1" implies everyone moves once.
+        if (nextIndex === 0) {
             this.turnCount++;
         }
         return this.accrueResources(this.currentPlayerId!);
@@ -291,6 +373,7 @@ export class GameState {
         return JSON.stringify({
             grid: this.grid.map(row => row.map(cell => cell.serialize())),
             players: this.players,
+            playerOrder: this.playerOrder,
             turnCount: this.turnCount,
             currentPlayerId: this.currentPlayerId
         });
@@ -299,6 +382,7 @@ export class GameState {
     deserialize(json: string) {
         const data = JSON.parse(json);
         this.players = data.players;
+        this.playerOrder = data.playerOrder || Object.keys(this.players); // Fallback for old saves
         this.turnCount = data.turnCount;
         this.currentPlayerId = data.currentPlayerId;
 

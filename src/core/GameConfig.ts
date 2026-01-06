@@ -21,8 +21,14 @@ export const GameConfig = {
         BRIDGE: "A tactical bridge. No income, but allows movement."
     },
     COLORS: {
-        P1: 0x880000,
-        P2: 0x000088,
+        P1: 0xff4444, // Red
+        P2: 0x4444ff, // Blue
+        P3: 0x44ff44, // Green
+        P4: 0xffff44, // Yellow
+        P5: 0xff44ff, // Purple
+        P6: 0x44ffff, // Cyan
+        P7: 0xffaa44, // Orange
+        P8: 0xffaaaa, // Pink
         NEUTRAL: 0x555555,
         BASE: 0xffffff,
         BG: 0x2d2d2d,
@@ -48,7 +54,7 @@ export const GameConfig = {
 
 export type Difficulty = 'EASY' | 'MEDIUM' | 'HARD';
 
-export type PlayerID = 'P1' | 'P2' | null;
+export type PlayerID = string | null;
 export type CellType = 'plain' | 'water' | 'hill' | 'bridge';
 
 export interface Player {

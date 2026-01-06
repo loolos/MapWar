@@ -26,14 +26,17 @@ export class GameEngine {
     // Tutorial State
     hasTriggeredEnclaveTutorial: boolean = false;
 
-    constructor() {
-        this.state = new GameState();
+    constructor(playerConfigs: { id: string, isAI: boolean, color: number }[] = []) {
+        this.state = new GameState(playerConfigs);
         this.listeners = {};
         this.pendingMoves = [];
         this.ai = new AIController(this);
 
-        // Initial Income for P1 (Start of Game)
-        this.state.accrueResources('P1');
+        // Initial Income for first player
+        const firstPlayer = this.state.playerOrder[0];
+        if (firstPlayer) {
+            this.state.accrueResources(firstPlayer);
+        }
     }
 
     on(event: string, callback: EventCallback) {
@@ -52,15 +55,24 @@ export class GameEngine {
     // Actions
     // Actions
     restartGame(keepMap: boolean = false) {
-        this.isSwapped = !this.isSwapped;
-        this.state.reset(this.isSwapped, keepMap);
+        // Rotate players for "Swap" effect
+        if (this.state.playerOrder.length > 0) {
+            const first = this.state.playerOrder.shift();
+            if (first) this.state.playerOrder.push(first);
+        }
+
+        // Pass undefined for configs (keep existing players), and keepMap
+        this.state.reset(undefined, keepMap);
         this.pendingMoves = [];
         this.lastAiMoves = [];
         this.lastError = null;
         this.isGameOver = false;
 
-        // Initial Income for P1 (Restart)
-        this.state.accrueResources('P1');
+        // Initial Income for first player (Restart)
+        const firstPlayer = this.state.playerOrder[0];
+        if (firstPlayer) {
+            this.state.accrueResources(firstPlayer);
+        }
 
         this.emit('mapUpdate'); // Redraw grid
         this.emit('turnChange'); // Update UI text
@@ -302,7 +314,54 @@ export class GameEngine {
 
             // Win Condition Check: Capture Enemy Base
             if (cell && cell.building === 'base' && cell.owner !== pid) {
-                gameWon = true;
+                // ELIMINATION LOGIC
+                const loserId = cell.owner;
+                if (loserId) {
+                    this.emit('logMessage', `${loserId} has been eliminated by ${pid}!`);
+
+                    // Transfer all loser's lands to winner?
+                    // UPDATE: User Request - Do NOT transfer lands.
+                    // Just destroy base (already done by setOwner overwriting building if we didn't check?)
+                    // modify setOwner to handle building destruction?
+                    // Actually, commitMoves sets owner of the cell.
+                    // But the Base building itself?
+                    // If we set owner to P1, does building remain?
+                    // Cell structure: owner, building.
+                    // If we just overwrite owner to P1, it becomes P1's base?
+                    // We should DESTROY the base building to represent destruction.
+
+                    // We are at cell (move.r, move.c).
+                    // We are about to setOwner(pid). 
+                    // We should explicitly set building to 'none' before or after?
+                    // If we leave it 'base', P1 gains a base.
+                    // Logic: "occupied... not belong to occupying player".
+                    // Wait. "occupied... lands considered isolated... not belong to occupying player".
+                    // "that fortress... not belong".
+                    // So P1 does NOT capture the base cell either?
+                    // "fortress being occupied... player will not move again... lands isolated... not belong to occupying player".
+                    // This implies P1 moves onto the tile, but maybe it doesn't become P1's Property?
+                    // Or it becomes P1's Property (as they moved there), but it is no longer a BASE.
+                    // And the *other* lands are not transferred.
+
+                    // Let's assume standard "Unit Move": P1 moves to (r,c). P1 owns (r,c).
+                    // But the 'Base' building is destroyed.
+                    // And P2's *other* lands remain P2 (but isolated).
+
+                    if (cell.building === 'base') {
+                        this.state.setBuilding(move.r, move.c, 'none'); // Destroy Base
+                    }
+
+                    // DO NOT transfer other lands.
+                    // Loop removed.
+
+                    // Remove loser from order
+                    this.state.playerOrder = this.state.playerOrder.filter(id => id !== loserId);
+
+                    // Check Win Condition: Last Man Standing
+                    if (this.state.playerOrder.length === 1) {
+                        gameWon = true;
+                    }
+                }
             }
 
             // Transformation: Water -> Bridge
@@ -317,16 +376,12 @@ export class GameEngine {
         if (totalCost > 0) {
             this.state.players[pid].gold -= totalCost;
 
-            // Update Connectivity for visuals immediately
-            // Update Connectivity for visuals immediately
-            this.state.updateConnectivity('P1');
-            this.state.updateConnectivity('P2');
-
-            // Check for enclaves (Supply Line Cuts)
-            // We check if the OPPONENT has enclaves now? Or current player?
-            // Test implies checks happen immediately
-            this.checkForEnclaves('P1');
-            this.checkForEnclaves('P2');
+            // Update Connectivity for ALL players
+            // Check for enclaves for ALL players
+            this.state.playerOrder.forEach(p => {
+                this.state.updateConnectivity(p);
+                this.checkForEnclaves(p);
+            });
 
             this.emit('mapUpdate');
         }
@@ -341,14 +396,6 @@ export class GameEngine {
         }
     }
 
-    // Kept for internal logic if needed, but mostly unused
-    canCapture(row: number, col: number): boolean {
-        return this.validateMove(row, col).valid;
-    }
-
-
-
-    // captureLand(row: number, col: number) { ... } // REMOVED/REPLACED by togglePlan & commit
     // Check if a player has any disconnected lands
     private checkForEnclaves(playerId: string): boolean {
         // Reset Pending Moves

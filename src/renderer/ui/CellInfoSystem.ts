@@ -12,6 +12,7 @@ export class CellInfoSystem {
     typeText: Phaser.GameObjects.Text;
     ownerText: Phaser.GameObjects.Text;
     costText: Phaser.GameObjects.Text;
+    planText: Phaser.GameObjects.Text;
     descText: Phaser.GameObjects.Text;
     maskShape: Phaser.GameObjects.Graphics;
 
@@ -23,14 +24,14 @@ export class CellInfoSystem {
         const bg = scene.add.graphics();
         this.container.add(bg);
 
-        // Initial Draw
-        this.drawPanel(bg, width, 220);
+        // Initial Draw (Taller for Plan Info)
+        this.drawPanel(bg, width, 250);
 
         // Strict Mask
         const maskShape = scene.make.graphics({});
         this.container.setMask(maskShape.createGeometryMask());
         this.maskShape = maskShape;
-        this.updateMask(width, 220, x, y);
+        this.updateMask(width, 250, x, y);
 
         // Header
         this.headerText = scene.add.text(10, 10, 'CELL INFO', {
@@ -56,11 +57,26 @@ export class CellInfoSystem {
         this.costText = scene.add.text(10, 115, 'Cost: --', style);
         this.container.add(this.costText);
 
-        this.descText = scene.add.text(10, 145, '', descStyle);
+        // Plan Text (New)
+        this.planText = scene.add.text(10, 140, 'Plan: 0 G', { fontSize: '16px', color: '#ff8888', fontStyle: 'bold' });
+        this.container.add(this.planText);
+
+        this.descText = scene.add.text(10, 170, '', descStyle);
         this.container.add(this.descText);
     }
 
     update(engine: GameEngine, selectedRow: number | null, selectedCol: number | null) {
+        // Always update Plan Cost
+        let totalCost = 0;
+        const currentPlayer = engine.state.getCurrentPlayer();
+        const currentGold = currentPlayer.gold;
+
+        for (const m of engine.pendingMoves) {
+            totalCost += engine.getMoveCost(m.r, m.c);
+        }
+        this.planText.setText(`Total Plan: ${totalCost} G`);
+        this.planText.setColor(totalCost > currentGold ? '#ff0000' : '#88ff88');
+
         if (selectedRow === null || selectedCol === null) {
             this.coordsText.setText('Pos: --');
             this.typeText.setText('Type: --');
@@ -109,7 +125,7 @@ export class CellInfoSystem {
     }
 
     public resize(width: number, x: number, y: number) {
-        const height = 220;
+        const height = 250;
 
         // Update Position
         this.setPosition(x, y);

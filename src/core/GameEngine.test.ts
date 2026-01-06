@@ -7,10 +7,36 @@ describe('GameEngine', () => {
 
     beforeEach(() => {
         engine = new GameEngine();
-        // Force P1 to (0,0) for coordinate tests that assume it
-        // Manually override
+
+        // Clear Grid for Isolation
+        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+                engine.state.grid[r][c].owner = null;
+                engine.state.grid[r][c].building = 'none'; // Correct type
+                engine.state.grid[r][c].isConnected = false;
+            }
+        }
+
+        // Force P2 Base (Target for attack tests)
         engine.state.setOwner(9, 9, 'P2');
+        engine.state.setBuilding(9, 9, 'base');
+
+        // Force P1 Base (Start for plan tests)
         engine.state.setOwner(0, 0, 'P1');
+        engine.state.setBuilding(0, 0, 'base');
+
+        // Recalculate Connectivity
+        // (Note: initializeGrid called accrueResources which gave initial gold. 
+        // Clearing grid removes base. But gold remains from constructor?)
+        // GameEngine constructor called accrueResources.
+        // That added gold based on INITIAL spawn.
+        // Then we clear grid.
+        // P1 Gold is already set (11 or 12).
+        // If we want deterministic Gold, we should reset it too.
+        engine.state.players['P1'].gold = 11; // Force to expected default
+
+        engine.state.updateConnectivity('P1');
+        engine.state.updateConnectivity('P2');
 
         // Force test area to be Plain to avoid random Water blocking moves
         if (engine.state.getCell(0, 1)) engine.state.getCell(0, 1)!.type = 'plain';
@@ -75,6 +101,11 @@ describe('GameEngine', () => {
         it('charges 20G for adjacent attack', () => {
             // Setup: P2 owns (0,1)
             engine.state.setOwner(0, 1, 'P2');
+            // Ensure Connected
+            engine.state.setOwner(0, 2, 'P2');
+            engine.state.setBuilding(0, 2, 'base');
+            engine.state.updateConnectivity('P2');
+
             engine.state.players['P1'].gold = 100;
 
             // P1 (0,0) attacks (0,1)
@@ -88,6 +119,11 @@ describe('GameEngine', () => {
             // P1 plans (0,2) [Enemy].
 
             engine.state.setOwner(0, 2, 'P2');
+            // Ensure (0,2) is connected so we test full cost
+            engine.state.setOwner(0, 3, 'P2');
+            engine.state.setBuilding(0, 3, 'base');
+            engine.state.updateConnectivity('P2');
+
             engine.state.players['P1'].gold = 100;
 
             // Plan (0,1) - Empty
@@ -108,7 +144,10 @@ describe('GameEngine', () => {
             // Setup: P1 next to P2 Base?
             // P2 Base at (9,9).
             // Cheat: Set P1 owner at (9,8).
+            // Cheat: Set P1 owner at (9,8).
             engine.state.setOwner(9, 8, 'P1');
+            engine.state.setBuilding(9, 8, 'base'); // Ensure connected for attack
+            engine.state.updateConnectivity('P1');
             engine.state.players['P1'].gold = 100;
 
             // Attack Base (9,9)
@@ -120,6 +159,50 @@ describe('GameEngine', () => {
 
             expect(gameOverSpy).toHaveBeenCalledWith('P1');
             expect(engine.isGameOver).toBe(true);
+
+            // Verify Logic Change: Lands are NOT transferred
+            // (9,8) was P1 (Base Capture spot)
+            // (9,9) was P2 Base (Now Destroyed)
+            // P2 also owned (0,1) and (0,2) elsewhere in setup? No, setup overrides.
+            // Let's check a P2 land if we added one. 
+            // We didn't explicitly add other P2 lands in this test, but let's assume P2 had some land.
+
+            // New Test Case in checking "Combat Mechanics" or here?
+            // Let's split this into a specific Elimination test below.
+        });
+
+        it('does NOT transfer lands on elimination but removes player', () => {
+            // Setup: P1 next to P2 Base. P2 also has land at (5,5).
+            // P2 Base at (9,9)
+            engine.state.setOwner(9, 9, 'P2');
+            engine.state.setBuilding(9, 9, 'base');
+
+            // P2 Land at (5,5)
+            engine.state.setOwner(5, 5, 'P2');
+
+            // P1 at (9,8) ready to attack
+            engine.state.setOwner(9, 8, 'P1');
+            engine.state.setBuilding(9, 8, 'base');
+            engine.state.updateConnectivity('P1');
+            engine.state.players['P1'].gold = 100;
+
+            // Attack
+            engine.togglePlan(9, 9);
+            engine.commitMoves();
+
+            // P2 should be removed from order
+            expect(engine.state.playerOrder).not.toContain('P2');
+
+            // P2 Base should be destroyed
+            const baseCell = engine.state.getCell(9, 9)!;
+            expect(baseCell.building).toBe('none');
+            expect(baseCell.owner).toBe('P1'); // Captured spot is P1
+
+            // P2 Land at (5,5) should REMAIN P2
+            const landCell = engine.state.getCell(5, 5)!;
+            expect(landCell.owner).toBe('P2');
+
+
         });
 
         it('blocks actions when game is over', () => {

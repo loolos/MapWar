@@ -2,29 +2,24 @@ import Phaser from 'phaser';
 import { GameEngine } from '../../core/GameEngine'; // For Move type if needed? Or just pass primitives
 
 export class PlayerStatusSystem {
-    private container: Phaser.GameObjects.Container;
-
-    // UI Elements
-    private uiText!: Phaser.GameObjects.Text; // Turn Counter
-    private p1TitleText!: Phaser.GameObjects.Text;
-    private p1GoldText!: Phaser.GameObjects.Text;
-    private p1Coin!: Phaser.GameObjects.Image;
-    private p1TypeIcon!: Phaser.GameObjects.Image;
-
-    private p2TitleText!: Phaser.GameObjects.Text;
-    private p2GoldText!: Phaser.GameObjects.Text;
-    private p2Coin!: Phaser.GameObjects.Image;
-    private p2TypeIcon!: Phaser.GameObjects.Image;
-
-    private costText!: Phaser.GameObjects.Text;
+    private container!: Phaser.GameObjects.Container;
+    private uiText!: Phaser.GameObjects.Text;
     private maskShape!: Phaser.GameObjects.Graphics;
+    private playerRows: Phaser.GameObjects.Container[] = [];
+
+    // Scroll components
+    private listContainer!: Phaser.GameObjects.Container;
+    private listMask!: Phaser.Display.Masks.GeometryMask;
+    private scrollY = 0;
+    private contentHeight = 0;
+    private viewHeight = 0;
 
     public readonly BASE_WIDTH = 260;
 
     constructor(scene: Phaser.Scene, x: number, y: number, height: number) {
         this.container = scene.add.container(x, y);
 
-        // Sidebar Background (Glassmorphism Container)
+        // Sidebar Background (Interactive for scrolling)
         const sidebarBg = scene.add.graphics();
         this.container.add(sidebarBg);
         this.drawPanel(sidebarBg, 260, height);
@@ -45,118 +40,151 @@ export class PlayerStatusSystem {
         }).setOrigin(0.5);
         this.container.add(this.uiText);
 
-        const startY = 80;
+        // Scrollable List Container
+        this.listContainer = scene.add.container(0, 80);
+        this.container.add(this.listContainer);
 
-        // P1 Card
-        const p1Card = scene.add.graphics();
-        this.drawCardPanel(p1Card, 240, 90, 0xff4444); // Red Accent
-        p1Card.setPosition(10, startY);
-        this.container.add(p1Card);
+        // Setup Mask
+        this.maskShape = scene.make.graphics({});
+        this.listMask = new Phaser.Display.Masks.GeometryMask(scene, this.maskShape);
+        this.listContainer.setMask(this.listMask);
 
-        this.p1TitleText = scene.add.text(20, startY + 10, 'PLAYER 1', {
-            fontFamily: 'Georgia, serif', fontSize: '18px', color: '#ff4444', fontStyle: 'bold',
-            shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 2, fill: true }
+        this.viewHeight = height - 90; // Top padding (80) + bottom padding (10)
+
+        // Enhance Interaction for Scroll
+        const hitArea = new Phaser.Geom.Rectangle(0, 80, 260, this.viewHeight);
+        this.container.setInteractive(hitArea, Phaser.Geom.Rectangle.Contains);
+
+        this.container.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+            if (pointer.isDown) {
+                const dy = pointer.y - pointer.prevPosition.y;
+                this.scroll(dy);
+            }
         });
-        this.container.add(this.p1TitleText);
 
-        this.p1TypeIcon = scene.add.image(200, startY + 25, 'icon_human_badge').setDisplaySize(42, 42); // Larger & Transparent
-        this.container.add(this.p1TypeIcon);
+        // Wheel support
+        scene.input.on('wheel', (pointer: any, _gameObjects: any, _deltaX: number, deltaY: number, _deltaZ: number) => {
+            // Check if pointer is over this container?
+            const localPoint = this.container.pointToContainer(pointer);
 
-        // Add small label under icon if needed, or just let the icon speak. 
-        // User asked for "more obvious". Large icon + "HUMAN" text?
-        // Let's stick to Large Icon for now as requested.
+            // Simple bounds check: x=[0, 260], y=[0, height] inside container
+            // ViewHeight is the "scrollable" area, but wheel should work on whole header too?
+            // Let's allow wheel on whole sidebar
+            const hit = localPoint.x >= 0 && localPoint.x <= 260 && localPoint.y >= 0 && localPoint.y <= height;
 
-        this.p1Coin = scene.add.image(35, startY + 55, 'icon_gold_3d').setDisplaySize(28, 28);
-        this.container.add(this.p1Coin);
-
-        this.p1GoldText = scene.add.text(60, startY + 45, '0', {
-            fontFamily: 'Arial', fontSize: '22px', color: '#ffd700', fontStyle: 'bold',
-            shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 2, fill: true }
+            if (hit) {
+                this.scroll(-deltaY * 0.5);
+            }
         });
-        this.container.add(this.p1GoldText);
 
+        // Initialize Mask
+        this.updateMask(260, height, x, y);
+    }
 
-        // P2 Card
-        const p2Y = startY + 100;
-        const p2Card = scene.add.graphics();
-        this.drawCardPanel(p2Card, 240, 90, 0x4444ff); // Blue Accent
-        p2Card.setPosition(10, p2Y);
-        this.container.add(p2Card);
+    private scroll(dy: number) {
+        if (this.contentHeight <= this.viewHeight) return;
 
-        this.p2TitleText = scene.add.text(20, p2Y + 10, 'PLAYER 2', {
-            fontFamily: 'Georgia, serif', fontSize: '18px', color: '#4444ff', fontStyle: 'bold',
-            shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 2, fill: true }
-        });
-        this.container.add(this.p2TitleText);
+        this.scrollY += dy;
+        const minScroll = this.viewHeight - this.contentHeight;
+        if (this.scrollY > 0) this.scrollY = 0;
+        if (this.scrollY < minScroll) this.scrollY = minScroll;
 
-        this.p2TypeIcon = scene.add.image(200, p2Y + 25, 'icon_human_badge').setDisplaySize(42, 42);
-        this.container.add(this.p2TypeIcon);
-
-        this.p2Coin = scene.add.image(35, p2Y + 55, 'icon_gold_3d').setDisplaySize(28, 28);
-        this.container.add(this.p2Coin);
-
-        this.p2GoldText = scene.add.text(60, p2Y + 45, '0', {
-            fontFamily: 'Arial', fontSize: '22px', color: '#ffd700', fontStyle: 'bold',
-            shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 2, fill: true }
-        });
-        this.container.add(this.p2GoldText);
-
-        // Cost Card
-        const costY = p2Y + 110;
-        const costCard = scene.add.graphics();
-        this.drawCardPanel(costCard, 240, 60);
-        costCard.setPosition(10, costY);
-        this.container.add(costCard);
-
-        const costHeader = scene.add.text(20, costY + 8, 'PLANNED COST', {
-            fontFamily: 'Georgia, serif', fontSize: '12px', color: '#aaaaaa'
-        });
-        this.container.add(costHeader);
-
-        this.costText = scene.add.text(20, costY + 25, '0 G', {
-            fontFamily: 'Georgia, serif', fontSize: '24px', color: '#ff8888', fontStyle: 'bold',
-            shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 2, fill: true }
-        });
-        this.container.add(this.costText);
+        this.listContainer.y = 80 + this.scrollY;
     }
 
     public update(engine: GameEngine) {
         const state = engine.state;
-        const p1 = state.players['P1'];
-        const p2 = state.players['P2'];
-        const curr = state.currentPlayerId;
 
         // Update Turn
         this.uiText.setText(`TURN ${state.turnCount}`);
 
-        // Update Gold
-        this.p1GoldText.setText(p1.gold.toString());
-        this.p2GoldText.setText(p2.gold.toString());
+        const currentIds = state.playerOrder;
+        const needsRebuild = this.playerRows.length !== currentIds.length ||
+            this.playerRows.some((row, i) => (row as any).playerId !== currentIds[i]);
 
-        // Visual Highlights (Alpha for inactive)
-        const p1Alpha = curr === 'P1' ? 1 : 0.4;
-        this.p1TitleText.setAlpha(p1Alpha);
-        this.p1GoldText.setAlpha(p1Alpha);
-        this.p1TypeIcon.setTexture(p1.isAI ? 'icon_robot_badge' : 'icon_human_badge');
-        this.p1TypeIcon.setAlpha(p1Alpha);
+        if (needsRebuild) {
+            this.rebuildList(engine.state.playerOrder, engine.state.players);
+        } else {
+            // Just update values
+            this.playerRows.forEach((row) => {
+                const pid = (row as any).playerId;
+                const player = state.players[pid];
+                const goldTxt = row.getAt(3) as Phaser.GameObjects.Text;
+                goldTxt.setText(player.gold.toString());
 
-        const p2Alpha = curr === 'P2' ? 1 : 0.4;
-        this.p2TitleText.setAlpha(p2Alpha);
-        this.p2GoldText.setAlpha(p2Alpha);
-        this.p2TypeIcon.setTexture(p2.isAI ? 'icon_robot_badge' : 'icon_human_badge');
-        this.p2TypeIcon.setAlpha(p2Alpha);
-
-        // Update Cost
-        let totalCost = 0;
-        const currentPlayer = state.getCurrentPlayer();
-        const currentGold = currentPlayer.gold;
-
-        for (const m of engine.pendingMoves) {
-            totalCost += engine.getMoveCost(m.r, m.c);
+                // Alpha Update
+                const currentId = state.currentPlayerId || '';
+                const pAlpha = currentId === pid ? 1 : 0.4;
+                row.setAlpha(pAlpha);
+            });
         }
+    }
 
-        this.costText.setText(`${totalCost} G`);
-        this.costText.setColor(totalCost > currentGold ? '#ff0000' : '#ff8888');
+    private rebuildList(order: string[], players: any) {
+        // Clear old
+        this.listContainer.removeAll(true); // Destroy children
+        this.playerRows = [];
+
+        let currentY = 0;
+        const gap = 10;
+        const useCompact = order.length > 5;
+        const actualCardH = useCompact ? 50 : 90;
+
+        order.forEach(pid => {
+            const player = players[pid];
+            const row = this.createPlayerRow(player, currentY, actualCardH);
+            (row as any).playerId = pid;
+            this.listContainer.add(row);
+            this.playerRows.push(row);
+
+            currentY += actualCardH + gap;
+        });
+
+        this.contentHeight = currentY;
+
+        // Reset scroll if content shrinks
+        if (this.scrollY < this.viewHeight - this.contentHeight) {
+            this.scrollY = Math.min(0, this.viewHeight - this.contentHeight);
+            this.listContainer.y = 80 + this.scrollY;
+        }
+    }
+
+    private createPlayerRow(player: any, y: number, h: number): Phaser.GameObjects.Container {
+        const scene = this.container.scene;
+        const row = scene.add.container(10, y);
+
+        // BG
+        const bg = scene.add.graphics();
+        this.drawCardPanel(bg, 240, h, player.color);
+        row.add(bg);
+
+        // Title
+        const titleY = h > 60 ? 10 : 8;
+        const title = scene.add.text(20, titleY, player.id, {
+            fontFamily: 'Georgia, serif', fontSize: '18px', color: '#' + player.color.toString(16).padStart(6, '0'), fontStyle: 'bold',
+            shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 2, fill: true }
+        });
+        row.add(title);
+
+        // Coin Icon
+        const coinY = h > 60 ? 55 : 25;
+        const coin = scene.add.image(35, coinY, 'icon_gold_3d').setDisplaySize(24, 24);
+        row.add(coin);
+
+        // Gold Text
+        const goldText = scene.add.text(60, coinY - 10, player.gold.toString(), {
+            fontFamily: 'Arial', fontSize: '20px', color: '#ffd700', fontStyle: 'bold',
+            shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 2, fill: true }
+        });
+        row.add(goldText);
+
+        // Type Icon
+        const iconY = h > 60 ? 45 : 25;
+        const icon = scene.add.image(200, iconY, player.isAI ? 'icon_robot_badge' : 'icon_human_badge')
+            .setDisplaySize(h > 60 ? 42 : 32, h > 60 ? 42 : 32);
+        row.add(icon);
+
+        return row;
     }
 
     public setPosition(x: number, y: number) {
@@ -165,12 +193,20 @@ export class PlayerStatusSystem {
 
     public resize(width: number, height: number, x: number, y: number) {
         // Update Background
-        const bgIndex = 0;
-        const bg = this.container.getAt(bgIndex) as Phaser.GameObjects.Graphics;
+        const bg = this.container.getAt(0) as Phaser.GameObjects.Graphics;
         if (bg) {
             bg.clear();
             this.drawPanel(bg, width, height);
         }
+
+        this.viewHeight = height - 90;
+
+        // Update Interactive Hit Area
+        const hitArea = new Phaser.Geom.Rectangle(0, 80, width, this.viewHeight);
+        this.container.input!.hitArea = hitArea; // Directly update hitArea?
+        // Or re-set interactive
+        this.container.removeInteractive();
+        this.container.setInteractive(hitArea, Phaser.Geom.Rectangle.Contains);
 
         // Update Mask
         this.updateMask(width, height, x, y);
@@ -180,17 +216,28 @@ export class PlayerStatusSystem {
         if (this.maskShape) {
             this.maskShape.clear();
             this.maskShape.fillStyle(0xffffff);
-            // Mask needs absolute world coordinates if not child of container? 
-            // GeometryMask uses world coordinates usually.
-            // If we use setMask on container, the mask shape should be in world coords.
-            // Container x/y + internal 0,0
-            this.maskShape.fillRect(x, y, w * this.container.scaleX, h * this.container.scaleY);
+            // Mask in Absolute World Coords
+            // x, y is the top-left of the container
+            // Mask should start at y + 80
+            // Height is viewHeight
+            // Scale awareness
+            // For MainScene resize, passed x/y are container coords? Yes.
+
+            // Note: MaskShape is a Graphics object. GeometryMask uses it.
+            // Graphics coordinates are local unless added to scene?
+            // "The Graphics object is rendered to the Mask Buffer".
+            // It needs world coordinates usually.
+
+            // Let's assume standard camera/zoom (1.0).
+            const absoluteY = y + 80;
+            this.maskShape.fillRect(x, absoluteY, w, this.viewHeight);
         }
     }
 
     public setScale(scale: number) {
         this.container.setScale(scale);
     }
+
     private drawPanel(graphics: Phaser.GameObjects.Graphics, width: number, height: number) {
         // Glassmorphism Style
         const radius = 16;

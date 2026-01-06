@@ -71,7 +71,10 @@ export class MainScene extends Phaser.Scene {
 
     create(data?: any) {
         // 1. Initialize Engine
-        this.engine = new GameEngine();
+        // If loading a preset, configs are irrelevant (overwritten by save), but for new game they matter.
+        // Actually, if loading preset, GameEngine.loadState handles it.
+        // We pass configs to constructor for New Game.
+        this.engine = new GameEngine(data && data.playerConfigs ? data.playerConfigs : []);
 
         // 2. Check for Preset Load
         if (data && data.loadPreset) {
@@ -166,14 +169,8 @@ export class MainScene extends Phaser.Scene {
 
         this.scale.on('resize', this.resize, this);
 
-        // Reset Bridge/Graphics
-        const gfx = this.make.graphics({ x: 0, y: 0 });
-        gfx.fillStyle(0x654321); // Wood Color
-        gfx.fillRect(0, 0, 64, 64);
-        // Add planks detail
-        gfx.fillStyle(0x543210);
-        for (let i = 10; i < 64; i += 15) gfx.fillRect(0, i, 64, 2);
-        gfx.generateTexture('tile_bridge', 64, 64);
+        // Initialize Procedural Textures
+        this.createProceduralTextures();
 
         // Event Listeners
         this.engine.on('mapUpdate', () => {
@@ -187,6 +184,8 @@ export class MainScene extends Phaser.Scene {
         this.engine.on('planUpdate', () => {
             this.drawMap();
             this.updateUI();
+            // Refresh info system to show updated plan cost
+            this.infoSystem.update(this.engine, this.selectedRow, this.selectedCol);
         });
         this.engine.on('gameRestart', () => {
             if (this.overlayContainer) {
@@ -220,6 +219,25 @@ export class MainScene extends Phaser.Scene {
 
         // Trigger Initial Layout
         this.resize(this.scale.gameSize);
+        // Safety: Reprocess layout after short delay to ensure UI updates are caught
+        this.time.delayedCall(100, () => {
+            this.resize(this.scale.gameSize);
+        });
+    }
+
+    private createProceduralTextures() {
+        if (this.textures.exists('tile_bridge')) return;
+
+        const gfx = this.make.graphics({ x: 0, y: 0 });
+        gfx.fillStyle(0x654321); // Wood Color
+        gfx.fillRect(0, 0, 64, 64);
+
+        // Add planks detail
+        gfx.fillStyle(0x543210);
+        for (let i = 10; i < 64; i += 15) gfx.fillRect(0, i, 64, 2);
+
+        gfx.generateTexture('tile_bridge', 64, 64);
+        gfx.destroy();
     }
 
     resize(gameSize: Phaser.Structs.Size) {
@@ -228,60 +246,113 @@ export class MainScene extends Phaser.Scene {
 
         this.cameras.main.setViewport(0, 0, width, height);
 
-        // Re-initialize terrain visuals (e.g. if map size changed or first run)
+        // Re-initialize terrain visuals if needed
         this.initializeTerrainVisuals();
 
-        // Common UI Layout (Sidebar/Footer agnostic simple layout for Rectangular Map)
-        // Let's implement a simple Responsive Layout:
-        // Sidebar on Left (Status + Info). Buttons on Bottom Right? 
-        // For simplicity, we keep the previous landscape/portrait split concept but simplified.
+        // -----------------------------
+        // RESPONSIVE LAYOUT LOGIC
+        // -----------------------------
+        const isPortrait = height > width || width < 600;
 
-        const sidebarW = 260; // Left column width
-        const bottomH = 200; // Bottom area height
+        // Define Regions
+        let mapX = 0, mapY = 0, mapAreaW = 0, mapAreaH = 0;
+        let sidebarW = 0, bottomH = 0;
 
-        // Re-position UI backgrounds
-        this.trBg.clear().fillStyle(0x222222).fillRect(0, 0, sidebarW, height); // Sidebar BG
-        this.brBg.clear().fillStyle(0x111111).fillRect(width - sidebarW, height - bottomH, sidebarW, bottomH); // Notification BG place
-        this.blBg.clear().fillStyle(GameConfig.COLORS.ACTION_BG).fillRect(0, height - bottomH, width, bottomH); // Footer BG
+        if (isPortrait) {
+            // --- PORTRAIT (MOBILE) ---
+            bottomH = Math.max(250, height * 0.35);
+            sidebarW = 0; // No vertical sidebar
 
-        // 1. Sidebar (Status & Info)
+            mapAreaW = width;
+            mapAreaH = height - bottomH;
+            mapX = 0;
+            mapY = 0;
 
-        const statusHeight = 370; // Height to fit all status cards (P1, P2, Cost)
-        this.playerStatusSystem.resize(sidebarW, statusHeight, 0, 0);
-        this.infoSystem.resize(sidebarW, 0, statusHeight + 10);
+            // Backgrounds
+            this.trBg.clear().setVisible(false);
+            this.brBg.clear().setVisible(false);
+            this.blBg.clear().fillStyle(0x111111).fillRect(0, mapAreaH, width, bottomH).setVisible(true);
 
-        // 2. Buttons & Notifications
-        // Buttons: Bottom Left?
-        this.buttonSystem.setPosition(20, height - bottomH + 20);
+            // Split Bottom Panel: Left (Info), Right (Status)
+            const midX = width / 2;
 
-        // Notifications: Bottom Right?
-        // Let's float notifications top right? 
-        // Or just put them in the bottom bar to the right.
-        this.notificationSystem.resize(300, bottomH - 20);
-        this.notificationSystem.setPosition(width - 320, height - bottomH + 10);
-        this.notificationSystem.setVisible(true);
+            // 1. Info System (Left)
+            const infoScale = Math.min(1, (midX - 10) / 260);
+            this.infoSystem.setScale(infoScale);
 
+            const infoX = 5;
+            const infoY = mapAreaH + 10;
+            this.infoSystem.resize(260, infoX, infoY);
+            this.infoSystem.setPosition(infoX, infoY);
 
-        // 3. MAP AREA
-        // Available space:
-        // Left: sidebarW
-        // Bottom: bottomH
-        // Map Area = Top Left: (sidebarW, 0) to Bottom Right: (width, height - bottomH ?)
-        // Actually let's assume Sidebar consumes Left, Footer consumes Bottom.
+            // 2. Player Status (Right)
+            // Available width for status is (width - midX). 
+            // Internal width is 260.
+            const statusScale = Math.min(1, (width - midX - 10) / 260);
+            this.playerStatusSystem.setScale(statusScale);
 
-        const mapX = sidebarW;
-        const mapY = 0;
-        const mapAreaW = width - sidebarW;
-        const mapAreaH = height - bottomH;
+            // Available Height (Unscaled)
+            const availH = (bottomH - 20) / statusScale;
+            this.playerStatusSystem.resize(260, availH, midX + 5, mapAreaH + 10);
+            this.playerStatusSystem.setPosition(midX + 5, mapAreaH + 10);
 
-        if (mapAreaW <= 0 || mapAreaH <= 0) return; // Window too small
+            // Buttons: Floating or Bottom?
+            // Space is tight. Float on bottom-right of Map Area.
+            this.buttonSystem.setPosition(width - 140, mapAreaH - 60);
 
-        // Dimensions of Map
-        // Dimensions of Map
+            // Notifications: Top Center overlay
+            this.notificationSystem.resize(Math.min(300, width - 20), 0);
+            this.notificationSystem.setPosition((width - Math.min(300, width - 20)) / 2, 60);
+
+        } else {
+            // --- LANDSCAPE (DESKTOP) ---
+            sidebarW = 260;
+            bottomH = 0; // Sidebar covers full height usually
+
+            mapX = sidebarW;
+            mapY = 0;
+            mapAreaW = width - sidebarW;
+            mapAreaH = height;
+
+            // Backgrounds
+            this.trBg.clear().fillStyle(0x222222).fillRect(0, 0, sidebarW, height).setVisible(true);
+            this.blBg.clear().setVisible(false);
+            this.brBg.clear().setVisible(false); // Clean up old
+
+            // Reset Scales
+            this.infoSystem.setScale(1);
+            this.playerStatusSystem.setScale(1);
+
+            // Systems in Sidebar
+            const statusH = height * 0.6;
+            this.playerStatusSystem.resize(sidebarW, statusH, 0, 0);
+            this.playerStatusSystem.setPosition(0, 0);
+
+            // Fix: Pass correct x,y (0, statusH+10) to resize so mask is valid
+            const infoY = statusH + 10;
+            this.infoSystem.resize(sidebarW, 0, infoY); // x=0 by default if I pass 3 args? No, sig is (w, x, y)
+            this.infoSystem.setPosition(0, infoY);
+
+            // Buttons: Bottom Left of Map Area? Or sidebar?
+            // "Sidebar agnostic" -> Previously floating bottom left.
+            this.buttonSystem.setPosition(20, height - 80);
+
+            // Notifications
+            this.notificationSystem.resize(300, 0);
+            this.notificationSystem.setPosition(width - 320, height - 100);
+        }
+
+        // Force data refresh to ensure visibility immediately
+        if (this.engine) {
+            this.playerStatusSystem.update(this.engine);
+            this.infoSystem.update(this.engine, null, null);
+        }
+
+        // --- MAP SCALING & CENTERING ---
+        if (mapAreaW <= 0 || mapAreaH <= 0) return;
+
         let gridW = GameConfig.GRID_WIDTH;
         let gridH = GameConfig.GRID_HEIGHT;
-
-        // Use actual grid size if available (handles loaded saves with different sizes)
         if (this.engine && this.engine.state.grid.length > 0) {
             gridH = this.engine.state.grid.length;
             gridW = this.engine.state.grid[0].length;
@@ -290,35 +361,29 @@ export class MainScene extends Phaser.Scene {
         const mapPixelW = gridW * this.tileSize;
         const mapPixelH = gridH * this.tileSize;
 
-        // Scaling to Fit
         const scaleX = (mapAreaW - 40) / mapPixelW;
         const scaleY = (mapAreaH - 40) / mapPixelH;
         let scale = Math.min(scaleX, scaleY);
-
-        // Clamp Scale
-        scale = Math.min(scale, 1.2); // Max zoom
+        scale = Math.min(scale, 1.2);
         const minScale = this.minTileSize / this.tileSize;
         if (scale < minScale) scale = minScale;
 
         this.mapContainer.setScale(scale);
 
-        // Center Map
         const scaledMapW = mapPixelW * scale;
         const scaledMapH = mapPixelH * scale;
 
         this.isMapScrollable = (scaledMapW > mapAreaW || scaledMapH > mapAreaH);
 
-        // Calculate Centered Position
         let targetX = mapX + (mapAreaW - scaledMapW) / 2;
         let targetY = mapY + (mapAreaH - scaledMapH) / 2;
 
         if (this.isMapScrollable) {
-            // If scrollable, clamp to start at top-left of area (with padding)
-            if (scaledMapW > mapAreaW) targetX = mapX + 20; // Padding
+            if (scaledMapW > mapAreaW) targetX = mapX + 20;
             if (scaledMapH > mapAreaH) targetY = mapY + 20;
 
             this.cameraControlsContainer.setVisible(true);
-            this.cameraControlsContainer.setPosition(width - 80, height - bottomH - 80);
+            this.cameraControlsContainer.setPosition(width - 80, height - (isPortrait ? bottomH + 80 : 80));
         } else {
             this.cameraControlsContainer.setVisible(false);
         }
@@ -427,7 +492,8 @@ export class MainScene extends Phaser.Scene {
                 // We do NOT draw opaque backgrounds for terrain types anymore.
 
                 if (cell.owner) {
-                    const color = cell.owner === 'P1' ? GameConfig.COLORS.P1 : GameConfig.COLORS.P2;
+                    const player = this.engine.state.players[cell.owner];
+                    const color = player ? player.color : 0x888888;
 
                     if (cell.isConnected) {
                         // Normal Connected State: Solid Semi-Transparent
