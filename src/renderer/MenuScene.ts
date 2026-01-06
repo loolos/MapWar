@@ -1,6 +1,7 @@
 
 import Phaser from 'phaser';
 import { GameConfig } from '../core/GameConfig';
+import { SaveRegistry } from '../core/saves/SaveRegistry';
 
 export class MenuScene extends Phaser.Scene {
     constructor() {
@@ -72,6 +73,29 @@ export class MenuScene extends Phaser.Scene {
             })
             .on('pointerover', () => startBtn.setStyle({ backgroundColor: '#6666ff' }))
             .on('pointerout', () => startBtn.setStyle({ backgroundColor: '#4444ff' }));
+
+        // Load Test Saves (Dynamic List)
+        const saves = Object.keys(SaveRegistry);
+        let yPos = h / 2 + 180;
+
+        saves.forEach(key => {
+            const save = SaveRegistry[key];
+            const btn = this.add.text(w / 2, yPos, `LOAD: ${save.name}`, {
+                fontSize: '24px',
+                color: '#ffffff',
+                backgroundColor: '#884444',
+                padding: { x: 20, y: 10 }
+            })
+                .setOrigin(0.5)
+                .setInteractive({ useHandCursor: true })
+                .on('pointerdown', () => {
+                    this.scene.start('MainScene', { loadPreset: key });
+                })
+                .on('pointerover', () => btn.setStyle({ backgroundColor: '#aa6666' }))
+                .on('pointerout', () => btn.setStyle({ backgroundColor: '#884444' }));
+
+            yPos += 60;
+        });
 
         // Handle Enter Key
         this.input.keyboard?.on('keydown-ENTER', () => {

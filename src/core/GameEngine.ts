@@ -51,9 +51,9 @@ export class GameEngine {
 
     // Actions
     // Actions
-    restartGame() {
+    restartGame(keepMap: boolean = false) {
         this.isSwapped = !this.isSwapped;
-        this.state.reset(this.isSwapped);
+        this.state.reset(this.isSwapped, keepMap);
         this.pendingMoves = [];
         this.lastAiMoves = [];
         this.lastError = null;
@@ -65,6 +65,29 @@ export class GameEngine {
         this.emit('mapUpdate'); // Redraw grid
         this.emit('turnChange'); // Update UI text
         this.emit('gameRestart');
+    }
+
+    loadState(json: string) {
+        this.state.deserialize(json);
+        this.pendingMoves = [];
+        this.lastAiMoves = [];
+        this.lastError = null;
+        this.isGameOver = false;
+
+        // Ensure Config Grid Size matches loaded state?
+        // GameState.deserialize relies on GameConfig.GRID_WIDTH loop.
+        // Ideally, we should update Config based on JSON data if variable size.
+        // For now, assume preset matches or update Config here if needed.
+        // The preset is 10x10. If current config is different, deserialize loop might fail or clip.
+        // Let's force update config dimensions based on loaded grid.
+        if (this.state.grid.length > 0) {
+            (GameConfig as any).GRID_HEIGHT = this.state.grid.length;
+            (GameConfig as any).GRID_WIDTH = this.state.grid[0].length;
+        }
+
+        this.emit('mapUpdate');
+        this.emit('turnChange');
+        this.emit('gameRestart'); // Re-init UI
     }
 
     // Execute an Action (Command Pattern)

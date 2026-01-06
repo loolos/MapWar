@@ -1,3 +1,4 @@
+
 import Phaser from 'phaser';
 import { GameEngine } from '../core/GameEngine';
 import { GameConfig } from '../core/GameConfig';
@@ -5,6 +6,7 @@ import { NotificationSystem } from './ui/NotificationSystem';
 import { ActionButtonSystem } from './ui/ActionButtonSystem';
 import { PlayerStatusSystem } from './ui/PlayerStatusSystem';
 import { CellInfoSystem } from './ui/CellInfoSystem';
+import { SaveRegistry } from '../core/saves/SaveRegistry';
 import { TextureUtils } from '../utils/TextureUtils';
 
 export class MainScene extends Phaser.Scene {
@@ -36,7 +38,7 @@ export class MainScene extends Phaser.Scene {
     mapOffsetY: number = 0;
 
     // Camera Controls
-    minTileSize: number = 32;
+    minTileSize: number = 12; // Allow zooming out further (40x40 map fits in ~500px height at 12px/tile)
     isMapScrollable: boolean = false;
     mapScrollSpeed: number = 10;
     scrollKeys!: {
@@ -46,6 +48,7 @@ export class MainScene extends Phaser.Scene {
         right: Phaser.Input.Keyboard.Key
     };
     cameraControlsContainer!: Phaser.GameObjects.Container; // UI for pan buttons
+    cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
 
     constructor() {
         super('MainScene');
@@ -66,9 +69,30 @@ export class MainScene extends Phaser.Scene {
         this.load.image('raw_icon_robot', 'assets/icon_robot_blackbg_1767659401523.png');
     }
 
-    create() {
-        // Initialize GameEngine (fresh instance on Scene start)
+    create(data?: any) {
+        // 1. Initialize Engine
         this.engine = new GameEngine();
+
+        // 2. Check for Preset Load
+        if (data && data.loadPreset) {
+            const key = data.loadPreset as string;
+            const save = SaveRegistry[key];
+
+            if (save) {
+                const presetJson = save.getData();
+                this.engine.loadState(presetJson);
+
+                // Notification
+                this.time.delayedCall(500, () => {
+                    this.notificationSystem.show(`Loaded: ${save.name}`, 'info');
+                });
+
+                // Force Resize to Center Map on new Dimensions
+                this.time.delayedCall(100, () => {
+                    this.resize(this.scale.gameSize);
+                });
+            }
+        }
 
         // Process Textures (Runtime Transparency)
         TextureUtils.makeTransparent(this, 'raw_icon_gold', 'icon_gold_3d', 40);
@@ -107,11 +131,6 @@ export class MainScene extends Phaser.Scene {
         // Map Container
         this.mapContainer = this.add.container(0, 0);
         this.terrainGroup = this.add.group();
-        // Phaser Group cannot be added to Container directly if it's a "Group" of GameObjects. 
-        // We actually add the GameObjects to the container. 
-        // Let's change terrain logic slightly: we'll add images to mapContainer directly if possible, or just use group.
-        // Actually, Group is efficient for pooling. Container is for transforms.
-        // We will make `terrainGroup` just a list tracker, and add valid objects to `mapContainer`.
 
         // Graphics Layers
         this.gridGraphics = this.add.graphics();
@@ -124,8 +143,6 @@ export class MainScene extends Phaser.Scene {
         this.mapContainer.add(this.gridGraphics);    // Grid on top of terrain color
         this.mapContainer.add(this.selectionGraphics);
         this.mapContainer.add(this.highlightGraphics);
-        // Wait, terrain is under grid. 
-        // We'll manage terrain images manually inside mapContainer.
 
         // UI Backgrounds
         this.trBg = this.add.graphics();
@@ -139,11 +156,17 @@ export class MainScene extends Phaser.Scene {
         this.notificationSystem = new NotificationSystem(this, 0, 0, 100, 100);
         this.setupButtons();
 
-        // Handle Resize
+        // Initialize Visuals
+        this.cameraControlsContainer = this.add.container(0, 0);
+        this.cameraControlsContainer.setVisible(false);
+        this.createCameraControls();
+
+        this.initializeTerrainVisuals(); // Initial draw of terrain
+        this.drawMap(); // Initial draw of grid/units
+
         this.scale.on('resize', this.resize, this);
 
-        // Event Listeners
-        // Generate Bridge Texture (Programmatic)
+        // Reset Bridge/Graphics
         const gfx = this.make.graphics({ x: 0, y: 0 });
         gfx.fillStyle(0x654321); // Wood Color
         gfx.fillRect(0, 0, 64, 64);
@@ -190,9 +213,10 @@ export class MainScene extends Phaser.Scene {
             this.notificationSystem.show(msg, 'info');
         });
 
-        this.cameraControlsContainer = this.add.container(0, 0);
-        this.cameraControlsContainer.setVisible(false);
-        this.createCameraControls();
+        // Initialize Cursor Keys
+        if (this.input.keyboard) {
+            this.cursors = this.input.keyboard.createCursorKeys();
+        }
 
         // Trigger Initial Layout
         this.resize(this.scale.gameSize);
@@ -253,8 +277,18 @@ export class MainScene extends Phaser.Scene {
         if (mapAreaW <= 0 || mapAreaH <= 0) return; // Window too small
 
         // Dimensions of Map
-        const mapPixelW = GameConfig.GRID_WIDTH * this.tileSize;
-        const mapPixelH = GameConfig.GRID_HEIGHT * this.tileSize;
+        // Dimensions of Map
+        let gridW = GameConfig.GRID_WIDTH;
+        let gridH = GameConfig.GRID_HEIGHT;
+
+        // Use actual grid size if available (handles loaded saves with different sizes)
+        if (this.engine && this.engine.state.grid.length > 0) {
+            gridH = this.engine.state.grid.length;
+            gridW = this.engine.state.grid[0].length;
+        }
+
+        const mapPixelW = gridW * this.tileSize;
+        const mapPixelH = gridH * this.tileSize;
 
         // Scaling to Fit
         const scaleX = (mapAreaW - 40) / mapPixelW;
@@ -319,8 +353,11 @@ export class MainScene extends Phaser.Scene {
         const localY = (pointer.y - this.mapContainer.y) / scale;
 
         // Ignore clicks outside the map grid
-        const mapWidth = GameConfig.GRID_WIDTH * this.tileSize;
-        const mapHeight = GameConfig.GRID_HEIGHT * this.tileSize;
+        const gridHeight = this.engine.state.grid.length;
+        const gridWidth = gridHeight > 0 ? this.engine.state.grid[0].length : 0;
+
+        const mapWidth = gridWidth * this.tileSize;
+        const mapHeight = gridHeight * this.tileSize;
 
         if (localX < 0 || localX >= mapWidth || localY < 0 || localY >= mapHeight) return;
 
@@ -333,7 +370,7 @@ export class MainScene extends Phaser.Scene {
         const col = Math.floor(localX / this.tileSize);
         const row = Math.floor(localY / this.tileSize);
 
-        if (col >= 0 && col < GameConfig.GRID_WIDTH && row >= 0 && row < GameConfig.GRID_HEIGHT) {
+        if (col >= 0 && col < gridWidth && row >= 0 && row < gridHeight) {
             // Update Selection
             this.selectedRow = row;
             this.selectedCol = col;
@@ -377,9 +414,11 @@ export class MainScene extends Phaser.Scene {
 
         // --- RENDER LOOP ---
         const grid = this.engine.state.grid;
+        const height = grid.length;
+        const width = height > 0 ? grid[0].length : 0;
 
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
                 const cell = grid[r][c];
                 const x = c * this.tileSize;
                 const y = r * this.tileSize;
@@ -458,8 +497,11 @@ export class MainScene extends Phaser.Scene {
 
         let count = 0;
         try {
-            for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-                for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+            const height = grid.length;
+            const width = height > 0 ? grid[0].length : 0;
+
+            for (let r = 0; r < height; r++) {
+                for (let c = 0; c < width; c++) {
                     const cell = grid[r][c];
                     const x = c * this.tileSize + this.tileSize / 2; // Center origin
                     const y = r * this.tileSize + this.tileSize / 2;
@@ -538,10 +580,10 @@ export class MainScene extends Phaser.Scene {
             let dy = 0;
             const speed = this.mapScrollSpeed;
 
-            if (this.scrollKeys.up.isDown) dy += speed;
-            if (this.scrollKeys.down.isDown) dy -= speed;
-            if (this.scrollKeys.left.isDown) dx += speed;
-            if (this.scrollKeys.right.isDown) dx -= speed;
+            if (this.scrollKeys.up.isDown || (this.cursors && this.cursors.up.isDown)) dy += speed;
+            if (this.scrollKeys.down.isDown || (this.cursors && this.cursors.down.isDown)) dy -= speed;
+            if (this.scrollKeys.left.isDown || (this.cursors && this.cursors.left.isDown)) dx += speed;
+            if (this.scrollKeys.right.isDown || (this.cursors && this.cursors.right.isDown)) dx -= speed;
 
             if (dx !== 0 || dy !== 0) {
                 this.mapContainer.x += dx;
@@ -627,26 +669,47 @@ export class MainScene extends Phaser.Scene {
         }
         this.overlayContainer.add(title);
 
-        const restartBtn = this.add.text(w / 2, h / 2 + 60, 'PLAY AGAIN (SWAP)', {
-            fontSize: '32px',
-            color: '#ffffff',
+        // 1. PLAY AGAIN (New Map)
+        const btnNew = this.createButton(0, 0, 'PLAY AGAIN (NEW MAP)', '#44ff44', () => {
+            this.engine.restartGame(false);
+        });
+        this.overlayContainer.add(btnNew);
+
+        // 2. RESTART (Same Map)
+        const btnSame = this.createButton(0, 60, 'RESTART (SAME MAP)', '#4444ff', () => {
+            this.engine.restartGame(true);
+        });
+        this.overlayContainer.add(btnSame);
+
+        // 3. MAIN MENU
+        const btnMenu = this.createButton(0, 120, 'MAIN MENU', '#aaaaaa', () => {
+            this.scene.start('MenuScene');
+        });
+        this.overlayContainer.add(btnMenu);
+
+        // Center the button group (approximate center relative to text)
+        // Title is at h/2 - 50. Buttons start at h/2 + 20?
+        const groupY = h / 2 + 20;
+        btnNew.setPosition(w / 2, groupY);
+        btnSame.setPosition(w / 2, groupY + 60);
+        btnMenu.setPosition(w / 2, groupY + 120);
+
+        // Input blocked via handleInput check
+    }
+
+    private createButton(x: number, y: number, text: string, color: string, onClick: () => void): Phaser.GameObjects.Text {
+        const btn = this.add.text(x, y, text, {
+            fontSize: '24px',
+            color: color,
             backgroundColor: '#333333',
             padding: { x: 20, y: 10 }
         })
             .setOrigin(0.5)
             .setInteractive({ useHandCursor: true })
-            .on('pointerdown', () => {
-                this.engine.restartGame();
-            })
-            .on('pointerover', () => restartBtn.setStyle({ backgroundColor: '#555555' }))
-            .on('pointerout', () => restartBtn.setStyle({ backgroundColor: '#333333' }));
-
-        // Scale button to fit width
-        if (restartBtn.width > maxW) {
-            restartBtn.setScale(maxW / restartBtn.width);
-        }
-
-        this.overlayContainer.add(restartBtn);
+            .on('pointerdown', onClick)
+            .on('pointerover', () => btn.setStyle({ backgroundColor: '#555555' }))
+            .on('pointerout', () => btn.setStyle({ backgroundColor: '#333333' }));
+        return btn;
         // Input blocked via handleInput check
     }
 

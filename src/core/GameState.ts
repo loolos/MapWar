@@ -31,7 +31,10 @@ export class GameState {
         // 2. Generate Clustered Terrain
         this.generateTerrain();
 
-        // 3. Setup Bases
+        this.setupBases(swapped);
+    }
+
+    private setupBases(swapped: boolean) {
         const p1Start = swapped ? { r: 0, c: 0 } : { r: GameConfig.GRID_HEIGHT - 1, c: GameConfig.GRID_WIDTH - 1 };
         const p2Start = swapped ? { r: GameConfig.GRID_HEIGHT - 1, c: GameConfig.GRID_WIDTH - 1 } : { r: 0, c: 0 };
 
@@ -107,13 +110,31 @@ export class GameState {
     }
 
     // Reset Game State
-    reset(swapped: boolean) {
-        this.grid = [];
+    reset(swapped: boolean, keepTerrain: boolean = false) {
         this.players['P1'].gold = GameConfig.INITIAL_GOLD;
         this.players['P2'].gold = GameConfig.INITIAL_GOLD;
         this.currentPlayerId = 'P1';
         this.turnCount = 1;
-        this.initializeGrid(swapped);
+
+        if (keepTerrain) {
+            // Reset existing grid state
+            for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+                for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+                    const cell = this.grid[r][c];
+                    cell.owner = null;
+                    cell.building = 'none';
+                    cell.isConnected = false;
+                    // Reset Bridges to Water
+                    if (cell.type === 'bridge') {
+                        cell.type = 'water';
+                    }
+                }
+            }
+            this.setupBases(swapped);
+        } else {
+            this.grid = [];
+            this.initializeGrid(swapped);
+        }
     }
 
     getCell(row: number, col: number): Cell | null {
@@ -282,9 +303,16 @@ export class GameState {
         this.currentPlayerId = data.currentPlayerId;
 
         // Reconstruct Grid
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            if (!this.grid[r]) this.grid[r] = [];
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+        // Use loaded data dimensions
+        const height = data.grid.length;
+        const width = height > 0 ? data.grid[0].length : 0;
+
+        // Reset grid to new size
+        this.grid = [];
+
+        for (let r = 0; r < height; r++) {
+            this.grid[r] = [];
+            for (let c = 0; c < width; c++) {
                 this.grid[r][c] = Cell.deserialize(data.grid[r][c]);
             }
         }

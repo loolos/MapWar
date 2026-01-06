@@ -139,6 +139,32 @@ describe('GameEngine', () => {
             engine.togglePlan(5, 5);
             expect(engine.pendingMoves).toHaveLength(0);
         });
+
+        it('restarts game with terrain preservation', () => {
+            // Setup: (0,1) is Water
+            engine.state.getCell(0, 1)!.type = 'water';
+            engine.state.setOwner(0, 1, 'P1'); // Owner specific
+
+            // Restart with keepMap = true
+            engine.restartGame(true);
+
+            const cell = engine.state.getCell(0, 1)!;
+            // Should still be water
+            expect(cell.type).toBe('water');
+            // But owner should be reset (null or Base depending on pos)
+            // (0,1) is NOT a base. So null.
+            expect(cell.owner).toBeNull();
+        });
+
+        it('restarts game reset resets buildings/bridges', () => {
+            // Setup Bridge
+            engine.state.getCell(0, 1)!.type = 'bridge';
+
+            engine.restartGame(true);
+
+            // Should revert to water
+            expect(engine.state.getCell(0, 1)!.type).toBe('water');
+        });
     });
 
     // Test chaining validity

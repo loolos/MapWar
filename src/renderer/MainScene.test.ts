@@ -78,7 +78,8 @@ vi.mock('phaser', () => {
                         on: vi.fn(() => t),
                         setStyle: vi.fn(() => t),
                         width: 100,
-                        setScale: vi.fn(() => t)
+                        setScale: vi.fn(() => t),
+                        setPosition: vi.fn(() => t)
                     };
                     return t;
                 }),
@@ -98,6 +99,12 @@ vi.mock('phaser', () => {
                     on: vi.fn(),
                     addCapture: vi.fn(),
                     addKeys: vi.fn(() => ({
+                        up: { isDown: false },
+                        down: { isDown: false },
+                        left: { isDown: false },
+                        right: { isDown: false }
+                    })),
+                    createCursorKeys: vi.fn(() => ({
                         up: { isDown: false },
                         down: { isDown: false },
                         left: { isDown: false },
@@ -221,6 +228,17 @@ describe('MainScene', () => {
         scene.engine.restartGame();
 
         expect(initSpy).toHaveBeenCalled();
+        // Map is 10x10 (640x640)
+        // Window 800x600. Sidebar 260. Bottom 200.
+        // Map Area: W = 800 - 260 = 540. H = 600 - 200 = 400.
+        // ScaleX = (540-40)/640 = 500/640 = 0.78
+        // ScaleY = (400-40)/640 = 360/640 = 0.5625
+        // MinScale = 0.5625
+        // Clamp: Min(0.5625, 1.2) = 0.5625.
+        // Min Tile Size 12 / 64 = 0.1875. 0.5625 > 0.1875. OK.
+
+        // Scale should be ~0.5625
+        expect(scene.mapContainer.setScale).toHaveBeenCalledWith(expect.closeTo(0.5625, 0.001));
         expect(scene.terrainGroup.clear).toHaveBeenCalledWith(true, true);
     });
 
