@@ -49,7 +49,7 @@ describe('GameEngine', () => {
             engine.state.players['P1'].gold = 100;
             engine.togglePlan(5, 5);
             expect(engine.pendingMoves).toHaveLength(0);
-            expect(engine.lastError).toContain('adjacent');
+            expect(engine.lastError).toContain('supply line');
         });
 
         it('prevents moves when out of gold', () => {
@@ -191,25 +191,95 @@ describe('GameEngine', () => {
             expect(report.land).toBe(1.5);
         });
 
-        it('restores connection and income', () => {
-            // Create a chain: (0,0) -> (0,1) -> (0,2)
+    });
+
+    it('restores connection and income', () => {
+        // Create a chain: (0,0) -> (0,1) -> (0,2)
+        engine.state.setOwner(0, 1, 'P1');
+        engine.state.setOwner(0, 2, 'P1');
+        engine.state.updateConnectivity('P1');
+
+        expect(engine.state.getCell(0, 2)?.isConnected).toBe(true);
+
+        // Cut the link (0,1)
+        engine.state.setOwner(0, 1, 'P2'); // Enemy takes it
+        engine.state.updateConnectivity('P1');
+
+        expect(engine.state.getCell(0, 2)?.isConnected).toBe(false);
+
+        // Restore the link
+        engine.state.setOwner(0, 1, 'P1');
+        engine.state.updateConnectivity('P1');
+
+        expect(engine.state.getCell(0, 2)?.isConnected).toBe(true);
+    });
+
+    describe('New Gameplay Rules', () => {
+        it('Vulnerability: Attacks on disconnected enemy tiles cost 30% less', () => {
+            // Setup: P2 owns (0,2), but it is disconnected (isolated)
+            // P2 Base is far away at (9,9)
+            engine.state.setOwner(0, 2, 'P2');
+            engine.state.updateConnectivity('P2');
+
+            // P1 owns (0,1), adjacent to P2's (0,2)
+            engine.state.setOwner(0, 1, 'P1');
+            engine.state.players['P1'].gold = 100;
+
+            // Check P2 connectivity
+            const enemyTile = engine.state.getCell(0, 2);
+            expect(enemyTile?.isConnected).toBe(false);
+
+            // Calculate cost for P1 to attack (0,2)
+            const cost = engine.getMoveCost(0, 2);
+            // Normal Attack: 20 -> Discounted 30% -> 14
+            expect(cost).toBe(14);
+        });
+
+        it('Supply Line: Cannot expand from disconnected territory', () => {
+            // Setup: P1 has an isolated enclave at (5,5)
+            engine.state.setOwner(5, 5, 'P1');
+            engine.state.updateConnectivity('P1');
+            engine.state.players['P1'].gold = 100;
+
+            // Verify isolated
+            expect(engine.state.getCell(5, 5)?.isConnected).toBe(false);
+
+            // Try to expand to neighbors of (5,5), e.g., (5,6)
+            engine.togglePlan(5, 6);
+
+            // Should fail validation
+            expect(engine.pendingMoves).toHaveLength(0);
+            expect(engine.lastError).toContain('Main Base supply line');
+        });
+
+        it('Supply Line: Can expand from connected territory', () => {
+            // P1 Base at (0,0). Valid to expand to (0,1)
+            engine.state.players['P1'].gold = 100;
+            engine.togglePlan(0, 1);
+            expect(engine.pendingMoves).toHaveLength(1);
+        });
+
+        it('Enclave Notification: Logs message when enclave created', () => {
+            const logSpy = vi.fn();
+            engine.on('logMessage', logSpy);
+
+            // Setup: P1 has (0,0) -> (0,1) -> (0,2)
             engine.state.setOwner(0, 1, 'P1');
             engine.state.setOwner(0, 2, 'P1');
             engine.state.updateConnectivity('P1');
 
-            expect(engine.state.getCell(0, 2)?.isConnected).toBe(true);
+            // P2 cuts the line at (0,1)
+            // We simulate P2 playing.
+            engine.state.currentPlayerId = 'P2';
+            engine.state.players['P2'].gold = 100;
+            // P2 takes (0,1)
+            engine.pendingMoves = [{ r: 0, c: 1 }]; // Manually set pending for P2
 
-            // Cut the link (0,1)
-            engine.state.setOwner(0, 1, 'P2'); // Enemy takes it
-            engine.state.updateConnectivity('P1');
+            // Commit P2 moves
+            engine.commitMoves();
 
-            expect(engine.state.getCell(0, 2)?.isConnected).toBe(false);
-
-            // Restore the link
-            engine.state.setOwner(0, 1, 'P1');
-            engine.state.updateConnectivity('P1');
-
-            expect(engine.state.getCell(0, 2)?.isConnected).toBe(true);
+            // P1's (0,2) is now an enclave. Notification should fire.
+            expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Supply line cut'));
         });
     });
 });

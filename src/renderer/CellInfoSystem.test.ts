@@ -28,7 +28,14 @@ const mockText = {
 const mockGraphics = {
     fillStyle: vi.fn(),
     fillRect: vi.fn(),
-    clear: vi.fn()
+    clear: vi.fn(),
+    fillRoundedRect: vi.fn(),
+    strokeRoundedRect: vi.fn(),
+    lineStyle: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    strokePath: vi.fn()
 };
 
 const mockContainer = {
@@ -52,7 +59,15 @@ const mockScene = {
             createGeometryMask: vi.fn(),
             clear: vi.fn(),
             fillStyle: vi.fn(),
-            fillRect: vi.fn()
+            fillRect: vi.fn(),
+            fillRoundedRect: vi.fn(),
+            strokeRoundedRect: vi.fn(),
+            lineStyle: vi.fn(),
+            beginPath: vi.fn(),
+            moveTo: vi.fn(),
+            lineTo: vi.fn(),
+            strokePath: vi.fn(),
+            arc: vi.fn()
         }))
     }
 } as any;

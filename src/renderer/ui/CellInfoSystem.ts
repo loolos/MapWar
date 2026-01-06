@@ -19,11 +19,12 @@ export class CellInfoSystem {
         this.scene = scene;
         this.container = scene.add.container(x, y);
 
-        // Background
+        // Background (Glassmorphism)
         const bg = scene.add.graphics();
-        bg.fillStyle(GameConfig.COLORS.UI_BG, 1);
-        bg.fillRect(0, 0, width, 220); // Increased height for description
         this.container.add(bg);
+
+        // Initial Draw
+        this.drawPanel(bg, width, 220);
 
         // Strict Mask
         const maskShape = scene.make.graphics({});
@@ -114,8 +115,7 @@ export class CellInfoSystem {
         const bg = this.container.getAt(bgIndex) as Phaser.GameObjects.Graphics;
         if (bg) {
             bg.clear();
-            bg.fillStyle(GameConfig.COLORS.UI_BG, 1);
-            bg.fillRect(0, 0, width, height);
+            this.drawPanel(bg, width, height);
         }
 
         // Update Wrap
@@ -129,9 +129,29 @@ export class CellInfoSystem {
         if (this.maskShape) {
             this.maskShape.clear();
             this.maskShape.fillStyle(0xffffff);
-            // GeometryMask world coords
             this.maskShape.fillRect(x, y, w * this.container.scaleX, h * this.container.scaleY);
         }
+    }
+
+    private drawPanel(graphics: Phaser.GameObjects.Graphics, width: number, height: number) {
+        const radius = 16;
+        const color = 0x1a1a1a;
+        const alpha = 0.85;
+        const strokeColor = 0xffffff;
+        const strokeAlpha = 0.1;
+
+        graphics.fillStyle(color, alpha);
+        graphics.fillRoundedRect(0, 0, width, height, radius);
+
+        graphics.lineStyle(2, strokeColor, strokeAlpha);
+        graphics.strokeRoundedRect(0, 0, width, height, radius);
+
+        // Highlight
+        graphics.lineStyle(1, 0xffffff, 0.15);
+        graphics.beginPath();
+        graphics.moveTo(radius, 0);
+        graphics.lineTo(width - radius, 0);
+        graphics.strokePath();
     }
 
     public setScale(scale: number) {

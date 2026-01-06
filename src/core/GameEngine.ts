@@ -23,6 +23,9 @@ export class GameEngine {
     // AI
     ai: AIController;
 
+    // Tutorial State
+    hasTriggeredEnclaveTutorial: boolean = false;
+
     constructor() {
         this.state = new GameState();
         this.listeners = {};
@@ -178,6 +181,11 @@ export class GameEngine {
 
         // Distance Penalty Logic (Double if chained)
         if (isAttack) {
+            // Vulnerability Rule: Disconnected enemy land is CHEAPER (30% off)
+            if (cell.owner && !cell.isConnected) {
+                baseCost = Math.floor(baseCost * 0.7);
+            }
+
             // Distance Rule: If adjacent to OWNED land, normal cost.
             // If only adjacent to PENDING land (chained), double cost.
             if (curr && this.state.isAdjacentToOwned(row, col, curr)) { // Use state method
@@ -200,13 +208,13 @@ export class GameEngine {
         if (!cell) return { valid: false, reason: "Out of bounds" };
         if (cell.owner === playerId) return { valid: false, reason: "Already owned" }; // Self-own check
 
-        // 2. Adjacency Check (Prioritize reachability feedback)
-        // must be adjacent to OWNED or PENDING
-        const isAdjToOwned = this.state.isAdjacentToOwned(row, col, playerId);
+        // 2. Adjacency Check (Supply Line Rule)
+        // must be adjacent to CONNECTED territory or PENDING
+        const isAdjToConnected = this.state.isAdjacentToConnected(row, col, playerId);
         const isAdjToPending = this.isAdjacentToPending(row, col);
 
-        if (!isAdjToOwned && !isAdjToPending) {
-            return { valid: false, reason: "Must be adjacent to your territory" };
+        if (!isAdjToConnected && !isAdjToPending) {
+            return { valid: false, reason: "Must connect to Main Base supply line" };
         }
 
         // 3. Terrain Check
@@ -265,6 +273,16 @@ export class GameEngine {
             this.state.updateConnectivity('P1');
             this.state.updateConnectivity('P2');
 
+            // Check for Enclave Creation (Tutorial Log)
+            if (!this.hasTriggeredEnclaveTutorial) {
+                const p1HasEnclave = this.checkForEnclaves('P1');
+                const p2HasEnclave = this.checkForEnclaves('P2');
+                if (p1HasEnclave || p2HasEnclave) {
+                    this.hasTriggeredEnclaveTutorial = true;
+                    this.emit('logMessage', "Supply line cut! Isolated lands cost 30% less to capture.");
+                }
+            }
+
             this.emit('mapUpdate');
         }
 
@@ -286,4 +304,16 @@ export class GameEngine {
 
 
     // captureLand(row: number, col: number) { ... } // REMOVED/REPLACED by togglePlan & commit
+    // Check if a player has any disconnected lands
+    private checkForEnclaves(playerId: string): boolean {
+        for (let r = 0; r < GameConfig.GRID_SIZE; r++) {
+            for (let c = 0; c < GameConfig.GRID_SIZE; c++) {
+                const cell = this.state.grid[r][c];
+                if (cell.owner === playerId && !cell.isConnected) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
 }

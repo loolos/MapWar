@@ -5,6 +5,7 @@ import { NotificationSystem } from './ui/NotificationSystem';
 import { ActionButtonSystem } from './ui/ActionButtonSystem';
 import { PlayerStatusSystem } from './ui/PlayerStatusSystem';
 import { CellInfoSystem } from './ui/CellInfoSystem';
+import { TextureUtils } from '../utils/TextureUtils';
 
 export class MainScene extends Phaser.Scene {
     engine: GameEngine;
@@ -44,9 +45,19 @@ export class MainScene extends Phaser.Scene {
         this.load.image('tile_plain', 'assets/tile_plain.png');
         this.load.image('tile_hill', 'assets/tile_hill.png');
         this.load.image('tile_water', 'assets/tile_water.png');
+
+        // Tactical UI Assets (Load as Raw)
+        this.load.image('raw_icon_gold', 'assets/icon_gold_blackbg_1767659375024.png');
+        this.load.image('raw_icon_human', 'assets/icon_human_blackbg_1767659388348.png');
+        this.load.image('raw_icon_robot', 'assets/icon_robot_blackbg_1767659401523.png');
     }
 
     create() {
+        // Process Textures (Runtime Transparency)
+        TextureUtils.makeTransparent(this, 'raw_icon_gold', 'icon_gold_3d', 40);
+        TextureUtils.makeTransparent(this, 'raw_icon_human', 'icon_human_badge', 40);
+        TextureUtils.makeTransparent(this, 'raw_icon_robot', 'icon_robot_badge', 40);
+
         this.cameras.main.setBackgroundColor(GameConfig.COLORS.BG);
 
         // Debug Log
@@ -56,6 +67,14 @@ export class MainScene extends Phaser.Scene {
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
             this.handleInput(pointer);
         });
+
+        // Keyboard Shortcuts
+        if (this.input.keyboard) {
+            this.input.keyboard.addCapture('SPACE'); // Prevent scrolling
+            this.input.keyboard.on('keydown-SPACE', () => {
+                this.engine.endTurn();
+            });
+        }
 
         // ---------------------------------------------------------
         // INITIALIZE GRAPHICS & SYSTEMS (Empty/Default)

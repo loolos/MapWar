@@ -3,6 +3,13 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MainScene } from './MainScene';
 import { GameEngine } from '../core/GameEngine';
 
+// Mock TextureUtils to avoid Canvas errors
+vi.mock('../utils/TextureUtils', () => ({
+    TextureUtils: {
+        makeTransparent: vi.fn()
+    }
+}));
+
 // Mock Phaser
 vi.mock('phaser', () => {
     class Scene {
@@ -45,7 +52,14 @@ vi.mock('phaser', () => {
                         fillRect: vi.fn(() => g),
                         lineStyle: vi.fn(() => g),
                         strokeRect: vi.fn(() => g),
-                        fillCircle: vi.fn(() => g)
+                        fillCircle: vi.fn(() => g),
+                        fillRoundedRect: vi.fn(() => g),
+                        strokeRoundedRect: vi.fn(() => g),
+                        beginPath: vi.fn(() => g),
+                        moveTo: vi.fn(() => g), // Add missing Graphics methods
+                        lineTo: vi.fn(() => g),
+                        strokePath: vi.fn(() => g),
+                        arc: vi.fn(() => g)
                     };
                     return g;
                 }),
@@ -68,7 +82,15 @@ vi.mock('phaser', () => {
                 gameSize: { width: 800, height: 600 }
             };
             this.load = { image: vi.fn() };
-            this.input = { on: vi.fn(), enabled: true };
+            this.load = { image: vi.fn() };
+            this.input = {
+                on: vi.fn(),
+                enabled: true,
+                keyboard: {
+                    on: vi.fn(),
+                    addCapture: vi.fn()
+                }
+            };
             this.time = { delayedCall: vi.fn() };
         }
     }
