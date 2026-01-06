@@ -494,4 +494,66 @@ describe('GameEngine', () => {
             // (0,2) not added
         });
     });
+
+    describe('Elimination Rules', () => {
+        it('disconnects all cells of an eliminated player', () => {
+            // Setup: P1 (Attacker) and P2 (Victim)
+            // P2 has Base at (0,0) and land at (0,1)
+            engine.state.setOwner(0, 0, 'P2');
+            engine.state.setBuilding(0, 0, 'base');
+            engine.state.setOwner(0, 1, 'P2');
+            engine.state.getCell(0, 1)!.isConnected = true; // Initially connected
+
+            // P1 adjacent to P2 Base
+            engine.state.setOwner(1, 0, 'P1');
+            engine.state.players['P1'].gold = 1000;
+
+            // P1 captures P2 Base
+            engine.pendingMoves = [{ r: 0, c: 0 }];
+
+            // Commit
+            engine.commitMoves();
+
+            // 1. P2 Base Destroyed
+            expect(engine.state.getCell(0, 0)?.building).toBe('none');
+            // 2. P2 Removed from Turn Order
+            expect(engine.state.playerOrder).not.toContain('P2');
+            // 3. P2's remaining land (0,1) should be Disconnected
+            expect(engine.state.getCell(0, 1)?.isConnected).toBe(false);
+        });
+    });
+
+    describe('Game Persistence and Restart', () => {
+        it('restores eliminated players on restart', () => {
+            // Setup: 3 Players. P2 Eliminated.
+            const p1 = 'P1';
+            const p2 = 'P2';
+            const p3 = 'P3';
+
+            // Override with 3 players
+            engine = new GameEngine([
+                { id: p1, isAI: false, color: 0 },
+                { id: p2, isAI: true, color: 1 },
+                { id: p3, isAI: true, color: 2 }
+            ]);
+
+            // Eliminate P2
+            // Manually modify state to simulate elimination for speed
+            engine.state.playerOrder = [p1, p3]; // P2 gone
+
+            expect(engine.state.playerOrder).not.toContain(p2);
+            expect(engine.state.allPlayerIds).toContain(p2); // Should persist
+
+            // Restart Game
+            engine.restartGame();
+
+            // Verify P2 is back
+            expect(engine.state.playerOrder).toHaveLength(3);
+            expect(engine.state.playerOrder).toContain(p2);
+
+            // Verify Swap (P1 was first, now P2 or P3 should be first depending on rotation)
+            // Original: [P1, P2, P3]. Shift -> [P2, P3, P1]. P2 is new first.
+            expect(engine.state.playerOrder[0]).toBe(p2);
+        });
+    });
 });

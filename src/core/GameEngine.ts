@@ -56,9 +56,9 @@ export class GameEngine {
     // Actions
     restartGame(keepMap: boolean = false) {
         // Rotate players for "Swap" effect
-        if (this.state.playerOrder.length > 0) {
-            const first = this.state.playerOrder.shift();
-            if (first) this.state.playerOrder.push(first);
+        if (this.state.allPlayerIds.length > 0) {
+            const first = this.state.allPlayerIds.shift();
+            if (first) this.state.allPlayerIds.push(first);
         }
 
         // Pass undefined for configs (keep existing players), and keepMap
@@ -319,43 +319,17 @@ export class GameEngine {
                 if (loserId) {
                     this.emit('logMessage', `${loserId} has been eliminated by ${pid}!`);
 
-                    // Transfer all loser's lands to winner?
-                    // UPDATE: User Request - Do NOT transfer lands.
-                    // Just destroy base (already done by setOwner overwriting building if we didn't check?)
-                    // modify setOwner to handle building destruction?
-                    // Actually, commitMoves sets owner of the cell.
-                    // But the Base building itself?
-                    // If we set owner to P1, does building remain?
-                    // Cell structure: owner, building.
-                    // If we just overwrite owner to P1, it becomes P1's base?
-                    // We should DESTROY the base building to represent destruction.
-
-                    // We are at cell (move.r, move.c).
-                    // We are about to setOwner(pid). 
-                    // We should explicitly set building to 'none' before or after?
-                    // If we leave it 'base', P1 gains a base.
-                    // Logic: "occupied... not belong to occupying player".
-                    // Wait. "occupied... lands considered isolated... not belong to occupying player".
-                    // "that fortress... not belong".
-                    // So P1 does NOT capture the base cell either?
-                    // "fortress being occupied... player will not move again... lands isolated... not belong to occupying player".
-                    // This implies P1 moves onto the tile, but maybe it doesn't become P1's Property?
-                    // Or it becomes P1's Property (as they moved there), but it is no longer a BASE.
-                    // And the *other* lands are not transferred.
-
-                    // Let's assume standard "Unit Move": P1 moves to (r,c). P1 owns (r,c).
-                    // But the 'Base' building is destroyed.
-                    // And P2's *other* lands remain P2 (but isolated).
-
                     if (cell.building === 'base') {
                         this.state.setBuilding(move.r, move.c, 'none'); // Destroy Base
                     }
 
-                    // DO NOT transfer other lands.
-                    // Loop removed.
-
-                    // Remove loser from order
+                    // Remove loser from order (stops them from getting turns)
                     this.state.playerOrder = this.state.playerOrder.filter(id => id !== loserId);
+
+                    // Force update connectivity for eliminated player to disconnect all their lands
+                    this.state.updateConnectivity(loserId);
+
+
 
                     // Check Win Condition: Last Man Standing
                     if (this.state.playerOrder.length === 1) {

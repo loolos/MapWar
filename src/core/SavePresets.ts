@@ -81,5 +81,6 @@ export const SavePresets = {
             currentPlayerId: 'P1',
             grid: grid
         });
-    }
+    },
+
 };

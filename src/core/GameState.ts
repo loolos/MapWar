@@ -5,6 +5,7 @@ export class GameState {
     grid: Cell[][];
     players: Record<string, Player>;
     playerOrder: string[];
+    allPlayerIds: string[]; // Persist full roster including eliminated players
     currentPlayerId: PlayerID;
     turnCount: number;
 
@@ -12,6 +13,7 @@ export class GameState {
         this.grid = [];
         this.players = {};
         this.playerOrder = [];
+        this.allPlayerIds = [];
 
         // specific default for 2 players if none provided (Backwards compatibility)
         if (playerConfigs.length === 0) {
@@ -30,6 +32,8 @@ export class GameState {
             };
             this.playerOrder.push(cfg.id);
         });
+
+        this.allPlayerIds = [...this.playerOrder]; // Initialize full roster
 
         this.currentPlayerId = this.playerOrder[0];
         this.turnCount = 1;
@@ -76,9 +80,7 @@ export class GameState {
 
             // Angle fraction
             const angle = (i / count) * 2 * Math.PI - (Math.PI / 2); // Start top -PI/2 (Actually P1 is usually Top Left?)
-            // Let's adjust angle so P1 is roughly Top Left (Angle -3PI/4?)
-            // Or just follow standard circle: 0 = Right, PI/2 = Down, PI = Left, -PI/2 = Up.
-            // If we want P1 at Top Left: That is roughly -3PI/4 or 5PI/4.
+            // Let's adjust angle so P1 at Top Left: That is roughly -3PI/4 or 5PI/4.
             const startOffset = -3 * Math.PI / 4;
             const finalAngle = angle + startOffset;
 
@@ -108,6 +110,7 @@ export class GameState {
             // Full Reset with new configs
             this.players = {};
             this.playerOrder = [];
+            this.allPlayerIds = [];
             configs.forEach(cfg => {
                 this.players[cfg.id] = {
                     id: cfg.id,
@@ -117,13 +120,17 @@ export class GameState {
                 };
                 this.playerOrder.push(cfg.id);
             });
-            // If new configs, we probably shouldn't keep map? Or maybe we can?
-            // Usually Setup -> New Game logic implies total reset.
-            // But if just swapping players on same map?
+            this.allPlayerIds = [...this.playerOrder];
         } else {
             // Soft Reset (Keep Players)
+            // Restore full player order from persistent roster
+            this.playerOrder = [...this.allPlayerIds];
+
             this.playerOrder.forEach(pid => {
-                this.players[pid].gold = GameConfig.INITIAL_GOLD;
+                // Ensure player object exists (it should, but safety first)
+                if (this.players[pid]) {
+                    this.players[pid].gold = GameConfig.INITIAL_GOLD;
+                }
             });
         }
 
@@ -197,7 +204,7 @@ export class GameState {
                 // Add neighbors to frontier
                 const neighbors = [
                     { r: curr.r + 1, c: curr.c }, { r: curr.r - 1, c: curr.c },
-                    { r: curr.r, c: curr.c + 1 }, { r: curr.r, c: curr.c - 1 }
+                    { r: curr.r, c: curr.c + 1 }, { r: curr.c, c: curr.c - 1 }
                 ];
 
                 for (const n of neighbors) {
@@ -374,6 +381,7 @@ export class GameState {
             grid: this.grid.map(row => row.map(cell => cell.serialize())),
             players: this.players,
             playerOrder: this.playerOrder,
+            allPlayerIds: this.allPlayerIds, // Save persistence list
             turnCount: this.turnCount,
             currentPlayerId: this.currentPlayerId
         });
@@ -382,9 +390,12 @@ export class GameState {
     deserialize(json: string) {
         const data = JSON.parse(json);
         this.players = data.players;
-        this.playerOrder = data.playerOrder || Object.keys(this.players); // Fallback for old saves
         this.turnCount = data.turnCount;
         this.currentPlayerId = data.currentPlayerId;
+
+        // Restore persistent list or fallback to players keys
+        this.allPlayerIds = data.allPlayerIds || Object.keys(this.players);
+        this.playerOrder = data.playerOrder || [...this.allPlayerIds]; // Fallback
 
         // Reconstruct Grid
         // Use loaded data dimensions

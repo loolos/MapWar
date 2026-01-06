@@ -1,6 +1,6 @@
-
 import { NearVictory } from './NearVictory';
 import { LargeMap } from './LargeMap';
+import { EliminationTest } from './EliminationTest';
 
 export interface SaveScenario {
     name: string;
@@ -10,5 +10,6 @@ export interface SaveScenario {
 
 export const SaveRegistry: Record<string, SaveScenario> = {
     'NEAR_VICTORY': NearVictory,
-    'LARGE_MAP': LargeMap
+    'LARGE_MAP': LargeMap,
+    'ELIMINATION_TEST': EliminationTest
 };
