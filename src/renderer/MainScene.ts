@@ -241,163 +241,171 @@ export class MainScene extends Phaser.Scene {
     }
 
     resize(gameSize: Phaser.Structs.Size) {
-        const width = gameSize.width;
-        const height = gameSize.height;
+        try {
+            const width = gameSize.width;
+            const height = gameSize.height;
 
-        this.cameras.main.setViewport(0, 0, width, height);
+            if (width === 0 || height === 0) return;
 
-        // Re-initialize terrain visuals only if missing (e.g. first load)
-        if (!this.terrainGroup || this.terrainGroup.getLength() === 0) {
-            this.initializeTerrainVisuals();
+            this.cameras.main.setViewport(0, 0, width, height);
+
+            // Re-initialize terrain visuals only if missing (e.g. first load)
+            if (!this.terrainGroup || this.terrainGroup.getLength() === 0) {
+                this.initializeTerrainVisuals();
+            }
+
+            // -----------------------------
+            // RESPONSIVE LAYOUT LOGIC
+            // -----------------------------
+            const isPortrait = height > width || width < 600;
+
+            // Define Regions
+            let mapX = 0, mapY = 0, mapAreaW = 0, mapAreaH = 0;
+            let sidebarW = 0, bottomH = 0;
+
+            if (isPortrait) {
+                // --- PORTRAIT (MOBILE) ---
+                bottomH = Math.max(250, height * 0.35);
+                sidebarW = 0; // No vertical sidebar
+
+                mapAreaW = width;
+                mapAreaH = height - bottomH;
+                mapX = 0;
+                mapY = 0;
+
+                // Backgrounds
+                this.trBg.clear().setVisible(false);
+                this.brBg.clear().setVisible(false);
+                this.blBg.clear().fillStyle(0x111111).fillRect(0, mapAreaH, width, bottomH).setVisible(true);
+
+                // Split Bottom Panel: Left (Info), Right (Status)
+                const midX = width / 2;
+
+                // 1. Info System (Left)
+                const infoScale = Math.min(1, (midX - 10) / 260);
+                this.infoSystem.setScale(infoScale);
+
+                const infoX = 5;
+                const infoY = mapAreaH + 10;
+                this.infoSystem.resize(260, infoX, infoY);
+                this.infoSystem.setPosition(infoX, infoY);
+
+                // 2. Player Status (Right)
+                // Available width for status is (width - midX). 
+                // Internal width is 260.
+                const statusScale = Math.min(1, (width - midX - 10) / 260);
+                this.playerStatusSystem.setScale(statusScale);
+
+                // Available Height (Unscaled)
+                const availH = (bottomH - 20) / statusScale;
+                this.playerStatusSystem.resize(260, availH, midX + 5, mapAreaH + 10);
+                this.playerStatusSystem.setPosition(midX + 5, mapAreaH + 10);
+
+                // Buttons: Floating or Bottom?
+                // Space is tight. Float on bottom-right of Map Area.
+                this.buttonSystem.setPosition(width - 140, mapAreaH - 60);
+
+                // Notifications: Top Center overlay
+                this.notificationSystem.resize(Math.min(300, width - 20), 0);
+                this.notificationSystem.setPosition((width - Math.min(300, width - 20)) / 2, 60);
+
+            } else {
+                // --- LANDSCAPE (DESKTOP) ---
+                sidebarW = 260;
+                bottomH = 0; // Sidebar covers full height usually
+
+                mapX = sidebarW;
+                mapY = 0;
+                mapAreaW = width - sidebarW;
+                mapAreaH = height;
+
+                // Backgrounds
+                this.trBg.clear().fillStyle(0x222222).fillRect(0, 0, sidebarW, height).setVisible(true);
+                this.blBg.clear().setVisible(false);
+                this.brBg.clear().setVisible(false); // Clean up old
+
+                // Reset Scales
+                this.infoSystem.setScale(1);
+                this.playerStatusSystem.setScale(1);
+
+                // Systems in Sidebar
+                const statusH = height * 0.6;
+                this.playerStatusSystem.resize(sidebarW, statusH, 0, 0);
+                this.playerStatusSystem.setPosition(0, 0);
+
+                // Fix: Pass correct x,y (0, statusH+10) to resize so mask is valid
+                const infoY = statusH + 10;
+                this.infoSystem.resize(sidebarW, 0, infoY); // x=0 by default if I pass 3 args? No, sig is (w, x, y)
+                this.infoSystem.setPosition(0, infoY);
+
+                // Buttons: Bottom Left of Map Area? Or sidebar?
+                // "Sidebar agnostic" -> Previously floating bottom left.
+                this.buttonSystem.setPosition(20, height - 80);
+
+                // Notifications
+                this.notificationSystem.resize(300, 0);
+                this.notificationSystem.setPosition(width - 320, height - 100);
+            }
+
+            // Force data refresh to ensure visibility immediately
+            if (this.engine) {
+                this.playerStatusSystem.update(this.engine);
+                this.infoSystem.update(this.engine, null, null);
+            }
+
+            // --- MAP SCALING & CENTERING ---
+            if (mapAreaW <= 0 || mapAreaH <= 0) return;
+
+            let gridW = GameConfig.GRID_WIDTH;
+            let gridH = GameConfig.GRID_HEIGHT;
+            if (this.engine && this.engine.state.grid.length > 0) {
+                gridH = this.engine.state.grid.length;
+                gridW = this.engine.state.grid[0].length;
+            }
+
+            const mapPixelW = gridW * this.tileSize;
+            const mapPixelH = gridH * this.tileSize;
+
+            const scaleX = (mapAreaW - 40) / mapPixelW;
+            const scaleY = (mapAreaH - 40) / mapPixelH;
+            let scale = Math.min(scaleX, scaleY);
+            scale = Math.min(scale, 1.2);
+            const minScale = this.minTileSize / this.tileSize;
+            if (scale < minScale) scale = minScale;
+
+            this.mapContainer.setScale(scale);
+
+            const scaledMapW = mapPixelW * scale;
+            const scaledMapH = mapPixelH * scale;
+
+            this.isMapScrollable = (scaledMapW > mapAreaW || scaledMapH > mapAreaH);
+
+            let targetX = mapX + (mapAreaW - scaledMapW) / 2;
+            let targetY = mapY + (mapAreaH - scaledMapH) / 2;
+
+            if (this.isMapScrollable) {
+                if (scaledMapW > mapAreaW) targetX = mapX + 20;
+                if (scaledMapH > mapAreaH) targetY = mapY + 20;
+
+                this.cameraControlsContainer.setVisible(true);
+                this.cameraControlsContainer.setPosition(width - 80, height - (isPortrait ? bottomH + 80 : 80));
+            } else {
+                this.cameraControlsContainer.setVisible(false);
+            }
+
+            this.mapContainer.setPosition(targetX, targetY);
+
+            // Update Offsets for Input
+            this.mapOffsetX = this.mapContainer.x;
+            this.mapOffsetY = this.mapContainer.y;
+
+            // Force Redraw of Grid/Overlays to ensure Z-order and freshness
+            this.drawMap();
+
+        } catch (err) {
+            console.error("MainScene.resize CRASHED:", err);
+            // Optionally try to recover or notify user via UI?
         }
-
-        // -----------------------------
-        // RESPONSIVE LAYOUT LOGIC
-        // -----------------------------
-        const isPortrait = height > width || width < 600;
-
-        // Define Regions
-        let mapX = 0, mapY = 0, mapAreaW = 0, mapAreaH = 0;
-        let sidebarW = 0, bottomH = 0;
-
-        if (isPortrait) {
-            // --- PORTRAIT (MOBILE) ---
-            bottomH = Math.max(250, height * 0.35);
-            sidebarW = 0; // No vertical sidebar
-
-            mapAreaW = width;
-            mapAreaH = height - bottomH;
-            mapX = 0;
-            mapY = 0;
-
-            // Backgrounds
-            this.trBg.clear().setVisible(false);
-            this.brBg.clear().setVisible(false);
-            this.blBg.clear().fillStyle(0x111111).fillRect(0, mapAreaH, width, bottomH).setVisible(true);
-
-            // Split Bottom Panel: Left (Info), Right (Status)
-            const midX = width / 2;
-
-            // 1. Info System (Left)
-            const infoScale = Math.min(1, (midX - 10) / 260);
-            this.infoSystem.setScale(infoScale);
-
-            const infoX = 5;
-            const infoY = mapAreaH + 10;
-            this.infoSystem.resize(260, infoX, infoY);
-            this.infoSystem.setPosition(infoX, infoY);
-
-            // 2. Player Status (Right)
-            // Available width for status is (width - midX). 
-            // Internal width is 260.
-            const statusScale = Math.min(1, (width - midX - 10) / 260);
-            this.playerStatusSystem.setScale(statusScale);
-
-            // Available Height (Unscaled)
-            const availH = (bottomH - 20) / statusScale;
-            this.playerStatusSystem.resize(260, availH, midX + 5, mapAreaH + 10);
-            this.playerStatusSystem.setPosition(midX + 5, mapAreaH + 10);
-
-            // Buttons: Floating or Bottom?
-            // Space is tight. Float on bottom-right of Map Area.
-            this.buttonSystem.setPosition(width - 140, mapAreaH - 60);
-
-            // Notifications: Top Center overlay
-            this.notificationSystem.resize(Math.min(300, width - 20), 0);
-            this.notificationSystem.setPosition((width - Math.min(300, width - 20)) / 2, 60);
-
-        } else {
-            // --- LANDSCAPE (DESKTOP) ---
-            sidebarW = 260;
-            bottomH = 0; // Sidebar covers full height usually
-
-            mapX = sidebarW;
-            mapY = 0;
-            mapAreaW = width - sidebarW;
-            mapAreaH = height;
-
-            // Backgrounds
-            this.trBg.clear().fillStyle(0x222222).fillRect(0, 0, sidebarW, height).setVisible(true);
-            this.blBg.clear().setVisible(false);
-            this.brBg.clear().setVisible(false); // Clean up old
-
-            // Reset Scales
-            this.infoSystem.setScale(1);
-            this.playerStatusSystem.setScale(1);
-
-            // Systems in Sidebar
-            const statusH = height * 0.6;
-            this.playerStatusSystem.resize(sidebarW, statusH, 0, 0);
-            this.playerStatusSystem.setPosition(0, 0);
-
-            // Fix: Pass correct x,y (0, statusH+10) to resize so mask is valid
-            const infoY = statusH + 10;
-            this.infoSystem.resize(sidebarW, 0, infoY); // x=0 by default if I pass 3 args? No, sig is (w, x, y)
-            this.infoSystem.setPosition(0, infoY);
-
-            // Buttons: Bottom Left of Map Area? Or sidebar?
-            // "Sidebar agnostic" -> Previously floating bottom left.
-            this.buttonSystem.setPosition(20, height - 80);
-
-            // Notifications
-            this.notificationSystem.resize(300, 0);
-            this.notificationSystem.setPosition(width - 320, height - 100);
-        }
-
-        // Force data refresh to ensure visibility immediately
-        if (this.engine) {
-            this.playerStatusSystem.update(this.engine);
-            this.infoSystem.update(this.engine, null, null);
-        }
-
-        // --- MAP SCALING & CENTERING ---
-        if (mapAreaW <= 0 || mapAreaH <= 0) return;
-
-        let gridW = GameConfig.GRID_WIDTH;
-        let gridH = GameConfig.GRID_HEIGHT;
-        if (this.engine && this.engine.state.grid.length > 0) {
-            gridH = this.engine.state.grid.length;
-            gridW = this.engine.state.grid[0].length;
-        }
-
-        const mapPixelW = gridW * this.tileSize;
-        const mapPixelH = gridH * this.tileSize;
-
-        const scaleX = (mapAreaW - 40) / mapPixelW;
-        const scaleY = (mapAreaH - 40) / mapPixelH;
-        let scale = Math.min(scaleX, scaleY);
-        scale = Math.min(scale, 1.2);
-        const minScale = this.minTileSize / this.tileSize;
-        if (scale < minScale) scale = minScale;
-
-        this.mapContainer.setScale(scale);
-
-        const scaledMapW = mapPixelW * scale;
-        const scaledMapH = mapPixelH * scale;
-
-        this.isMapScrollable = (scaledMapW > mapAreaW || scaledMapH > mapAreaH);
-
-        let targetX = mapX + (mapAreaW - scaledMapW) / 2;
-        let targetY = mapY + (mapAreaH - scaledMapH) / 2;
-
-        if (this.isMapScrollable) {
-            if (scaledMapW > mapAreaW) targetX = mapX + 20;
-            if (scaledMapH > mapAreaH) targetY = mapY + 20;
-
-            this.cameraControlsContainer.setVisible(true);
-            this.cameraControlsContainer.setPosition(width - 80, height - (isPortrait ? bottomH + 80 : 80));
-        } else {
-            this.cameraControlsContainer.setVisible(false);
-        }
-
-        this.mapContainer.setPosition(targetX, targetY);
-
-        // Update Offsets for Input
-        this.mapOffsetX = this.mapContainer.x;
-        this.mapOffsetY = this.mapContainer.y;
-
-        // Force Redraw of Grid/Overlays to ensure Z-order and freshness
-        this.drawMap();
     }
 
 

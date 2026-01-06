@@ -96,7 +96,8 @@ describe('CellInfoSystem', () => {
         engine.state = {
             grid: grid,
             getCell: (r: number, c: number) => grid[r] && grid[r][c],
-            // Add other state props if needed by System (none currently)
+            getCurrentPlayer: () => ({ id: 'P1', gold: 100, isAI: false, color: 0xff0000 }),
+            players: { 'P1': { id: 'P1', gold: 100 } }
         } as any;
     });
 

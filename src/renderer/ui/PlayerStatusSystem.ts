@@ -203,7 +203,8 @@ export class PlayerStatusSystem {
 
         // Update Interactive Hit Area
         const hitArea = new Phaser.Geom.Rectangle(0, 80, width, this.viewHeight);
-        this.container.input!.hitArea = hitArea; // Directly update hitArea?
+
+        // Re-set interactive to update hit area safely
         // Or re-set interactive
         this.container.removeInteractive();
         this.container.setInteractive(hitArea, Phaser.Geom.Rectangle.Contains);

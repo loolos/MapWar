@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { MainScene } from './renderer/MainScene';
 import { MenuScene } from './renderer/MenuScene';
+import './style.css';
 
 
 const config: Phaser.Types.Core.GameConfig = {
