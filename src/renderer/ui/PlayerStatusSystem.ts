@@ -212,7 +212,7 @@ export class PlayerStatusSystem {
         this.updateMask(width, height, x, y);
     }
 
-    private updateMask(w: number, h: number, x: number, y: number) {
+    private updateMask(w: number, _h: number, x: number, y: number) {
         if (this.maskShape) {
             this.maskShape.clear();
             this.maskShape.fillStyle(0xffffff);

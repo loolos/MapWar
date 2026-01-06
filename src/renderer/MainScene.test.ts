@@ -1,6 +1,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MainScene } from './MainScene';
+import { GameConfig } from '../core/GameConfig';
 
 
 // Mock TextureUtils to avoid Canvas errors
@@ -20,6 +21,7 @@ vi.mock('phaser', () => {
         input: any;
         time: any;
         make: any;
+        textures: any;
 
         constructor(_key: string) {
             this.cameras = {
@@ -67,7 +69,9 @@ vi.mock('phaser', () => {
                         moveTo: vi.fn(() => g), // Add missing Graphics methods
                         lineTo: vi.fn(() => g),
                         strokePath: vi.fn(() => g),
-                        arc: vi.fn(() => g)
+                        arc: vi.fn(() => g),
+                        setVisible: vi.fn(() => g),
+                        destroy: vi.fn()
                     };
                     return g;
                 }),
@@ -116,8 +120,15 @@ vi.mock('phaser', () => {
                 graphics: vi.fn(() => ({
                     fillStyle: vi.fn(),
                     fillRect: vi.fn(),
-                    generateTexture: vi.fn()
+                    generateTexture: vi.fn(),
+                    destroy: vi.fn()
                 }))
+            };
+            this.time = {
+                delayedCall: vi.fn((_delay, callback) => callback())
+            };
+            this.textures = {
+                exists: vi.fn(() => false)
             };
         }
     }
@@ -326,7 +337,7 @@ describe('MainScene', () => {
         // Check if fillStyle was called with (Color, 0.5)
         // Note: precise call order might vary, but we look for *a* call.
         // GameConfig.COLORS.P1 is 0x880000
-        expect(fillStyleSpy).toHaveBeenCalledWith(0x880000, 0.5);
+        expect(fillStyleSpy).toHaveBeenCalledWith(GameConfig.COLORS.P1, 0.5);
 
         // Expectation 2: Neutral Tile [0,0] should NOT draw an overlay
         // How to ensure it didn't draw for neutral? 
