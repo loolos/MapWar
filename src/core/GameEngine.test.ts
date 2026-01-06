@@ -282,4 +282,107 @@ describe('GameEngine', () => {
             expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Supply line cut'));
         });
     });
+
+    describe('Bridge Mechanics', () => {
+        beforeEach(() => {
+            // Setup: P1 Base at (0,0). (0,1) is Water.
+            const waterCell = engine.state.getCell(0, 1)!;
+            waterCell.type = 'water';
+            engine.state.players['P1'].gold = 100;
+        });
+
+        it('correctly reports bridge build cost', () => {
+            // Cost of water tile should be COST_BUILD_BRIDGE
+            const cost = engine.getMoveCost(0, 1);
+            expect(cost).toBe(GameConfig.COST_BUILD_BRIDGE);
+        });
+
+        it('allows building bridge on adjacent water', () => {
+            // (0,0) is owned by P1. (0,1) is Water.
+            engine.togglePlan(0, 1);
+            expect(engine.pendingMoves).toHaveLength(1);
+            expect(engine.lastError).toBeNull();
+        });
+
+        it('transforms water to bridge on commit', () => {
+            engine.togglePlan(0, 1);
+            engine.commitMoves();
+
+            const cell = engine.state.getCell(0, 1)!;
+            expect(cell.type).toBe('bridge');
+            expect(cell.owner).toBe('P1');
+        });
+
+        it('bridge provides 0 income', () => {
+            // Build bridge at (0,1)
+            engine.togglePlan(0, 1);
+            engine.commitMoves();
+
+            // Check income report
+            const report = engine.state.accrueResources('P1')!;
+            // Base: 10. Land (0,0): 1. Bridge: 0. Total: 11.
+            expect(report.total).toBe(11);
+            expect(report.land).toBe(1); // Only count (0,0) logic for income? 
+            // In accrueResources, landCount counts owned cells.
+            // But logic says: if type !== bridge, add income.
+            // The test should verify income amount.
+        });
+
+        it('bridge allows connectivity', () => {
+            // (0,0) -> (0,1)[Bridge] -> (0,2)[Plain]
+            const water = engine.state.getCell(0, 1)!;
+            water.type = 'water';
+
+            // Build bridge
+            engine.togglePlan(0, 1);
+            engine.commitMoves(); // Bridge built at (0,1)
+
+            // Capture (0,2) via bridge
+            // (0,2) is adjacent to (0,1) which is now a bridge owned by P1
+            const plain = engine.state.getCell(0, 2)!;
+            plain.type = 'plain';
+
+            engine.togglePlan(0, 2);
+            expect(engine.pendingMoves).toHaveLength(1); // Should be valid
+
+            engine.commitMoves();
+
+            expect(engine.state.getCell(0, 2)?.owner).toBe('P1');
+
+            // Verify connectivity
+            engine.state.updateConnectivity('P1');
+            expect(engine.state.getCell(0, 2)?.isConnected).toBe(true);
+        });
+
+        it('fails to build bridge if not adjacent to owned territory', () => {
+            // P1 at (0,0). Try to build bridge at (0,2) (Water) directly?
+            // (0,1) is Plain. (0,2) is Water.
+            // P1 does NOT own (0,1).
+            engine.state.getCell(0, 2)!.type = 'water';
+
+            // Try planning (0,2)
+            engine.togglePlan(0, 2);
+            expect(engine.pendingMoves).toHaveLength(0); // Cannot skip (0,1)
+
+            // But what if (0,1) is pending?
+            // The supply line check "isAdjacentToConnected || isAdjacentToPending".
+            // Bridge rule might be stricter: "adjacent to occupied".
+            // My implementation allowed "isAdjacentToOwned" which is strictly "occupied".
+            // So if I own (0,0), can I build bridge at (0,2)? No, not adjacent.
+
+            // What about move chain? (0,0) -> (0,1)[Plain] -> (0,2)[Water]?
+            // (0,1) is pending. Is (0,2) allowed?
+            // "Must be adjacent to ALREADY OWNED land".
+            // So chaining (0,1) -> (0,2) where (0,2) is bridge?
+            // Logic: `isAdjacentToOwned` will be false for (0,2) if (0,1) is only pending.
+            // So chaining bridge construction should fail.
+
+            engine.togglePlan(0, 1); // Plan (0,1)
+            engine.togglePlan(0, 2); // Plan Bridge at (0,2)
+
+            // (0,2) fails strict adjacency check
+            expect(engine.pendingMoves).toHaveLength(1); // Only (0,1) added
+            // (0,2) not added
+        });
+    });
 });

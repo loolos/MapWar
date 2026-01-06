@@ -7,15 +7,18 @@ export const GameConfig = {
     COST_MOVE: 5,
     COST_ATTACK: 20,
     COST_CAPTURE: 10,
+    COST_BUILD_BRIDGE: 30,
     TERRAIN_COSTS: {
         PLAIN: 1,
         HILL: 2,
-        WATER: Infinity // Impassable
+        BRIDGE: 1,
+        WATER: Infinity // Impassable unless building bridge
     },
     TERRAIN_DESCRIPTIONS: {
         PLAIN: "Normal terrain. Standard movement cost.",
         HILL: "Rugged terrain. Movement cost is DOUBLED.",
-        WATER: "Deep water. Impassable."
+        WATER: "Deep water. Build a Bridge (30G) to cross.",
+        BRIDGE: "A tactical bridge. No income, but allows movement."
     },
     COLORS: {
         P1: 0x880000,
@@ -32,7 +35,8 @@ export const GameConfig = {
         // Terrain Colors
         TERRAIN_WATER: 0x224488,
         TERRAIN_HILL: 0x666644,
-        TERRAIN_PLAIN: 0x555555 // Logic re-use: Neutral plain is this color
+        TERRAIN_PLAIN: 0x555555, // Logic re-use: Neutral plain is this color
+        TERRAIN_BRIDGE: 0x654321 // Wood color
     },
     UI: {
         TILE_SIZE: 64,
@@ -45,7 +49,7 @@ export const GameConfig = {
 export type Difficulty = 'EASY' | 'MEDIUM' | 'HARD';
 
 export type PlayerID = 'P1' | 'P2' | null;
-export type CellType = 'plain' | 'water' | 'hill';
+export type CellType = 'plain' | 'water' | 'hill' | 'bridge';
 
 export interface Player {
     id: PlayerID;

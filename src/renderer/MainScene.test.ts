@@ -19,6 +19,7 @@ vi.mock('phaser', () => {
         load: any;
         input: any;
         time: any;
+        make: any;
 
         constructor(_key: string) {
             this.cameras = {
@@ -104,7 +105,13 @@ vi.mock('phaser', () => {
                     }))
                 }
             };
-            this.time = { delayedCall: vi.fn() };
+            this.make = {
+                graphics: vi.fn(() => ({
+                    fillStyle: vi.fn(),
+                    fillRect: vi.fn(),
+                    generateTexture: vi.fn()
+                }))
+            };
         }
     }
 

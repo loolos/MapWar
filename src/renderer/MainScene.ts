@@ -143,7 +143,20 @@ export class MainScene extends Phaser.Scene {
         this.scale.on('resize', this.resize, this);
 
         // Event Listeners
-        this.engine.on('mapUpdate', () => this.drawMap());
+        // Generate Bridge Texture (Programmatic)
+        const gfx = this.make.graphics({ x: 0, y: 0 });
+        gfx.fillStyle(0x654321); // Wood Color
+        gfx.fillRect(0, 0, 64, 64);
+        // Add planks detail
+        gfx.fillStyle(0x543210);
+        for (let i = 10; i < 64; i += 15) gfx.fillRect(0, i, 64, 2);
+        gfx.generateTexture('tile_bridge', 64, 64);
+
+        // Event Listeners
+        this.engine.on('mapUpdate', () => {
+            this.initializeTerrainVisuals();
+            this.drawMap();
+        });
         this.engine.on('turnChange', () => {
             this.drawMap();
             this.updateUI();
@@ -454,6 +467,7 @@ export class MainScene extends Phaser.Scene {
                     let texture = 'tile_plain';
                     if (cell.type === 'hill') texture = 'tile_hill';
                     else if (cell.type === 'water') texture = 'tile_water';
+                    else if (cell.type === 'bridge') texture = 'tile_bridge';
 
                     const img = this.add.image(x, y, texture);
                     img.setDisplaySize(this.tileSize, this.tileSize);

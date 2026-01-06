@@ -168,6 +168,7 @@ export class GameEngine {
         // Base Cost (Terrain)
         let baseCost = GameConfig.COST_CAPTURE;
         if (cell.type === 'hill') baseCost = GameConfig.COST_CAPTURE * 2;
+        if (cell.type === 'water') baseCost = GameConfig.COST_BUILD_BRIDGE; // Bridge Cost
         // Plain is default (1x)
 
         // For Attack, use Attack Cost Base
@@ -177,6 +178,12 @@ export class GameEngine {
             isAttack = true;
             baseCost = GameConfig.COST_ATTACK;
             if (cell.type === 'hill') baseCost = GameConfig.COST_ATTACK * 2;
+            if (cell.type === 'bridge') baseCost = GameConfig.COST_ATTACK * 2; // Attacking bridge is same double cost rule? Or just standard attack? User said "invade ... double cost" implies standard attack cost.
+            // Wait, normal attack is COST_ATTACK (20). Hill is 40.
+            // User said "invade ... like others expense double". If bridge is flat, it's 20. If hill is 40.
+            // Let's assume bridge is flat terrain difficulty for attack, so 20. But user said "double".
+            // "invade bridge... same double cost". Standard attack IS expensive (20 vs 10 capture).
+            // Maybe they mean if disconnected? No, likely just standard attack rules apply.
         }
 
         // Distance Penalty Logic (Double if chained)
@@ -218,7 +225,14 @@ export class GameEngine {
         }
 
         // 3. Terrain Check
-        if (cell.type === 'water') return { valid: false, reason: "Cannot move to Water" };
+        if (cell.type === 'water') {
+            // Must be adjacent to ALREADY OWNED land to build a bridge (User Requirement)
+            // "If in adjacent area of occupied area, player can click build bridge"
+            const isAdjToOwned = this.state.isAdjacentToOwned(row, col, playerId);
+            if (!isAdjToOwned) {
+                return { valid: false, reason: "Bridges can only be built from existing territory" };
+            }
+        }
 
         // 4. Cost Check
         // Calculate total cost of pending moves + this move
@@ -266,6 +280,11 @@ export class GameEngine {
             // Win Condition Check: Capture Enemy Base
             if (cell && cell.building === 'base' && cell.owner !== pid) {
                 gameWon = true;
+            }
+
+            // Transformation: Water -> Bridge
+            if (cell && cell.type === 'water') {
+                cell.type = 'bridge';
             }
 
             this.state.setOwner(move.r, move.c, pid);

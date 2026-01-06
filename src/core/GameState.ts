@@ -161,12 +161,14 @@ export class GameState {
             for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
                 const cell = this.grid[r][c];
                 if (cell.owner === playerId) {
-                    landCount++;
-                    // Income Logic: Full (1) if connected, Half (0.5) if disconnected
-                    if (cell.isConnected) {
-                        landIncome += GameConfig.GOLD_PER_LAND;
-                    } else {
-                        landIncome += GameConfig.GOLD_PER_LAND * 0.5;
+                    if (cell.type !== 'bridge') { // Bridges provide 0 income
+                        landCount++;
+                        // Income Logic: Full (1) if connected, Half (0.5) if disconnected
+                        if (cell.isConnected) {
+                            landIncome += GameConfig.GOLD_PER_LAND;
+                        } else {
+                            landIncome += GameConfig.GOLD_PER_LAND * 0.5;
+                        }
                     }
                 }
             }
