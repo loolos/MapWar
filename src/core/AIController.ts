@@ -18,6 +18,9 @@ export class AIController {
         // 2. Prioritize capturing high value targets (bases > disconnected lands > hills > plains)
         // 3. Or just random expansion if easy.
 
+        // Clear previous AI moves
+        this.engine.lastAiMoves = [];
+
         const moves: { r: number, c: number, score: number }[] = [];
         const grid = this.engine.state.grid;
 
@@ -63,6 +66,7 @@ export class AIController {
                 // Simplest AI: stop on first failure.
                 break;
             } else {
+                this.engine.lastAiMoves.push({ r: m.r, c: m.c });
                 this.engine.commitMoves();
                 attempts++;
             }

@@ -208,8 +208,10 @@ export class MainScene extends Phaser.Scene {
         this.blBg.clear().fillStyle(GameConfig.COLORS.ACTION_BG).fillRect(0, height - bottomH, width, bottomH); // Footer BG
 
         // 1. Sidebar (Status & Info)
-        this.playerStatusSystem.resize(sidebarW, 300, 0, 0);
-        this.infoSystem.resize(sidebarW, 0, 310);
+
+        const statusHeight = 370; // Height to fit all status cards (P1, P2, Cost)
+        this.playerStatusSystem.resize(sidebarW, statusHeight, 0, 0);
+        this.infoSystem.resize(sidebarW, 0, statusHeight + 10);
 
         // 2. Buttons & Notifications
         // Buttons: Bottom Left?
@@ -370,31 +372,19 @@ export class MainScene extends Phaser.Scene {
                 const y = r * this.tileSize;
 
                 // 1. TERRAIN & OWNER COLOR
-                // We do NOT draw opaque backgrounds for terrain types anymore, 
-                // allowing the underlying PNG images (initialized in initializeTerrainVisuals) to show.
+                // We do NOT draw opaque backgrounds for terrain types anymore.
 
-                let overlayColor: number | null = null;
-                let alpha = 0;
+                if (cell.owner) {
+                    const color = cell.owner === 'P1' ? GameConfig.COLORS.P1 : GameConfig.COLORS.P2;
 
-                // Owner Overlays
-                if (cell.owner === 'P1') {
-                    overlayColor = GameConfig.COLORS.P1;
-                    alpha = 0.5;
-                } else if (cell.owner === 'P2') {
-                    overlayColor = GameConfig.COLORS.P2;
-                    alpha = 0.5;
-                }
-
-                // Disconnected Grey-out (Override or Overlay on top?)
-                if (cell.owner && !cell.isConnected) {
-                    overlayColor = 0x333333; // Dark Grey
-                    alpha = 0.7; // Darker to show "disabled"
-                }
-
-                // Apply Overlay if needed
-                if (overlayColor !== null) {
-                    this.gridGraphics.fillStyle(overlayColor, alpha);
-                    this.gridGraphics.fillRect(x, y, this.tileSize - 2, this.tileSize - 2);
+                    if (cell.isConnected) {
+                        // Normal Connected State: Solid Semi-Transparent
+                        this.gridGraphics.fillStyle(color, 0.5);
+                        this.gridGraphics.fillRect(x, y, this.tileSize - 2, this.tileSize - 2);
+                    } else {
+                        // Disconnected State: Zebra Stripes
+                        this.drawDisconnectedPattern(this.gridGraphics, x, y, this.tileSize, color);
+                    }
                 }
 
                 // Always draw a faint grid border to separate tiles visually
@@ -417,15 +407,15 @@ export class MainScene extends Phaser.Scene {
                 // Pending Moves
                 const isPending = this.engine.pendingMoves.some(m => m.r === r && m.c === c);
                 if (isPending) {
-                    this.selectionGraphics.fillStyle(GameConfig.COLORS.HIGHLIGHT_MOVE, 0.5);
-                    this.selectionGraphics.fillRect(x, y, this.tileSize, this.tileSize);
+                    this.selectionGraphics.lineStyle(4, GameConfig.COLORS.HIGHLIGHT_MOVE, 0.8);
+                    this.selectionGraphics.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
                 }
 
                 // AI Moves History
                 const isAiMove = this.engine.lastAiMoves.some(m => m.r === r && m.c === c);
                 if (isAiMove) {
-                    this.selectionGraphics.lineStyle(4, GameConfig.COLORS.HIGHLIGHT_AI);
-                    this.selectionGraphics.strokeRect(x, y, this.tileSize, this.tileSize);
+                    this.selectionGraphics.lineStyle(4, GameConfig.COLORS.HIGHLIGHT_AI, 1.0);
+                    this.selectionGraphics.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
                 }
             }
         }
@@ -644,5 +634,30 @@ export class MainScene extends Phaser.Scene {
 
         this.overlayContainer.add(restartBtn);
         // Input blocked via handleInput check
+    }
+
+    private drawDisconnectedPattern(graphics: Phaser.GameObjects.Graphics, x: number, y: number, size: number, color: number) {
+        graphics.lineStyle(4, color, 0.6); // Semi-transparent player color
+
+        // Draw Diagonal Stripes (Top-Left to Bottom-Right)
+        // Equation: x_rel + y_rel = k
+        const step = 10; // Density
+        // k ranges from 0 to 2*size
+        for (let k = 0; k <= 2 * size; k += step) {
+            // Intersection with square [0, size] x [0, size]
+            // x_rel = t. y_rel = k - t.
+            // 0 <= t <= size
+            // 0 <= k - t <= size  =>  t <= k  AND  t >= k - size
+
+            const tStart = Math.max(0, k - size);
+            const tEnd = Math.min(k, size);
+
+            if (tStart < tEnd) {
+                graphics.beginPath();
+                graphics.moveTo(x + tStart, y + (k - tStart));
+                graphics.lineTo(x + tEnd, y + (k - tEnd));
+                graphics.strokePath();
+            }
+        }
     }
 }

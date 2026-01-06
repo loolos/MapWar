@@ -110,6 +110,10 @@ export class CellInfoSystem {
 
     public resize(width: number, x: number, y: number) {
         const height = 220;
+
+        // Update Position
+        this.setPosition(x, y);
+
         // Redraw Background
         const bgIndex = 0;
         const bg = this.container.getAt(bgIndex) as Phaser.GameObjects.Graphics;

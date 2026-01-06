@@ -238,4 +238,77 @@ describe('MainScene', () => {
         expect(updateUISpy).toHaveBeenCalled();
         expect(scene.notificationSystem.show).toHaveBeenCalledWith("Game Restarted!", 'info');
     });
+
+    it('correctly calculates grid coordinates when map is scaled and offset', () => {
+        // Setup Map Transform
+        scene.tileSize = 64;
+        scene.mapContainer.x = 100;
+        scene.mapContainer.y = 50;
+        scene.mapContainer.scaleX = 0.5; // Zoomed out to 50%
+        scene.mapContainer.scaleY = 0.5;
+
+        // Target: Cell [1, 1]
+        // World Pixel at 100% scale = (64, 64) -> (128, 128)
+        // Scaled Pixel = 64 * 0.5 = 32
+        // Map space target = x=64+32=96, y=64+32=96 (center of 1,1)
+        // Screen Space = MapOrigin + (MapSpace * Scale)
+        // Target Screen X = 100 + (1 * 64 + 32) * 0.5 = 100 + 48 = 148?
+        // Wait, logic in code: localX = (pointer.x - container.x) / scale
+        // We want localX to be inside Cell [1, 1] (range 64-127)
+        // Let's target localX = 96 (center of col 1)
+        // 96 = (screenX - 100) / 0.5  => 48 = screenX - 100 => screenX = 148.
+
+        // Let's try a simpler one: Cell [0, 0] at 10,10 inside the cell.
+        // localX = 10.
+        // 10 = (screenX - 100) / 0.5 => 5 = screenX - 100 => screenX = 105.
+
+        const pointer = { x: 105, y: 55 } as any; // Map Y=50. (55-50)/0.5 = 10. Row 0.
+
+        // Mock Engine State
+        scene.engine.isGameOver = false;
+        scene.engine.state.players['P1'].isAI = false;
+
+        scene.handleInput(pointer);
+
+        expect(scene.selectedRow).toBe(0);
+        expect(scene.selectedCol).toBe(0);
+
+        // Test Cell [2, 1]
+        // Row 2 = 128px start. Center = 128 + 32 = 160.
+        // Col 1 = 64px start. Center = 64 + 32 = 96.
+        // Screen X = 100 + (96 * 0.5) = 148
+        // Screen Y = 50 + (160 * 0.5) = 130
+
+        const pointer2 = { x: 148, y: 130 } as any;
+        scene.handleInput(pointer2);
+
+        expect(scene.selectedRow).toBe(2);
+        expect(scene.selectedCol).toBe(1);
+    });
+
+    it('renders semi-transparent overlays for owned tiles and no overlay for neutral', () => {
+        // Setup Grid: [0,0] = Neutral, [0,1] = Owned P1
+        const grid = scene.engine.state.grid;
+        grid[0][0].owner = null;
+        grid[0][1].owner = 'P1';
+
+        // Mock Graphics
+        const fillStyleSpy = vi.spyOn(scene.gridGraphics, 'fillStyle');
+
+        scene.drawMap();
+
+        // Expectation 1: Owned Tile [0,1] should draw with Alpha 0.5
+        // Check if fillStyle was called with (Color, 0.5)
+        // Note: precise call order might vary, but we look for *a* call.
+        // GameConfig.COLORS.P1 is 0x880000
+        expect(fillStyleSpy).toHaveBeenCalledWith(0x880000, 0.5);
+
+        // Expectation 2: Neutral Tile [0,0] should NOT draw an overlay
+        // How to ensure it didn't draw for neutral? 
+        // We can check that fillStyle was NOT called with Neutral Color (0x555555) or opaque alpha (1)
+        // Previously neutral was drawn with 0x555555. Now it shouldn't be drawn at all.
+        // Let's verify it is NOT called with 0x555555 (NEUTRAL constant)
+        expect(fillStyleSpy).not.toHaveBeenCalledWith(0x555555, expect.anything());
+        // Also check it wasn't called with undefined/1.0 alpha for these tiles (only strokes)
+    });
 });
