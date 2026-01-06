@@ -246,8 +246,10 @@ export class MainScene extends Phaser.Scene {
 
         this.cameras.main.setViewport(0, 0, width, height);
 
-        // Re-initialize terrain visuals if needed
-        this.initializeTerrainVisuals();
+        // Re-initialize terrain visuals only if missing (e.g. first load)
+        if (!this.terrainGroup || this.terrainGroup.getLength() === 0) {
+            this.initializeTerrainVisuals();
+        }
 
         // -----------------------------
         // RESPONSIVE LAYOUT LOGIC
