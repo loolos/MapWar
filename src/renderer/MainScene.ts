@@ -255,99 +255,104 @@ export class MainScene extends Phaser.Scene {
             }
 
             // -----------------------------
-            // RESPONSIVE LAYOUT LOGIC
+            // UNIFIED RESPONSIVE LAYOUT
             // -----------------------------
-            const isPortrait = height > width || width < 600;
+            // Strict Orientation Check
+            const isPortrait = height > width;
 
             // Define Regions
             let mapX = 0, mapY = 0, mapAreaW = 0, mapAreaH = 0;
-            let sidebarW = 0, bottomH = 0;
+            const uiBaseWidth = 260; // Standard internal width of UI components
 
             if (isPortrait) {
-                // --- PORTRAIT (MOBILE) ---
-                bottomH = Math.max(250, height * 0.35);
-                sidebarW = 0; // No vertical sidebar
+                // --- PORTRAIT MODE (Map Top, UI Bottom) ---
+                // UI Height: 35% of screen, clamped [250px, 400px]
+                const uiHeight = Phaser.Math.Clamp(height * 0.35, 250, 400);
 
                 mapAreaW = width;
-                mapAreaH = height - bottomH;
+                mapAreaH = height - uiHeight;
                 mapX = 0;
                 mapY = 0;
 
-                // Backgrounds
+                // UI Background
                 this.trBg.clear().setVisible(false);
                 this.brBg.clear().setVisible(false);
-                this.blBg.clear().fillStyle(0x111111).fillRect(0, mapAreaH, width, bottomH).setVisible(true);
+                this.blBg.clear().fillStyle(0x111111).fillRect(0, mapAreaH, width, uiHeight).setVisible(true);
 
-                // Split Bottom Panel: Left (Info), Right (Status)
+                // Split UI Panel: Left (Info), Right (Status)
                 const midX = width / 2;
 
-                // 1. Info System (Left)
-                const infoScale = Math.min(1, (midX - 10) / 260);
-                this.infoSystem.setScale(infoScale);
+                // Scale UI to fit if screen is narrow
+                // Each panel needs ~uiBaseWidth (260px). 
+                // Available per panel = midX (roughly).
+                const panelScale = Math.min(1, (midX - 10) / uiBaseWidth);
 
-                const infoX = 5;
-                const infoY = mapAreaH + 10;
-                this.infoSystem.resize(260, infoX, infoY);
-                this.infoSystem.setPosition(infoX, infoY);
+                // 1. Info System (Left)
+                this.infoSystem.setScale(panelScale);
+                this.infoSystem.resize(uiBaseWidth, 5, mapAreaH + 10);
+                this.infoSystem.setPosition(5, mapAreaH + 10);
 
                 // 2. Player Status (Right)
-                // Available width for status is (width - midX). 
-                // Internal width is 260.
-                const statusScale = Math.min(1, (width - midX - 10) / 260);
-                this.playerStatusSystem.setScale(statusScale);
-
-                // Available Height (Unscaled)
-                const availH = (bottomH - 20) / statusScale;
-                this.playerStatusSystem.resize(260, availH, midX + 5, mapAreaH + 10);
+                this.playerStatusSystem.setScale(panelScale);
+                // Status system vertical height calculation
+                // It needs to fit within uiHeight.
+                const statusAvailH = (uiHeight - 20) / panelScale;
+                this.playerStatusSystem.resize(uiBaseWidth, statusAvailH, midX + 5, mapAreaH + 10);
                 this.playerStatusSystem.setPosition(midX + 5, mapAreaH + 10);
 
-                // Buttons: Floating or Bottom?
-                // Space is tight. Float on bottom-right of Map Area.
+                // Notifications: Top Center overlay
+                const notifWidth = Math.min(300, width - 20);
+                this.notificationSystem.resize(notifWidth, 0);
+                this.notificationSystem.setPosition((width - notifWidth) / 2, 60);
+
+                // Buttons: Bottom Right of Map (Floating)
                 this.buttonSystem.setPosition(width - 140, mapAreaH - 60);
 
-                // Notifications: Top Center overlay
-                this.notificationSystem.resize(Math.min(300, width - 20), 0);
-                this.notificationSystem.setPosition((width - Math.min(300, width - 20)) / 2, 60);
-
             } else {
-                // --- LANDSCAPE (DESKTOP) ---
-                sidebarW = 260;
-                bottomH = 0; // Sidebar covers full height usually
+                // --- LANDSCAPE MODE (UI Left, Map Right) ---
+                // Sidebar Width: 30% of screen, clamped [260px, 320px]
+                const sidebarW = Phaser.Math.Clamp(width * 0.3, 260, 320);
 
                 mapX = sidebarW;
                 mapY = 0;
                 mapAreaW = width - sidebarW;
                 mapAreaH = height;
 
-                // Backgrounds
+                // UI Background
                 this.trBg.clear().fillStyle(0x222222).fillRect(0, 0, sidebarW, height).setVisible(true);
                 this.blBg.clear().setVisible(false);
-                this.brBg.clear().setVisible(false); // Clean up old
+                this.brBg.clear().setVisible(false);
 
-                // Reset Scales
-                this.infoSystem.setScale(1);
-                this.playerStatusSystem.setScale(1);
+                // Scale UI to fit vertically if screen is short? 
+                // Mostly scaling is 1.0 unles screen is VERY small.
+                // If sidebarW < uiBaseWidth (260), scale down.
+                const uiScale = Math.min(1, (sidebarW - 10) / uiBaseWidth);
 
-                // Systems in Sidebar
-                const statusH = height * 0.6;
-                this.playerStatusSystem.resize(sidebarW, statusH, 0, 0);
-                this.playerStatusSystem.setPosition(0, 0);
+                this.infoSystem.setScale(uiScale);
+                this.playerStatusSystem.setScale(uiScale);
 
-                // Fix: Pass correct x,y (0, statusH+10) to resize so mask is valid
-                const infoY = statusH + 10;
-                this.infoSystem.resize(sidebarW, 0, infoY); // x=0 by default if I pass 3 args? No, sig is (w, x, y)
-                this.infoSystem.setPosition(0, infoY);
+                // Layout: Status Top, Info Bottom
+                // Status takes 60% height
+                const statusH = (height * 0.6) / uiScale;
 
-                // Buttons: Bottom Left of Map Area? Or sidebar?
-                // "Sidebar agnostic" -> Previously floating bottom left.
-                this.buttonSystem.setPosition(20, height - 80);
+                // Status System (Top Left)
+                this.playerStatusSystem.resize(uiBaseWidth, statusH, 0, 0);
+                this.playerStatusSystem.setPosition((sidebarW - uiBaseWidth * uiScale) / 2, 0); // Center in sidebar
 
-                // Notifications
+                // Info System (Below Status)
+                const infoY = (height * 0.6) + 10;
+                this.infoSystem.resize(uiBaseWidth, 0, infoY);
+                this.infoSystem.setPosition((sidebarW - uiBaseWidth * uiScale) / 2, infoY);
+
+                // Notifications: Top Right overlay
                 this.notificationSystem.resize(300, 0);
-                this.notificationSystem.setPosition(width - 320, height - 100);
+                this.notificationSystem.setPosition(width - 320, 20);
+
+                // Buttons: Bottom Left of Map Area
+                this.buttonSystem.setPosition(sidebarW + 20, height - 80);
             }
 
-            // Force data refresh to ensure visibility immediately
+            // Force data refresh
             if (this.engine) {
                 this.playerStatusSystem.update(this.engine);
                 this.infoSystem.update(this.engine, null, null);
@@ -388,7 +393,7 @@ export class MainScene extends Phaser.Scene {
                 if (scaledMapH > mapAreaH) targetY = mapY + 20;
 
                 this.cameraControlsContainer.setVisible(true);
-                this.cameraControlsContainer.setPosition(width - 80, height - (isPortrait ? bottomH + 80 : 80));
+                this.cameraControlsContainer.setPosition(width - 80, height - (isPortrait ? height * 0.35 + 80 : 80)); // Approx button pos
             } else {
                 this.cameraControlsContainer.setVisible(false);
             }

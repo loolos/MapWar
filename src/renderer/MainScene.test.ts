@@ -158,6 +158,9 @@ vi.mock('phaser', () => {
                         RIGHT: 39
                     }
                 }
+            },
+            Math: {
+                Clamp: vi.fn((v: number, min: number, max: number) => Math.max(min, Math.min(v, max)))
             }
         }
     };
