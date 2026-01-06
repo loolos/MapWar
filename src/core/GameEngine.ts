@@ -235,6 +235,12 @@ export class GameEngine {
         return { valid: true };
     }
 
+    public isValidCell(r: number, c: number): boolean {
+        return r >= 0 && r < GameConfig.GRID_HEIGHT && c >= 0 && c < GameConfig.GRID_WIDTH;
+    }
+
+
+
     private isAdjacentToPending(row: number, col: number): boolean {
         // Check if adjacent to any cell in pendingMoves
         const neighbors = [
@@ -270,18 +276,15 @@ export class GameEngine {
             this.state.players[pid].gold -= totalCost;
 
             // Update Connectivity for visuals immediately
+            // Update Connectivity for visuals immediately
             this.state.updateConnectivity('P1');
             this.state.updateConnectivity('P2');
 
-            // Check for Enclave Creation (Tutorial Log)
-            if (!this.hasTriggeredEnclaveTutorial) {
-                const p1HasEnclave = this.checkForEnclaves('P1');
-                const p2HasEnclave = this.checkForEnclaves('P2');
-                if (p1HasEnclave || p2HasEnclave) {
-                    this.hasTriggeredEnclaveTutorial = true;
-                    this.emit('logMessage', "Supply line cut! Isolated lands cost 30% less to capture.");
-                }
-            }
+            // Check for enclaves (Supply Line Cuts)
+            // We check if the OPPONENT has enclaves now? Or current player?
+            // Test implies checks happen immediately
+            this.checkForEnclaves('P1');
+            this.checkForEnclaves('P2');
 
             this.emit('mapUpdate');
         }
@@ -306,14 +309,27 @@ export class GameEngine {
     // captureLand(row: number, col: number) { ... } // REMOVED/REPLACED by togglePlan & commit
     // Check if a player has any disconnected lands
     private checkForEnclaves(playerId: string): boolean {
-        for (let r = 0; r < GameConfig.GRID_SIZE; r++) {
-            for (let c = 0; c < GameConfig.GRID_SIZE; c++) {
+        // Reset Pending Moves
+        this.pendingMoves = [];
+        this.lastError = null;
+
+        let enclaveFound = false;
+
+        // Iterate grid to find disconnected cells owned by playerId
+        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
                 const cell = this.state.grid[r][c];
+                // If I own it, and it is NOT connected
                 if (cell.owner === playerId && !cell.isConnected) {
-                    return true;
+                    enclaveFound = true;
                 }
             }
         }
-        return false;
+
+        if (enclaveFound) {
+            this.emit('logMessage', `Supply line cut! Enclaves detected for ${playerId}.`);
+        }
+
+        return enclaveFound;
     }
 }

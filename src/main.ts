@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { MainScene } from './renderer/MainScene';
+import { MenuScene } from './renderer/MenuScene';
 
 
 const config: Phaser.Types.Core.GameConfig = {
@@ -11,7 +12,10 @@ const config: Phaser.Types.Core.GameConfig = {
     autoCenter: Phaser.Scale.CENTER_BOTH
   },
   parent: 'app',
-  scene: [MainScene],
+  dom: {
+    createContainer: true
+  },
+  scene: [MenuScene, MainScene],
   physics: {
     default: 'arcade',
     arcade: {

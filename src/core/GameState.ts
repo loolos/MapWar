@@ -20,9 +20,9 @@ export class GameState {
 
     private initializeGrid(swapped: boolean = false) {
         // 1. Initialize empty plain grid
-        for (let r = 0; r < GameConfig.GRID_SIZE; r++) {
+        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
             this.grid[r] = [];
-            for (let c = 0; c < GameConfig.GRID_SIZE; c++) {
+            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
                 this.grid[r][c] = new Cell(r, c);
                 this.grid[r][c].type = 'plain';
             }
@@ -32,8 +32,8 @@ export class GameState {
         this.generateTerrain();
 
         // 3. Setup Bases
-        const p1Start = swapped ? { r: 0, c: 0 } : { r: GameConfig.GRID_SIZE - 1, c: GameConfig.GRID_SIZE - 1 };
-        const p2Start = swapped ? { r: GameConfig.GRID_SIZE - 1, c: GameConfig.GRID_SIZE - 1 } : { r: 0, c: 0 };
+        const p1Start = swapped ? { r: 0, c: 0 } : { r: GameConfig.GRID_HEIGHT - 1, c: GameConfig.GRID_WIDTH - 1 };
+        const p2Start = swapped ? { r: GameConfig.GRID_HEIGHT - 1, c: GameConfig.GRID_WIDTH - 1 } : { r: 0, c: 0 };
 
         this.setOwner(p1Start.r, p1Start.c, 'P1');
         this.setBuilding(p1Start.r, p1Start.c, 'base');
@@ -46,9 +46,16 @@ export class GameState {
 
     private generateTerrain() {
         // Config for Clusters
-        const waterClusters = 2;
+        const area = GameConfig.GRID_WIDTH * GameConfig.GRID_HEIGHT;
+        // Scale clusters based on map size? 
+        // Base was 10x10=100 cells. Clusters: 2 water, 3 hills.
+        // Approx 2% water clusters, 3% hill clusters? Or just fixed?
+        // Let's scale simply.
+        const scaleFactor = area / 100;
+
+        const waterClusters = Math.max(2, Math.floor(2 * scaleFactor));
         const waterSize = 6;
-        const hillClusters = 3;
+        const hillClusters = Math.max(3, Math.floor(3 * scaleFactor));
         const hillSize = 5;
 
         // Generate Water
@@ -64,8 +71,8 @@ export class GameState {
 
     private growCluster(type: 'water' | 'hill', targetSize: number) {
         // Pick random start (avoid corners roughly to save bases)
-        let r = Math.floor(Math.random() * (GameConfig.GRID_SIZE - 2)) + 1;
-        let c = Math.floor(Math.random() * (GameConfig.GRID_SIZE - 2)) + 1;
+        let r = Math.floor(Math.random() * (GameConfig.GRID_HEIGHT - 2)) + 1;
+        let c = Math.floor(Math.random() * (GameConfig.GRID_WIDTH - 2)) + 1;
 
         let size = 0;
         const queue: { r: number, c: number }[] = [{ r, c }];
@@ -96,7 +103,7 @@ export class GameState {
     }
 
     private isValidCell(r: number, c: number): boolean {
-        return r >= 0 && r < GameConfig.GRID_SIZE && c >= 0 && c < GameConfig.GRID_SIZE;
+        return r >= 0 && r < GameConfig.GRID_HEIGHT && c >= 0 && c < GameConfig.GRID_WIDTH;
     }
 
     // Reset Game State
@@ -110,7 +117,7 @@ export class GameState {
     }
 
     getCell(row: number, col: number): Cell | null {
-        if (row < 0 || row >= GameConfig.GRID_SIZE || col < 0 || col >= GameConfig.GRID_SIZE) {
+        if (row < 0 || row >= GameConfig.GRID_HEIGHT || col < 0 || col >= GameConfig.GRID_WIDTH) {
             return null;
         }
         return this.grid[row][col];
@@ -150,8 +157,8 @@ export class GameState {
         let landCount = 0;
         let landIncome = 0;
 
-        for (let r = 0; r < GameConfig.GRID_SIZE; r++) {
-            for (let c = 0; c < GameConfig.GRID_SIZE; c++) {
+        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
                 const cell = this.grid[r][c];
                 if (cell.owner === playerId) {
                     landCount++;
@@ -183,8 +190,8 @@ export class GameState {
         const queue: { r: number, c: number }[] = [];
         const ownedCells: { r: number, c: number }[] = [];
 
-        for (let r = 0; r < GameConfig.GRID_SIZE; r++) {
-            for (let c = 0; c < GameConfig.GRID_SIZE; c++) {
+        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
                 const cell = this.grid[r][c];
                 if (cell.owner === playerId) {
                     ownedCells.push({ r, c });
@@ -218,7 +225,7 @@ export class GameState {
                 const nc = curr.c + d.c;
 
                 // Bounds Check
-                if (nr >= 0 && nr < GameConfig.GRID_SIZE && nc >= 0 && nc < GameConfig.GRID_SIZE) {
+                if (nr >= 0 && nr < GameConfig.GRID_HEIGHT && nc >= 0 && nc < GameConfig.GRID_WIDTH) {
                     const key = `${nr},${nc}`;
                     const neighbor = this.grid[nr][nc];
 
@@ -273,9 +280,9 @@ export class GameState {
         this.currentPlayerId = data.currentPlayerId;
 
         // Reconstruct Grid
-        for (let r = 0; r < GameConfig.GRID_SIZE; r++) {
+        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
             if (!this.grid[r]) this.grid[r] = [];
-            for (let c = 0; c < GameConfig.GRID_SIZE; c++) {
+            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
                 this.grid[r][c] = Cell.deserialize(data.grid[r][c]);
             }
         }

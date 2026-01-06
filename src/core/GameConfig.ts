@@ -1,5 +1,6 @@
 export const GameConfig = {
-    GRID_SIZE: 10,
+    GRID_WIDTH: 10,
+    GRID_HEIGHT: 10,
     INITIAL_GOLD: 0,
     GOLD_PER_TURN_BASE: 10,
     GOLD_PER_LAND: 1,

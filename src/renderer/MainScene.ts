@@ -8,10 +8,13 @@ import { CellInfoSystem } from './ui/CellInfoSystem';
 import { TextureUtils } from '../utils/TextureUtils';
 
 export class MainScene extends Phaser.Scene {
-    engine: GameEngine;
+    engine!: GameEngine;
     tileSize: number = 64;
     // Graphical Layers
     gridGraphics!: Phaser.GameObjects.Graphics;
+    terrainGraphics!: Phaser.GameObjects.Graphics; // Ensure this is defined
+    selectionGraphics!: Phaser.GameObjects.Graphics;
+    highlightGraphics!: Phaser.GameObjects.Graphics;
     terrainGroup!: Phaser.GameObjects.Group;
 
     // UI Systems
@@ -32,9 +35,20 @@ export class MainScene extends Phaser.Scene {
     mapOffsetX: number = 0;
     mapOffsetY: number = 0;
 
+    // Camera Controls
+    minTileSize: number = 32;
+    isMapScrollable: boolean = false;
+    mapScrollSpeed: number = 10;
+    scrollKeys!: {
+        up: Phaser.Input.Keyboard.Key,
+        down: Phaser.Input.Keyboard.Key,
+        left: Phaser.Input.Keyboard.Key,
+        right: Phaser.Input.Keyboard.Key
+    };
+    cameraControlsContainer!: Phaser.GameObjects.Container; // UI for pan buttons
+
     constructor() {
         super('MainScene');
-        this.engine = new GameEngine();
     }
 
     preload() {
@@ -53,15 +67,18 @@ export class MainScene extends Phaser.Scene {
     }
 
     create() {
+        // Initialize GameEngine (fresh instance on Scene start)
+        this.engine = new GameEngine();
+
         // Process Textures (Runtime Transparency)
         TextureUtils.makeTransparent(this, 'raw_icon_gold', 'icon_gold_3d', 40);
+        // ...
+        // ...
+
         TextureUtils.makeTransparent(this, 'raw_icon_human', 'icon_human_badge', 40);
         TextureUtils.makeTransparent(this, 'raw_icon_robot', 'icon_robot_badge', 40);
 
         this.cameras.main.setBackgroundColor(GameConfig.COLORS.BG);
-
-        // Debug Log
-
 
         // Input
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
@@ -74,6 +91,13 @@ export class MainScene extends Phaser.Scene {
             this.input.keyboard.on('keydown-SPACE', () => {
                 this.engine.endTurn();
             });
+            // Setup Arrow Keys for Map Scroll
+            this.scrollKeys = this.input.keyboard.addKeys({
+                up: Phaser.Input.Keyboard.KeyCodes.UP,
+                down: Phaser.Input.Keyboard.KeyCodes.DOWN,
+                left: Phaser.Input.Keyboard.KeyCodes.LEFT,
+                right: Phaser.Input.Keyboard.KeyCodes.RIGHT
+            }) as any;
         }
 
         // ---------------------------------------------------------
@@ -82,15 +106,24 @@ export class MainScene extends Phaser.Scene {
 
         // Map Container
         this.mapContainer = this.add.container(0, 0);
-        this.terrainGroup = this.add.group(); // Images will be added to specific coords, but we'll add them to container instead?
+        this.terrainGroup = this.add.group();
         // Phaser Group cannot be added to Container directly if it's a "Group" of GameObjects. 
         // We actually add the GameObjects to the container. 
         // Let's change terrain logic slightly: we'll add images to mapContainer directly if possible, or just use group.
         // Actually, Group is efficient for pooling. Container is for transforms.
         // We will make `terrainGroup` just a list tracker, and add valid objects to `mapContainer`.
 
+        // Graphics Layers
         this.gridGraphics = this.add.graphics();
-        this.mapContainer.add(this.gridGraphics); // Grid on top?
+        this.terrainGraphics = this.add.graphics();
+        this.selectionGraphics = this.add.graphics();
+        this.highlightGraphics = this.add.graphics();
+
+        // Add to map container in order
+        this.mapContainer.add(this.terrainGraphics); // Bottom
+        this.mapContainer.add(this.gridGraphics);    // Grid on top of terrain color
+        this.mapContainer.add(this.selectionGraphics);
+        this.mapContainer.add(this.highlightGraphics);
         // Wait, terrain is under grid. 
         // We'll manage terrain images manually inside mapContainer.
 
@@ -144,6 +177,10 @@ export class MainScene extends Phaser.Scene {
             this.notificationSystem.show(msg, 'info');
         });
 
+        this.cameraControlsContainer = this.add.container(0, 0);
+        this.cameraControlsContainer.setVisible(false);
+        this.createCameraControls();
+
         // Trigger Initial Layout
         this.resize(this.scale.gameSize);
     }
@@ -154,172 +191,94 @@ export class MainScene extends Phaser.Scene {
 
         this.cameras.main.setViewport(0, 0, width, height);
 
-        // Determine Orientation
-        const isPortrait = height > width;
+        // Re-initialize terrain visuals (e.g. if map size changed or first run)
+        this.initializeTerrainVisuals();
 
-        if (isPortrait) {
-            this.layoutPortrait(width, height);
-        } else {
-            this.layoutLandscape(width, height);
-        }
+        // Common UI Layout (Sidebar/Footer agnostic simple layout for Rectangular Map)
+        // Let's implement a simple Responsive Layout:
+        // Sidebar on Left (Status + Info). Buttons on Bottom Right? 
+        // For simplicity, we keep the previous landscape/portrait split concept but simplified.
 
-        this.initializeTerrainVisuals(); // Re-create terrain images with new tile size
-        this.drawMap();
-        this.updateUI();
-        // Hack/Fix: Force a redraw after a short delay
-        this.time.delayedCall(100, () => {
-            this.drawMap();
-            // Force resize update again to ensure masks are correct after delay
-            if (isPortrait) {
-                this.layoutPortrait(width, height);
-            } else {
-                this.layoutLandscape(width, height);
-            }
-            this.updateUI();
-        });
-    }
+        const sidebarW = 260; // Left column width
+        const bottomH = 200; // Bottom area height
 
-    layoutLandscape(w: number, h: number) {
-        // 3-Column Layout
-        const leftColW = 220;
-        const rightColW = 220;
-        const centerW = w - leftColW - rightColW;
+        // Re-position UI backgrounds
+        this.trBg.clear().fillStyle(0x222222).fillRect(0, 0, sidebarW, height); // Sidebar BG
+        this.brBg.clear().fillStyle(0x111111).fillRect(width - sidebarW, height - bottomH, sidebarW, bottomH); // Notification BG place
+        this.blBg.clear().fillStyle(GameConfig.COLORS.ACTION_BG).fillRect(0, height - bottomH, width, bottomH); // Footer BG
 
-        // Backgrounds
-        // Left (Info/Status)
-        this.trBg.clear().fillStyle(0x222222).fillRect(0, 0, leftColW, h);
-        // Right (Logs/Buttons)
-        this.brBg.clear().fillStyle(0x111111).fillRect(w - rightColW, 0, rightColW, h);
-        // Center (Map bg?) - optional, let's leave it clear or action color?
-        // Let's use Action BG for the map area background if needed, or just let map sit there.
-        // Actually blBg was used for buttons. Let's reuse blBg for the Button area background in the right column?
-        // Or just paint the whole right column dark and put buttons on top.
+        // 1. Sidebar (Status & Info)
+        this.playerStatusSystem.resize(sidebarW, 300, 0, 0);
+        this.infoSystem.resize(sidebarW, 0, 310);
 
-        // 1. LEFT COLUMN
-        // Player Status at Top
-        const statusH = 350;
-        const p1StatusX = 10;
-        const p1StatusY = 10;
-        this.playerStatusSystem.setScale(1);
-        this.playerStatusSystem.setPosition(p1StatusX, p1StatusY);
-        // Base width 260 for status
-        this.playerStatusSystem.resize(260, statusH, p1StatusX, p1StatusY);
+        // 2. Buttons & Notifications
+        // Buttons: Bottom Left?
+        this.buttonSystem.setPosition(20, height - bottomH + 20);
 
-        // Cell Info below Status
-        const infoX = 10;
-        const infoY = statusH + 20;
-        const infoW = leftColW - 20;
-        this.infoSystem.setScale(1);
-        this.infoSystem.setPosition(infoX, infoY);
-        this.infoSystem.resize(infoW, infoX, infoY);
-
-        // 2. RIGHT COLUMN
-        // Logs at Top
-        const btnH = 200; // Buttons at bottom
-        const logsH = h - btnH;
-
-        this.notificationSystem.setScale(1);
-        this.notificationSystem.setPosition(w - rightColW + 10, 10);
-        // Assuming notification system resize is standard width, height? 
-        // NotificationSystem.ts was not modified but if it has resize(w, h) it should be fine.
-        // Checking NotificationSystem source would have been good but let's assume standard behavior or check error.
-        this.notificationSystem.resize(rightColW - 20, logsH - 20);
+        // Notifications: Bottom Right?
+        // Let's float notifications top right? 
+        // Or just put them in the bottom bar to the right.
+        this.notificationSystem.resize(300, bottomH - 20);
+        this.notificationSystem.setPosition(width - 320, height - bottomH + 10);
         this.notificationSystem.setVisible(true);
 
-        // Buttons at Bottom of Right Column
-        // Draw Button BG
-        this.blBg.clear().fillStyle(GameConfig.COLORS.ACTION_BG).fillRect(w - rightColW, h - btnH, rightColW, btnH);
-        this.buttonSystem.setScale(1);
-        this.buttonSystem.setPosition(w - rightColW + 10, h - btnH + 10);
 
-        // 3. CENTER (Map)
-        // Center map in the middle area
-        if (centerW > 0) {
-            const maxTileW = Math.floor(centerW / GameConfig.GRID_SIZE);
-            const maxTileH = Math.floor(h / GameConfig.GRID_SIZE);
-            this.tileSize = Math.min(maxTileW, maxTileH, 64);
-            const mapSize = this.tileSize * GameConfig.GRID_SIZE;
+        // 3. MAP AREA
+        // Available space:
+        // Left: sidebarW
+        // Bottom: bottomH
+        // Map Area = Top Left: (sidebarW, 0) to Bottom Right: (width, height - bottomH ?)
+        // Actually let's assume Sidebar consumes Left, Footer consumes Bottom.
 
-            this.mapOffsetX = leftColW + (centerW - mapSize) / 2;
-            this.mapOffsetY = (h - mapSize) / 2;
+        const mapX = sidebarW;
+        const mapY = 0;
+        const mapAreaW = width - sidebarW;
+        const mapAreaH = height - bottomH;
+
+        if (mapAreaW <= 0 || mapAreaH <= 0) return; // Window too small
+
+        // Dimensions of Map
+        const mapPixelW = GameConfig.GRID_WIDTH * this.tileSize;
+        const mapPixelH = GameConfig.GRID_HEIGHT * this.tileSize;
+
+        // Scaling to Fit
+        const scaleX = (mapAreaW - 40) / mapPixelW;
+        const scaleY = (mapAreaH - 40) / mapPixelH;
+        let scale = Math.min(scaleX, scaleY);
+
+        // Clamp Scale
+        scale = Math.min(scale, 1.2); // Max zoom
+        const minScale = this.minTileSize / this.tileSize;
+        if (scale < minScale) scale = minScale;
+
+        this.mapContainer.setScale(scale);
+
+        // Center Map
+        const scaledMapW = mapPixelW * scale;
+        const scaledMapH = mapPixelH * scale;
+
+        this.isMapScrollable = (scaledMapW > mapAreaW || scaledMapH > mapAreaH);
+
+        // Calculate Centered Position
+        let targetX = mapX + (mapAreaW - scaledMapW) / 2;
+        let targetY = mapY + (mapAreaH - scaledMapH) / 2;
+
+        if (this.isMapScrollable) {
+            // If scrollable, clamp to start at top-left of area (with padding)
+            if (scaledMapW > mapAreaW) targetX = mapX + 20; // Padding
+            if (scaledMapH > mapAreaH) targetY = mapY + 20;
+
+            this.cameraControlsContainer.setVisible(true);
+            this.cameraControlsContainer.setPosition(width - 80, height - bottomH - 80);
         } else {
-            this.tileSize = 32;
-            this.mapOffsetX = leftColW;
-            this.mapOffsetY = 0;
+            this.cameraControlsContainer.setVisible(false);
         }
-        this.mapContainer.setPosition(this.mapOffsetX, this.mapOffsetY);
-    }
 
-    layoutPortrait(w: number, h: number) {
-        const pad = 10;
-        const uiScale = 0.7;
+        this.mapContainer.setPosition(targetX, targetY);
 
-        // 1. TOP: Compact Header
-        const headerHeight = 200;
-        this.trBg.clear().fillStyle(0x222222).fillRect(0, 0, w, headerHeight);
-
-        // LEFT: Status
-        const halfW = w / 2;
-        const statusAvailableW = halfW - pad * 2;
-        // Calculate strict scale
-        const statusBaseW = this.playerStatusSystem.BASE_WIDTH;
-        // Ensure it fits
-        const statusScale = Math.min(uiScale, statusAvailableW / statusBaseW);
-
-        this.playerStatusSystem.setScale(statusScale);
-        this.playerStatusSystem.setPosition(pad, pad);
-        this.playerStatusSystem.resize(statusBaseW, headerHeight / statusScale, pad, pad);
-
-        // RIGHT: Info
-        const infoX = w / 2 + pad;
-        const infoAvailableW = halfW - pad * 2;
-
-        // Use uniform scale or responsive? Responsive seems better for text wrap
-        const infoScale = Math.min(uiScale, 1);
-        const infoInternalW = infoAvailableW / infoScale;
-
-        this.infoSystem.setScale(infoScale);
-        this.infoSystem.setPosition(infoX, pad);
-        this.infoSystem.resize(infoInternalW, infoX, pad);
-
-        // 3. BOTTOM: Buttons & Logs
-        const bottomHeight = 200; // Fixed footer height
-        const bottomY = h - bottomHeight;
-
-        // Draw Backgrounds
-        this.blBg.clear().fillStyle(GameConfig.COLORS.ACTION_BG).fillRect(0, bottomY, w / 2, bottomHeight);
-        this.brBg.clear().fillStyle(0x111111).fillRect(w / 2, bottomY, w / 2, bottomHeight);
-
-        // Buttons (Left)
-        this.buttonSystem.setScale(uiScale);
-        this.buttonSystem.setPosition(pad, bottomY + pad);
-
-        // Logs (Right)
-        this.notificationSystem.setScale(uiScale);
-        this.notificationSystem.setPosition((w / 2) + pad, bottomY + pad);
-        this.notificationSystem.resize(((w / 2) - pad * 2) / uiScale, (bottomHeight - pad * 2) / uiScale);
-        this.notificationSystem.setVisible(true);
-
-        // 2. MIDDLE: Map Centered with Margins
-        const mapStartY = headerHeight + pad; // Top Margin
-        const mapEndY = bottomY - pad; // Bottom Margin
-        const availableMapH = mapEndY - mapStartY;
-        const availableMapW = w - pad * 2;
-
-        if (availableMapW > 0 && availableMapH > 0) {
-            const maxTileW = Math.floor(availableMapW / GameConfig.GRID_SIZE);
-            const maxTileH = Math.floor(availableMapH / GameConfig.GRID_SIZE);
-            this.tileSize = Math.min(maxTileW, maxTileH, 64);
-            const mapSize = this.tileSize * GameConfig.GRID_SIZE;
-
-            this.mapOffsetX = (w - mapSize) / 2;
-            this.mapOffsetY = mapStartY + (availableMapH - mapSize) / 2;
-        } else {
-            this.tileSize = 32;
-            this.mapOffsetX = 0;
-            this.mapOffsetY = mapStartY;
-        }
-        this.mapContainer.setPosition(this.mapOffsetX, this.mapOffsetY);
+        // Update Offsets for Input
+        this.mapOffsetX = this.mapContainer.x;
+        this.mapOffsetY = this.mapContainer.y;
     }
 
 
@@ -339,13 +298,14 @@ export class MainScene extends Phaser.Scene {
             return;
         }
 
-        // Adjust pointer by map offset
-        const localX = pointer.x - this.mapOffsetX;
-        const localY = pointer.y - this.mapOffsetY;
+        // Adjust pointer by map offset and SCALE
+        const scale = this.mapContainer.scaleX;
+        const localX = (pointer.x - this.mapContainer.x) / scale;
+        const localY = (pointer.y - this.mapContainer.y) / scale;
 
         // Ignore clicks outside the map grid
-        const mapWidth = GameConfig.GRID_SIZE * this.tileSize;
-        const mapHeight = GameConfig.GRID_SIZE * this.tileSize;
+        const mapWidth = GameConfig.GRID_WIDTH * this.tileSize;
+        const mapHeight = GameConfig.GRID_HEIGHT * this.tileSize;
 
         if (localX < 0 || localX >= mapWidth || localY < 0 || localY >= mapHeight) return;
 
@@ -358,7 +318,7 @@ export class MainScene extends Phaser.Scene {
         const col = Math.floor(localX / this.tileSize);
         const row = Math.floor(localY / this.tileSize);
 
-        if (col >= 0 && col < GameConfig.GRID_SIZE && row >= 0 && row < GameConfig.GRID_SIZE) {
+        if (col >= 0 && col < GameConfig.GRID_WIDTH && row >= 0 && row < GameConfig.GRID_HEIGHT) {
             // Update Selection
             this.selectedRow = row;
             this.selectedCol = col;
@@ -369,81 +329,117 @@ export class MainScene extends Phaser.Scene {
     }
 
     drawMap() {
+        if (!this.engine) return;
+
         this.gridGraphics.clear();
+        this.terrainGraphics.clear();
+        this.selectionGraphics.clear();
+        this.highlightGraphics.clear();
+
+        // Remove old logic objects logic if heavy? 
+        // Phaser graphics clear is cheap.
+        // We reuse Text objects for Bases? We probably should pool them.
+        // For now, let's clear texts.
+        // Clean up transient objects (Base Labels)
+        // We do NOT want to destroy our Graphics layers or Terrain images here.
+        // Terrain images are managed by initializeTerrainVisuals.
+        // Graphics layers are persistent.
+
+        // We only need to remove/destroy Labels (Text) created in previous drawMap
+        // Iterate backwards to safely remove
+        const children = this.mapContainer.list;
+        for (let i = children.length - 1; i >= 0; i--) {
+            const child = children[i];
+            if (child.type === 'Text') {
+                child.destroy();
+            }
+        }
+
+        // Ensure layers are in correct order (in case things got shuffled?)
+        // Usually not needed if we just append Texts on top.
+        // But let's ensure Z-order if needed.
+        // mapContainer.bringToTop(this.highlightGraphics);
+
+        // --- RENDER LOOP ---
         const grid = this.engine.state.grid;
 
-        for (let r = 0; r < GameConfig.GRID_SIZE; r++) {
-            for (let c = 0; c < GameConfig.GRID_SIZE; c++) {
+        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
                 const cell = grid[r][c];
                 const x = c * this.tileSize;
                 const y = r * this.tileSize;
 
-                let alpha = 0.6; // Default to semi-transparent to show terrain
-                // Disconnected Effect: even more faint
-                if (cell.owner && !cell.isConnected) {
-                    alpha = 0.3;
+                // 1. TERRAIN & OWNER COLOR
+                // We do NOT draw opaque backgrounds for terrain types anymore, 
+                // allowing the underlying PNG images (initialized in initializeTerrainVisuals) to show.
+
+                let overlayColor: number | null = null;
+                let alpha = 0;
+
+                // Owner Overlays
+                if (cell.owner === 'P1') {
+                    overlayColor = GameConfig.COLORS.P1;
+                    alpha = 0.5;
+                } else if (cell.owner === 'P2') {
+                    overlayColor = GameConfig.COLORS.P2;
+                    alpha = 0.5;
                 }
 
-                if (cell.owner === 'P1') this.gridGraphics.fillStyle(GameConfig.COLORS.P1, alpha);
-                else if (cell.owner === 'P2') this.gridGraphics.fillStyle(GameConfig.COLORS.P2, alpha);
+                // Disconnected Grey-out (Override or Overlay on top?)
+                if (cell.owner && !cell.isConnected) {
+                    overlayColor = 0x333333; // Dark Grey
+                    alpha = 0.7; // Darker to show "disabled"
+                }
 
-                // Only fill if owned (overlay). unowned = transparent (show terrain texture)
-                if (cell.owner) {
+                // Apply Overlay if needed
+                if (overlayColor !== null) {
+                    this.gridGraphics.fillStyle(overlayColor, alpha);
                     this.gridGraphics.fillRect(x, y, this.tileSize - 2, this.tileSize - 2);
                 }
 
-                // ALWAYS draw grid lines so we can see the cells
-                this.gridGraphics.lineStyle(2, 0x444444, 0.5); // Dark grey stroke
-                this.gridGraphics.strokeRect(x, y, this.tileSize - 2, this.tileSize - 2);
+                // Always draw a faint grid border to separate tiles visually
+                this.gridGraphics.lineStyle(1, 0x000000, 0.3);
+                this.gridGraphics.strokeRect(x, y, this.tileSize, this.tileSize);
 
-                // If owned hill, draw a little marker to distinguish from plain?
-                // Or maybe just texture later. For now, small grey rect in corner?
-
-
+                // 2. BUILDINGS
                 if (cell.building === 'base') {
-                    this.gridGraphics.fillStyle(GameConfig.COLORS.BASE);
-                    this.gridGraphics.fillCircle(x + this.tileSize / 2, y + this.tileSize / 2, 10);
+                    // Add Base Icon/Text
+                    const baseText = this.add.text(x + this.tileSize / 2, y + this.tileSize / 2, '⌂', {
+                        fontSize: `${this.tileSize * 0.6}px`,
+                        color: '#ffffff',
+                        stroke: '#000000',
+                        strokeThickness: 4
+                    }).setOrigin(0.5);
+                    this.mapContainer.add(baseText);
+                }
+
+                // 3. SELECTION / HIGHLIGHTS
+                // Pending Moves
+                const isPending = this.engine.pendingMoves.some(m => m.r === r && m.c === c);
+                if (isPending) {
+                    this.selectionGraphics.fillStyle(GameConfig.COLORS.HIGHLIGHT_MOVE, 0.5);
+                    this.selectionGraphics.fillRect(x, y, this.tileSize, this.tileSize);
+                }
+
+                // AI Moves History
+                const isAiMove = this.engine.lastAiMoves.some(m => m.r === r && m.c === c);
+                if (isAiMove) {
+                    this.selectionGraphics.lineStyle(4, GameConfig.COLORS.HIGHLIGHT_AI);
+                    this.selectionGraphics.strokeRect(x, y, this.tileSize, this.tileSize);
                 }
             }
         }
 
-        // Draw Pending Moves
-        for (const p of this.engine.pendingMoves) {
-            const x = p.c * this.tileSize;
-            const y = p.r * this.tileSize;
-            const cell = this.engine.state.getCell(p.r, p.c);
-
-            // Highlight color based on action type
-            if (cell && cell.owner && cell.owner !== this.engine.state.currentPlayerId) {
-                this.gridGraphics.lineStyle(4, GameConfig.COLORS.HIGHLIGHT_ATTACK, 1); // Attack
-            } else {
-                this.gridGraphics.lineStyle(4, GameConfig.COLORS.HIGHLIGHT_MOVE, 1); // Move/Capture
-            }
-            this.gridGraphics.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
-        }
-
-        // Highlight AI Moves
-        this.gridGraphics.lineStyle(4, GameConfig.COLORS.HIGHLIGHT_AI, 0.8);
-        for (const m of this.engine.lastAiMoves) {
-            const x = m.c * this.tileSize;
-            const y = m.r * this.tileSize;
-            this.gridGraphics.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
+        // Ensure map is correctly positioned after content change?
+        // resize() handles scale/pos.
+        // If this is first draw, we might need to force resize logic?
+        if (!this.hasRenderedOnce) {
+            this.resize(this.scale.gameSize);
+            this.hasRenderedOnce = true;
         }
     }
 
     initializeTerrainVisuals() {
-
-
-        if (this.terrainGroup) {
-            this.terrainGroup.clear(true, true); // Destroy entities
-        }
-
-        // Also clear mapContainer of images (but keep gridGraphics!)
-        // Since we didn't add images to mapContainer before, we start fresh logic:
-        // Identify images in mapContainer that are terrain and destroy them?
-        // Or just use a Group to track them and destroy them.
-
-        // BETTER: remove all from terrainGroup (which destroys them).
         // Then create new images and add to terrainGroup AND mapContainer.
 
         const grid = this.engine.state.grid;
@@ -452,10 +448,15 @@ export class MainScene extends Phaser.Scene {
             return;
         }
 
+        // Clear old terrain if any
+        if (this.terrainGroup) {
+            this.terrainGroup.clear(true, true);
+        }
+
         let count = 0;
         try {
-            for (let r = 0; r < GameConfig.GRID_SIZE; r++) {
-                for (let c = 0; c < GameConfig.GRID_SIZE; c++) {
+            for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+                for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
                     const cell = grid[r][c];
                     const x = c * this.tileSize + this.tileSize / 2; // Center origin
                     const y = r * this.tileSize + this.tileSize / 2;
@@ -526,6 +527,66 @@ export class MainScene extends Phaser.Scene {
             this.updateUI();
             this.hasRenderedOnce = true;
         }
+
+        // Handle Map Scrolling
+        if (this.isMapScrollable && this.scrollKeys) {
+            let dx = 0;
+            let dy = 0;
+            const speed = this.mapScrollSpeed;
+
+            if (this.scrollKeys.up.isDown) dy += speed;
+            if (this.scrollKeys.down.isDown) dy -= speed;
+            if (this.scrollKeys.left.isDown) dx += speed;
+            if (this.scrollKeys.right.isDown) dx -= speed;
+
+            if (dx !== 0 || dy !== 0) {
+                this.mapContainer.x += dx;
+                this.mapContainer.y += dy;
+                // Update offset vars so input handling works
+                this.mapOffsetX = this.mapContainer.x;
+                this.mapOffsetY = this.mapContainer.y;
+            }
+        }
+    }
+
+    createCameraControls() {
+        // Create 4 arrow buttons
+        const size = 50;
+        // const pad = 10; // Unused
+
+        // Up
+        const up = this.add.text(0, -size, '▲', { fontSize: '32px', color: '#ffffff', backgroundColor: '#333333' })
+            .setInteractive()
+            .on('pointerdown', () => this.scrollKeys.up.isDown = true)
+            .on('pointerup', () => this.scrollKeys.up.isDown = false)
+            .on('pointerout', () => this.scrollKeys.up.isDown = false)
+            .setOrigin(0.5);
+
+        // Down
+        const down = this.add.text(0, size, '▼', { fontSize: '32px', color: '#ffffff', backgroundColor: '#333333' })
+            .setInteractive()
+            .on('pointerdown', () => this.scrollKeys.down.isDown = true)
+            .on('pointerup', () => this.scrollKeys.down.isDown = false)
+            .on('pointerout', () => this.scrollKeys.down.isDown = false)
+            .setOrigin(0.5);
+
+        // Left
+        const left = this.add.text(-size, 0, '◀', { fontSize: '32px', color: '#ffffff', backgroundColor: '#333333' })
+            .setInteractive()
+            .on('pointerdown', () => this.scrollKeys.left.isDown = true)
+            .on('pointerup', () => this.scrollKeys.left.isDown = false)
+            .on('pointerout', () => this.scrollKeys.left.isDown = false)
+            .setOrigin(0.5);
+
+        // Right
+        const right = this.add.text(size, 0, '▶', { fontSize: '32px', color: '#ffffff', backgroundColor: '#333333' })
+            .setInteractive()
+            .on('pointerdown', () => this.scrollKeys.right.isDown = true)
+            .on('pointerup', () => this.scrollKeys.right.isDown = false)
+            .on('pointerout', () => this.scrollKeys.right.isDown = false)
+            .setOrigin(0.5);
+
+        this.cameraControlsContainer.add([up, down, left, right]);
     }
 
     // Overlay for Game Over

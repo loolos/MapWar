@@ -33,7 +33,14 @@ vi.mock('phaser', () => {
                     setPosition: vi.fn(),
                     destroy: vi.fn(),
                     clear: vi.fn(),
-                    sendToBack: vi.fn()
+                    sendToBack: vi.fn(),
+                    setVisible: vi.fn(),
+                    setScale: vi.fn(),
+                    x: 0,
+                    y: 0,
+                    getAll: vi.fn(() => []),
+                    removeAll: vi.fn(),
+                    list: [] // Emulate public list property of Container
                 })),
                 group: vi.fn(() => ({
                     clear: vi.fn(),
@@ -88,7 +95,13 @@ vi.mock('phaser', () => {
                 enabled: true,
                 keyboard: {
                     on: vi.fn(),
-                    addCapture: vi.fn()
+                    addCapture: vi.fn(),
+                    addKeys: vi.fn(() => ({
+                        up: { isDown: false },
+                        down: { isDown: false },
+                        left: { isDown: false },
+                        right: { isDown: false }
+                    }))
                 }
             };
             this.time = { delayedCall: vi.fn() };
@@ -108,6 +121,16 @@ vi.mock('phaser', () => {
                     width: number;
                     height: number;
                     constructor(w: number, h: number) { this.width = w; this.height = h; }
+                }
+            },
+            Input: {
+                Keyboard: {
+                    KeyCodes: {
+                        UP: 38,
+                        DOWN: 40,
+                        LEFT: 37,
+                        RIGHT: 39
+                    }
                 }
             }
         }
