@@ -61,7 +61,7 @@ export class MainScene extends Phaser.Scene {
         this.cameras.main.setBackgroundColor(GameConfig.COLORS.BG);
 
         // Debug Log
-        console.log('MainScene Create: Grid Size', GameConfig.GRID_SIZE);
+
 
         // Input
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
@@ -432,7 +432,7 @@ export class MainScene extends Phaser.Scene {
     }
 
     initializeTerrainVisuals() {
-        console.log("initializeTerrainVisuals: START");
+
 
         if (this.terrainGroup) {
             this.terrainGroup.clear(true, true); // Destroy entities
@@ -476,7 +476,7 @@ export class MainScene extends Phaser.Scene {
         } catch (err) {
             console.error("initializeTerrainVisuals: ERROR in loop", err);
         }
-        console.log(`initializeTerrainVisuals: END. Created ${count} images.`);
+
     }
 
     updateUI() {
@@ -517,7 +517,7 @@ export class MainScene extends Phaser.Scene {
     update(_time: number, _delta: number) {
         // Force initial render on first update to avoid black screen
         if (!this.hasRenderedOnce) {
-            console.log("Forcing initial drawMap");
+
             // Determine initial layout if not already done? resize calls it.
             // But if create happened before resize event fired? 
             // resize calls drawMap. 

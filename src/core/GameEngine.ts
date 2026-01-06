@@ -126,10 +126,10 @@ export class GameEngine {
 
         // AI Check
         const nextPlayer = this.state.getCurrentPlayer();
-        console.log(`Turn Ended. Next Player: ${nextPlayer.id}, isAI: ${nextPlayer.isAI}`);
+
 
         if (nextPlayer.isAI) {
-            console.log("Triggering AI Turn...");
+
             setTimeout(() => {
                 if (!this.isGameOver) {
                     this.ai.playTurn();

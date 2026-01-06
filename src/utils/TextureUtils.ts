@@ -55,6 +55,6 @@ export class TextureUtils {
 
         // Register as new Texture
         scene.textures.addCanvas(newKey, canvas);
-        console.log(`TextureUtils: Created transparent texture '${newKey}' from '${sourceKey}'.`);
+
     }
 }

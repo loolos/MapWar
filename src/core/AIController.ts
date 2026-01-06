@@ -28,7 +28,7 @@ export class AIController {
 
                 // If invalid (error set), stop safely
                 if (this.engine.lastError) {
-                    // console.log("AI Move Failed:", this.engine.lastError);
+
                     this.engine.pendingMoves = []; // Clear bad move
                     this.engine.lastError = null;
                     break;

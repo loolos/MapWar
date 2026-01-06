@@ -1,7 +1,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MainScene } from './MainScene';
-import { GameEngine } from '../core/GameEngine';
+
 
 // Mock TextureUtils to avoid Canvas errors
 vi.mock('../utils/TextureUtils', () => ({
@@ -20,7 +20,7 @@ vi.mock('phaser', () => {
         input: any;
         time: any;
 
-        constructor(key: string) {
+        constructor(_key: string) {
             this.cameras = {
                 main: {
                     setBackgroundColor: vi.fn(),
@@ -107,7 +107,7 @@ vi.mock('phaser', () => {
                 Size: class {
                     width: number;
                     height: number;
-                    constructor(w, h) { this.width = w; this.height = h; }
+                    constructor(w: number, h: number) { this.width = w; this.height = h; }
                 }
             }
         }
