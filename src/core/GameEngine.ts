@@ -301,7 +301,10 @@ export class GameEngine {
         const thisMoveCost = this.getMoveCost(row, col);
 
         if (player.gold < plannedCost + thisMoveCost) {
-            return { valid: false, reason: `Not enough gold(Need ${thisMoveCost})` };
+            let reason = `Not enough gold(Need ${thisMoveCost})`;
+            const isLongRange = !this.state.isAdjacentToOwned(row, col, player.id);
+            if (isLongRange) reason += " (Includes Distance Penalty)";
+            return { valid: false, reason };
         }
 
         return { valid: true };

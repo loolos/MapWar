@@ -146,8 +146,8 @@ export class MainScene extends Phaser.Scene {
         // Add to map container in order
         this.mapContainer.add(this.terrainGraphics); // Bottom
         this.mapContainer.add(this.gridGraphics);    // Grid on top of terrain color
-        this.mapContainer.add(this.selectionGraphics);
-        this.mapContainer.add(this.highlightGraphics);
+        this.mapContainer.add(this.highlightGraphics); // AI Moves (Below Selection)
+        this.mapContainer.add(this.selectionGraphics); // Player Plan (Top)
 
         // UI Backgrounds
         this.trBg = this.add.graphics();
@@ -610,8 +610,8 @@ export class MainScene extends Phaser.Scene {
                 // AI Moves History
                 const isAiMove = this.engine.lastAiMoves.some(m => m.r === r && m.c === c);
                 if (isAiMove) {
-                    this.selectionGraphics.lineStyle(4, GameConfig.COLORS.HIGHLIGHT_AI, 1.0);
-                    this.selectionGraphics.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
+                    this.highlightGraphics.lineStyle(4, GameConfig.COLORS.HIGHLIGHT_AI, 1.0);
+                    this.highlightGraphics.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
                 }
             }
         }
