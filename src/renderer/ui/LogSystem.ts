@@ -2,12 +2,18 @@ import Phaser from 'phaser';
 
 export type LogType = 'info' | 'combat' | 'warning' | 'error';
 
+interface LogEntry {
+    text: string;
+    color: string;
+}
+
 export class LogSystem {
     private container: Phaser.GameObjects.Container;
     private background: Phaser.GameObjects.Graphics;
-    private textObj: Phaser.GameObjects.Text;
-    private messages: string[] = [];
-    private maxMessages: number = 20;
+    private logLines: Phaser.GameObjects.Text[] = [];
+    private messages: LogEntry[] = [];
+    private maxMessages: number = 8;
+    private lineHeight: number = 20;
 
     constructor(scene: Phaser.Scene, x: number, y: number, width: number, height: number) {
         this.container = scene.add.container(x, y);
@@ -16,26 +22,51 @@ export class LogSystem {
         this.background = scene.add.graphics();
         this.container.add(this.background);
 
-        // Text Object
-        this.textObj = scene.add.text(5, 5, '', {
-            fontFamily: 'monospace',
-            fontSize: '12px',
-            color: '#aaaaaa',
-            wordWrap: { width: width - 10 }
-        });
-        this.container.add(this.textObj);
+        // Initialize Text Lines
+        for (let i = 0; i < this.maxMessages; i++) {
+            const textObj = scene.add.text(5, 0, '', {
+                fontFamily: 'monospace',
+                fontSize: '14px',
+                color: '#ffffff',
+                wordWrap: { width: width - 10 }
+            });
+            this.container.add(textObj);
+            this.logLines.push(textObj);
+        }
 
-        this.refresh();
         this.resize(width, height);
+        this.refresh();
     }
 
     public addLog(message: string, type: LogType = 'info') {
         let prefix = '> ';
-        if (type === 'combat') prefix = '⚔️ ';
-        if (type === 'warning') prefix = '⚠️ ';
-        if (type === 'error') prefix = '❌ ';
+        let color = '#ffffff';
 
-        const entry = `${prefix}${message}`;
+        switch (type) {
+            case 'error':
+                prefix = '❌ ';
+                color = '#ff4444'; // Red
+                break;
+            case 'warning':
+                prefix = '⚠️ ';
+                color = '#ffee44'; // Yellow
+                break;
+            case 'combat':
+                prefix = '⚔️ ';
+                color = '#ffffff'; // White
+                break;
+            case 'info':
+            default:
+                prefix = '> ';
+                color = '#ffffff'; // White
+                break;
+        }
+
+        const entry: LogEntry = {
+            text: `${prefix}${message}`,
+            color: color
+        };
+
         this.messages.push(entry);
 
         if (this.messages.length > this.maxMessages) {
@@ -46,23 +77,20 @@ export class LogSystem {
     }
 
     private refresh() {
-        // Simple render: Join last N messages
-        // Since it's a "bottom-up" log usually? Or top-down?
-        // Let's do Top-Down, newest at bottom?
-        // Actually, scrolling log usually has newest at bottom.
-        // We'll just join them.
+        // Render from bottom up: index 0 = newest message (at the bottom)
+        const reversedMessages = [...this.messages].reverse();
 
-        // Truncate to fit? For now just show all and let alignment handle it.
-        // If we want "scroll to bottom", we can set originY=1 and position at bottom?
-        // Or just render last 5-6 lines that fit?
-
-        // Let's render all, and assume user sees the bottom ones if we align correctly?
-        // Or simpler: Just render last 8 messages.
-        const visibleMessages = this.messages.slice(-8);
-        this.textObj.setText(visibleMessages.join('\n'));
-
-        // TODO: Auto-scroll logic if we want to be fancy.
-        // For now, static text box.
+        for (let i = 0; i < this.maxMessages; i++) {
+            const lineObj = this.logLines[i];
+            if (i < reversedMessages.length) {
+                const msg = reversedMessages[i];
+                lineObj.setText(msg.text);
+                lineObj.setColor(msg.color);
+                lineObj.setVisible(true);
+            } else {
+                lineObj.setVisible(false);
+            }
+        }
     }
 
     public resize(width: number, height: number) {
@@ -74,15 +102,18 @@ export class LogSystem {
         this.background.lineStyle(1, 0x444444);
         this.background.strokeRoundedRect(0, 0, width, height, 4);
 
-        this.textObj.setStyle({ wordWrap: { width: width - 10 } });
+        // Update Text Lines Positions
+        const bottomMargin = 5;
 
-        // Align text to bottom of container?
-        // Or just Top.
-        // If we want "latest at bottom", we can set text origin (0, 1) and y = height - 5.
-        // Let's try that.
-        this.textObj.setOrigin(0, 1);
-        this.textObj.setPosition(5, height - 5);
-        this.textObj.setFixedSize(width - 10, height - 10); // Clip?
+        for (let i = 0; i < this.logLines.length; i++) {
+            const lineObj = this.logLines[i];
+            lineObj.setStyle({ wordWrap: { width: width - 10 } });
+
+            // i=0 is the bottom-most line
+            const yPos = height - bottomMargin - ((i + 1) * this.lineHeight);
+
+            lineObj.setPosition(5, yPos);
+        }
     }
 
     public setPosition(x: number, y: number) {

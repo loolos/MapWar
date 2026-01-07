@@ -287,7 +287,7 @@ describe('MainScene', () => {
         const updateUISpy = vi.spyOn(scene, 'updateUI');
         scene.engine.restartGame();
         expect(updateUISpy).toHaveBeenCalled();
-        expect(scene.notificationSystem.show).toHaveBeenCalledWith("Game Restarted!", 'info');
+        expect(scene.logSystem.addLog).toHaveBeenCalledWith("Game Restarted!", 'info');
     });
 
     it('correctly calculates grid coordinates when map is scaled and offset', () => {

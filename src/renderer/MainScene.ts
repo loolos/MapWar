@@ -89,7 +89,7 @@ export class MainScene extends Phaser.Scene {
 
                 // Notification
                 this.time.delayedCall(500, () => {
-                    this.notificationSystem.show(`Loaded: ${save.name}`, 'info');
+                    this.logSystem.addLog(`Loaded: ${save.name}`, 'info');
                 });
 
                 // Force Resize to Center Map on new Dimensions
@@ -158,7 +158,7 @@ export class MainScene extends Phaser.Scene {
         this.playerStatusSystem = new PlayerStatusSystem(this, 0, 0, 100);
         this.infoSystem = new CellInfoSystem(this, 0, 0, 100);
         this.buttonSystem = new ActionButtonSystem(this, 0, 0);
-        this.notificationSystem = new NotificationSystem(this, 0, 0, 100, 100);
+        // this.notificationSystem = new NotificationSystem(this, 0, 0, 100, 100);
         this.logSystem = new LogSystem(this, 0, 0, 200, 100); // NEW
 
         this.setupButtons();
@@ -200,12 +200,12 @@ export class MainScene extends Phaser.Scene {
             this.initializeTerrainVisuals(); // Re-build terrain images for new map
             this.updateUI();
             this.drawMap();
-            this.notificationSystem.show("Game Restarted!", 'info');
+            this.logSystem.addLog("Game Restarted!", 'info');
         });
 
         this.engine.on('gameOver', (winner: string) => {
             this.updateUI();
-            this.notificationSystem.show(`Game Over! ${winner} Wins!`, 'info');
+            this.logSystem.addLog(`Game Over! ${winner} Wins!`, 'info');
             this.showVictoryOverlay(winner);
         });
 
@@ -337,9 +337,9 @@ export class MainScene extends Phaser.Scene {
                 // Adjust button system to center button in its quadrant?
                 // ActionButtonSystem usually places button at (0,0) relative.
 
-                // Notifications (Transient) -> Center Overlay
-                this.notificationSystem.resize(300, 0);
-                this.notificationSystem.setPosition((width - 300) / 2, mapY + 20);
+                // Notifications (Overlay Removed)
+                // this.notificationSystem.resize(300, 0);
+                // this.notificationSystem.setPosition((width - 300) / 2, mapY + 20);
 
             } else {
                 // --- LANDSCAPE MODE (Two Columns) ---
@@ -392,9 +392,9 @@ export class MainScene extends Phaser.Scene {
                 // Button Anchor
                 this.buttonSystem.setPosition(width - (sidebarW / 2), height - 80);
 
-                // Notifications Center map
-                this.notificationSystem.resize(300, 0);
-                this.notificationSystem.setPosition(mapX + (mapAreaW - 300) / 2, 20);
+                // Notifications (Overlay Removed)
+                // this.notificationSystem.resize(300, 0);
+                // this.notificationSystem.setPosition(mapX + (mapAreaW - 300) / 2, 20);
             }
 
             // ... (rest of logic: refresh, map scaling)
@@ -691,8 +691,8 @@ export class MainScene extends Phaser.Scene {
         if (currentPlayer.isAI) {
             // this.logSystem.addLog('🤖 AI is planning...', 'info');
         } else if (this.engine.lastError) {
-            this.logSystem.addLog(this.engine.lastError, 'warning');
-            this.notificationSystem.show(this.engine.lastError, 'error'); // Keep overlay warning for errors
+            this.logSystem.addLog(this.engine.lastError, 'error');
+            // Overlay warning for errors removed
         } else if (totalCost > currentGold) {
             // this.logSystem.addLog(`Need ${totalCost}G`, 'warning');
         } else {
