@@ -7,9 +7,13 @@ export class Cell {
     col: number;
     owner: PlayerID;
     unit: any | null; // Placeholder for Unit class
-    building: 'base' | 'none';
+    building: 'base' | 'town' | 'none';
     isConnected: boolean;
     type: CellType;
+
+    // Town Specific State
+    townIncome: number;
+    townTurnCount: number;
 
     constructor(row: number, col: number) {
         this.row = row;
@@ -19,6 +23,9 @@ export class Cell {
         this.building = 'none';
         this.isConnected = true;
         this.type = 'plain';
+
+        this.townIncome = 0; // Config default will apply on creation if town
+        this.townTurnCount = 0;
     }
 
     isOwnedBy(playerId: PlayerID): boolean {
@@ -32,7 +39,9 @@ export class Cell {
             owner: this.owner,
             building: this.building,
             isConnected: this.isConnected,
-            type: this.type
+            type: this.type,
+            townIncome: this.townIncome,
+            townTurnCount: this.townTurnCount
         };
     }
 
@@ -42,6 +51,8 @@ export class Cell {
         cell.building = data.building;
         cell.isConnected = data.isConnected ?? true;
         cell.type = data.type || 'plain';
+        cell.townIncome = data.townIncome || 0;
+        cell.townTurnCount = data.townTurnCount || 0;
         return cell;
     }
 }

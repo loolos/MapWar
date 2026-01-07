@@ -48,7 +48,13 @@ export class GameEngine {
 
     emit(event: string, data?: any) {
         if (this.listeners[event]) {
-            this.listeners[event].forEach(cb => cb(data)); // Pass data
+            this.listeners[event].forEach(cb => {
+                try {
+                    cb(data);
+                } catch (err) {
+                    console.error(`Error in listener for event '${event}':`, err);
+                }
+            });
         }
     }
 
@@ -167,7 +173,13 @@ export class GameEngine {
 
             setTimeout(() => {
                 if (!this.isGameOver) {
-                    this.ai.playTurn();
+                    try {
+                        this.ai.playTurn();
+                    } catch (err) {
+                        console.error("Critical AI Error:", err);
+                        // Force end turn if AI crashes to keep game moving
+                        this.endTurn();
+                    }
                 }
             }, 500);
         }
@@ -202,9 +214,14 @@ export class GameEngine {
 
         // Base Cost (Terrain)
         let baseCost = GameConfig.COST_CAPTURE;
-        if (cell.type === 'hill') baseCost = GameConfig.COST_CAPTURE * 2;
-        if (cell.type === 'water') baseCost = GameConfig.COST_BUILD_BRIDGE; // Bridge Cost
-        // Plain is default (1x)
+        if (cell.building === 'town' && (cell.owner === null || cell.owner === 'neutral')) { // Neutral Town
+            baseCost = GameConfig.COST_CAPTURE_TOWN;
+        }
+        else {
+            // Standard Terrain
+            if (cell.type === 'hill') baseCost = GameConfig.COST_CAPTURE * 2;
+            if (cell.type === 'water') baseCost = GameConfig.COST_BUILD_BRIDGE; // Bridge Cost
+        }
 
         // For Attack, use Attack Cost Base
         let isAttack = false;
@@ -212,8 +229,14 @@ export class GameEngine {
         if (cell.owner !== null && cell.owner !== curr) {
             isAttack = true;
             baseCost = GameConfig.COST_ATTACK;
+            if (cell.building === 'town') {
+                // Attack Enemy Town: Standard Attack Rules
+                // Basic Attack: 20
+                // Hill Town? 40.
+            }
             if (cell.type === 'hill') baseCost = GameConfig.COST_ATTACK * 2;
-            if (cell.type === 'bridge') baseCost = GameConfig.COST_ATTACK * 2; // Attacking bridge is same double cost rule? Or just standard attack? User said "invade ... double cost" implies standard attack cost.
+            if (cell.type === 'bridge') baseCost = GameConfig.COST_ATTACK * 2;
+
             // Wait, normal attack is COST_ATTACK (20). Hill is 40.
             // User said "invade ... like others expense double". If bridge is flat, it's 20. If hill is 40.
             // Let's assume bridge is flat terrain difficulty for attack, so 20. But user said "double".
@@ -336,6 +359,13 @@ export class GameEngine {
                         gameWon = true;
                     }
                 }
+            }
+
+            // Check for Town Capture
+            if (cell && cell.building === 'town') {
+                // Reset Income and Growth on Capture (whether from neutral or enemy)
+                cell.townIncome = GameConfig.TOWN_INCOME_BASE;
+                cell.townTurnCount = 0;
             }
 
             // Transformation: Water -> Bridge

@@ -8,6 +8,12 @@ export const GameConfig = {
     COST_ATTACK: 20,
     COST_CAPTURE: 10,
     COST_BUILD_BRIDGE: 30,
+    // Town Configs
+    COST_CAPTURE_TOWN: 30,
+    TOWN_INCOME_BASE: 1,
+    TOWN_INCOME_GROWTH: 1,
+    TOWN_INCOME_CAP: 10,
+    TOWN_GROWTH_INTERVAL: 2,
     TERRAIN_COSTS: {
         PLAIN: 1,
         HILL: 2,

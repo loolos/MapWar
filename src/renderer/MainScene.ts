@@ -583,6 +583,20 @@ export class MainScene extends Phaser.Scene {
                         strokeThickness: 4
                     }).setOrigin(0.5);
                     this.mapContainer.add(baseText);
+                } else if (cell.building === 'town') {
+                    // Towns
+                    const icon = '🏠';
+                    const income = cell.townIncome;
+                    const label = cell.owner ? `${icon}\n+${income}` : `${icon}`;
+
+                    const townText = this.add.text(x + this.tileSize / 2, y + this.tileSize / 2, label, {
+                        fontSize: `${this.tileSize * 0.35}px`,
+                        color: '#ffff00',
+                        stroke: '#000000',
+                        strokeThickness: 3,
+                        align: 'center'
+                    }).setOrigin(0.5);
+                    this.mapContainer.add(townText);
                 }
 
                 // 3. SELECTION / HIGHLIGHTS

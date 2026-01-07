@@ -181,9 +181,43 @@ export class GameState {
         for (let i = 0; i < hillClusters; i++) {
             this.growCluster('hill', hillSize);
         }
+
+        // Generate Towns
+        // Let's place roughly 6-8 towns for a 10x10 map.
+        const townCount = Math.max(5, Math.floor(6 * scaleFactor));
+        let placedTowns: { r: number, c: number }[] = [];
+        let attempts = 0;
+
+        while (placedTowns.length < townCount && attempts < 200) {
+            attempts++;
+            const r = Math.floor(Math.random() * GameConfig.GRID_HEIGHT);
+            const c = Math.floor(Math.random() * GameConfig.GRID_WIDTH);
+            const cell = this.grid[r][c];
+
+            // Only place on plain, not on edges (optional), not if already occupied
+            if (cell.type === 'plain' && cell.building === 'none') {
+                // Ensure not too close to potential bases? 
+                // Bases are set later at corners/edges. Avoiding edges helps.
+                if (r > 1 && r < GameConfig.GRID_HEIGHT - 2 && c > 1 && c < GameConfig.GRID_WIDTH - 2) {
+
+                    // Check distance to existing towns
+                    const tooClose = placedTowns.some(t => {
+                        const dist = Math.abs(t.r - r) + Math.abs(t.c - c); // Manhattan
+                        return dist < 3; // Minimum distance 3
+                    });
+
+                    if (!tooClose) {
+                        this.setBuilding(r, c, 'town');
+                        cell.townIncome = GameConfig.TOWN_INCOME_BASE;
+                        placedTowns.push({ r, c });
+                    }
+                }
+            }
+        }
     }
 
     private growCluster(type: 'water' | 'hill', targetSize: number) {
+        // ... (Existing implementation remains same, just ensuring context match for replace)
         // Pick random start (avoid corners roughly to save bases)
         let r = Math.floor(Math.random() * (GameConfig.GRID_HEIGHT - 2)) + 1;
         let c = Math.floor(Math.random() * (GameConfig.GRID_WIDTH - 2)) + 1;
@@ -197,7 +231,7 @@ export class GameState {
             const curr = queue.splice(index, 1)[0];
 
             const cell = this.grid[curr.r][curr.c];
-            if (cell.type === 'plain') { // Only overwrite plains
+            if (cell.type === 'plain' && cell.building === 'none') { // Only overwrite empty plains
                 cell.type = type;
                 size++;
 
@@ -220,8 +254,6 @@ export class GameState {
         return r >= 0 && r < GameConfig.GRID_HEIGHT && c >= 0 && c < GameConfig.GRID_WIDTH;
     }
 
-
-
     getCell(row: number, col: number): Cell | null {
         if (row < 0 || row >= GameConfig.GRID_HEIGHT || col < 0 || col >= GameConfig.GRID_WIDTH) {
             return null;
@@ -234,7 +266,7 @@ export class GameState {
         if (cell) cell.owner = owner;
     }
 
-    setBuilding(row: number, col: number, type: 'base' | 'none') {
+    setBuilding(row: number, col: number, type: 'base' | 'town' | 'none') {
         const cell = this.getCell(row, col);
         if (cell) cell.building = type;
     }
@@ -271,7 +303,29 @@ export class GameState {
             for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
                 const cell = this.grid[r][c];
                 if (cell.owner === playerId) {
-                    if (cell.type !== 'bridge') { // Bridges provide 0 income
+
+                    if (cell.building === 'town') {
+                        // Town Growth Logic
+                        // Assuming this is called ONCE per turn start for the player
+                        // We rely on GameEngine only calling this on turn start/end.
+                        // Wait, GameEngine calls it on endTurn.
+
+                        // Increment turn count
+                        cell.townTurnCount++;
+
+                        // Check for Growth
+                        if (cell.townTurnCount % GameConfig.TOWN_GROWTH_INTERVAL === 0) {
+                            if (cell.townIncome < GameConfig.TOWN_INCOME_CAP) {
+                                cell.townIncome += GameConfig.TOWN_INCOME_GROWTH;
+                            }
+                        }
+
+                        // Add Income
+                        landIncome += cell.townIncome;
+                        // Towns count as land? Usually yes.
+                        landCount++;
+                    }
+                    else if (cell.type !== 'bridge') { // Bridges provide 0 income
                         landCount++;
                         // Income Logic: Full (1) if connected, Half (0.5) if disconnected
                         if (cell.isConnected) {
@@ -285,9 +339,7 @@ export class GameState {
         }
 
         const baseIncome = GameConfig.GOLD_PER_TURN_BASE;
-        const total = baseIncome + landIncome; // landIncome can now be float? 0.5?
-        // Let's ceil or floor? Or keep float? Gold is number. 
-        // Usually games floor income.
+        const total = baseIncome + landIncome;
         const finalTotal = Math.floor(total);
 
         this.players[playerId].gold += finalTotal;

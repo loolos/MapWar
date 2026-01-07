@@ -105,7 +105,8 @@ export class PlayerStatusSystem {
             this.playerRows.forEach((row) => {
                 const pid = (row as any).playerId;
                 const player = state.players[pid];
-                const goldTxt = row.getAt(3) as Phaser.GameObjects.Text;
+                // Child Order: 0:BG, 1:Title, 2:GoldText, 3:Coin, 4:Icon
+                const goldTxt = row.getAt(2) as Phaser.GameObjects.Text;
                 goldTxt.setText(player.gold.toString());
 
                 // Alpha Update
