@@ -214,6 +214,17 @@ vi.mock('./ui/CellInfoSystem', () => ({
     })
 }));
 
+vi.mock('./ui/LogSystem', () => ({
+    LogSystem: vi.fn().mockImplementation(function () {
+        return {
+            addLog: vi.fn(),
+            resize: vi.fn(),
+            setVisible: vi.fn(),
+            setPosition: vi.fn()
+        };
+    })
+}));
+
 
 describe('MainScene', () => {
     let scene: MainScene;

@@ -9,12 +9,16 @@ import { CellInfoSystem } from './ui/CellInfoSystem';
 import { SaveRegistry } from '../core/saves/SaveRegistry';
 import { TextureUtils } from '../utils/TextureUtils';
 
+import { LogSystem } from './ui/LogSystem';
+
+// ... imports
+
 export class MainScene extends Phaser.Scene {
     engine!: GameEngine;
     tileSize: number = 64;
     // Graphical Layers
     gridGraphics!: Phaser.GameObjects.Graphics;
-    terrainGraphics!: Phaser.GameObjects.Graphics; // Ensure this is defined
+    terrainGraphics!: Phaser.GameObjects.Graphics;
     selectionGraphics!: Phaser.GameObjects.Graphics;
     highlightGraphics!: Phaser.GameObjects.Graphics;
     terrainGroup!: Phaser.GameObjects.Group;
@@ -24,6 +28,7 @@ export class MainScene extends Phaser.Scene {
     buttonSystem!: ActionButtonSystem;
     playerStatusSystem!: PlayerStatusSystem;
     infoSystem!: CellInfoSystem;
+    logSystem!: LogSystem; // NEW
 
     // Interaction State
     selectedRow: number | null = null;
@@ -38,7 +43,7 @@ export class MainScene extends Phaser.Scene {
     mapOffsetY: number = 0;
 
     // Camera Controls
-    minTileSize: number = 12; // Allow zooming out further (40x40 map fits in ~500px height at 12px/tile)
+    minTileSize: number = 12;
     isMapScrollable: boolean = false;
     mapScrollSpeed: number = 10;
     scrollKeys!: {
@@ -47,7 +52,7 @@ export class MainScene extends Phaser.Scene {
         left: Phaser.Input.Keyboard.Key,
         right: Phaser.Input.Keyboard.Key
     };
-    cameraControlsContainer!: Phaser.GameObjects.Container; // UI for pan buttons
+    cameraControlsContainer!: Phaser.GameObjects.Container;
     cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
 
     constructor() {
@@ -71,9 +76,6 @@ export class MainScene extends Phaser.Scene {
 
     create(data?: any) {
         // 1. Initialize Engine
-        // If loading a preset, configs are irrelevant (overwritten by save), but for new game they matter.
-        // Actually, if loading preset, GameEngine.loadState handles it.
-        // We pass configs to constructor for New Game.
         this.engine = new GameEngine(data && data.playerConfigs ? data.playerConfigs : []);
 
         // 2. Check for Preset Load
@@ -157,6 +159,8 @@ export class MainScene extends Phaser.Scene {
         this.infoSystem = new CellInfoSystem(this, 0, 0, 100);
         this.buttonSystem = new ActionButtonSystem(this, 0, 0);
         this.notificationSystem = new NotificationSystem(this, 0, 0, 100, 100);
+        this.logSystem = new LogSystem(this, 0, 0, 200, 100); // NEW
+
         this.setupButtons();
 
         // Initialize Visuals
@@ -205,11 +209,15 @@ export class MainScene extends Phaser.Scene {
             this.showVictoryOverlay(winner);
         });
 
+        this.engine.on('logMessage', (msg: string) => {
+            this.logSystem.addLog(msg, 'info');
+        });
+
         this.engine.on('incomeReport', (report: any) => {
             const isAI = this.engine.state.getCurrentPlayer().isAI;
-            const prefix = isAI ? "AI Turn: " : "Income Report: ";
-            const msg = `${prefix}+${report.total}G (Base: ${report.base}, Land: ${report.land})`;
-            this.notificationSystem.show(msg, 'info');
+            const prefix = isAI ? "AI: " : "Income: ";
+            const msg = `${prefix}+${report.total}G (B:${report.base}, L:${report.land})`;
+            this.logSystem.addLog(msg, 'info');
         });
 
         // Initialize Cursor Keys
@@ -249,7 +257,6 @@ export class MainScene extends Phaser.Scene {
 
             this.cameras.main.setViewport(0, 0, width, height);
 
-            // Re-initialize terrain visuals only if missing (e.g. first load)
             if (!this.terrainGroup || this.terrainGroup.getLength() === 0) {
                 this.initializeTerrainVisuals();
             }
@@ -257,110 +264,152 @@ export class MainScene extends Phaser.Scene {
             // -----------------------------
             // UNIFIED RESPONSIVE LAYOUT
             // -----------------------------
-            // Strict Orientation Check
             const isPortrait = height > width;
 
             // Define Regions
             let mapX = 0, mapY = 0, mapAreaW = 0, mapAreaH = 0;
-            const uiBaseWidth = 260; // Standard internal width of UI components
+            const uiBaseWidth = 260;
 
             if (isPortrait) {
-                // --- PORTRAIT MODE (Map Top, UI Bottom) ---
-                // UI Height: 35% of screen, clamped [250px, 400px]
-                const uiHeight = Phaser.Math.Clamp(height * 0.35, 250, 400);
+                // --- PORTRAIT MODE (4-Corner Layout) ---
+                // Header (Status + Info): Top 15% (min 120px)
+                // Footer (Log + Buttons): Bottom 15% (min 120px)
 
-                mapAreaW = width;
-                mapAreaH = height - uiHeight;
+                const barHeight = Phaser.Math.Clamp(height * 0.15, 120, 180);
+
+                // Map fills the middle
                 mapX = 0;
-                mapY = 0;
+                mapY = barHeight;
+                mapAreaW = width;
+                mapAreaH = height - (barHeight * 2);
 
-                // UI Background
+                // Clear Backgrounds
                 this.trBg.clear().setVisible(false);
-                this.brBg.clear().setVisible(false);
-                this.blBg.clear().fillStyle(0x111111).fillRect(0, mapAreaH, width, uiHeight).setVisible(true);
-
-                // Split UI Panel: Left (Info), Right (Status)
-                const midX = width / 2;
-
-                // Scale UI to fit if screen is narrow
-                // Each panel needs ~uiBaseWidth (260px). 
-                // Available per panel = midX (roughly).
-                const panelScale = Math.min(1, (midX - 10) / uiBaseWidth);
-
-                // 1. Info System (Left)
-                this.infoSystem.setScale(panelScale);
-                this.infoSystem.resize(uiBaseWidth, 5, mapAreaH + 10);
-                this.infoSystem.setPosition(5, mapAreaH + 10);
-
-                // 2. Player Status (Right)
-                this.playerStatusSystem.setScale(panelScale);
-                // Status system vertical height calculation
-                // It needs to fit within uiHeight.
-                const statusAvailH = (uiHeight - 20) / panelScale;
-                this.playerStatusSystem.resize(uiBaseWidth, statusAvailH, midX + 5, mapAreaH + 10);
-                this.playerStatusSystem.setPosition(midX + 5, mapAreaH + 10);
-
-                // Notifications: Top Center overlay
-                const notifWidth = Math.min(300, width - 20);
-                this.notificationSystem.resize(notifWidth, 0);
-                this.notificationSystem.setPosition((width - notifWidth) / 2, 60);
-
-                // Buttons: Bottom Right of Map (Floating)
-                this.buttonSystem.setPosition(width - 140, mapAreaH - 60);
-
-            } else {
-                // --- LANDSCAPE MODE (UI Left, Map Right) ---
-                // Sidebar Width: 30% of screen, clamped [260px, 320px]
-                const sidebarW = Phaser.Math.Clamp(width * 0.3, 260, 320);
-
-                mapX = sidebarW;
-                mapY = 0;
-                mapAreaW = width - sidebarW;
-                mapAreaH = height;
-
-                // UI Background
-                this.trBg.clear().fillStyle(0x222222).fillRect(0, 0, sidebarW, height).setVisible(true);
                 this.blBg.clear().setVisible(false);
                 this.brBg.clear().setVisible(false);
 
-                // Scale UI to fit vertically if screen is short? 
-                // Mostly scaling is 1.0 unles screen is VERY small.
-                // If sidebarW < uiBaseWidth (260), scale down.
-                const uiScale = Math.min(1, (sidebarW - 10) / uiBaseWidth);
+                // We need backgrounds for the 4 corners basically.
+                // Using existing BGs or drawing new strict rects?
 
-                this.infoSystem.setScale(uiScale);
-                this.playerStatusSystem.setScale(uiScale);
+                // Draw UI Backgrounds (Dark panels)
+                const graphics = this.trBg; // Reuse this for all UI bg in portrait
+                graphics.setVisible(true);
+                graphics.clear();
+                graphics.fillStyle(0x111111, 0.9);
 
-                // Layout: Status Top, Info Bottom
-                // Status takes 60% height
-                const statusH = (height * 0.6) / uiScale;
+                // Top Bar
+                graphics.fillRect(0, 0, width, barHeight);
+                // Bottom Bar
+                graphics.fillRect(0, height - barHeight, width, barHeight);
 
-                // Status System (Top Left)
-                this.playerStatusSystem.resize(uiBaseWidth, statusH, 0, 0);
-                this.playerStatusSystem.setPosition((sidebarW - uiBaseWidth * uiScale) / 2, 0); // Center in sidebar
+                // Split Width
+                const midX = width / 2;
 
-                // Info System (Below Status)
-                const infoY = (height * 0.6) + 10;
-                this.infoSystem.resize(uiBaseWidth, 0, infoY);
-                this.infoSystem.setPosition((sidebarW - uiBaseWidth * uiScale) / 2, infoY);
+                // --- TOP LEFT: Player Status ---
+                const statusScale = Math.min(1, (midX - 10) / uiBaseWidth);
+                this.playerStatusSystem.setScale(statusScale);
+                // Note: resize takes (width, height, x, y) for mask generation
+                this.playerStatusSystem.resize(uiBaseWidth, barHeight / statusScale, 5, 5);
+                this.playerStatusSystem.setPosition(5, 5);
 
-                // Notifications: Top Right overlay
+                // --- TOP RIGHT: Cell Info ---
+                const infoScale = Math.min(1, (midX - 10) / uiBaseWidth);
+                this.infoSystem.setScale(infoScale);
+                // Note: resize takes (width, x, y) for mask generation. 
+                // Wait, CellInfoSystem.resize signature is (width, x, y). 
+                // It does NOT take height? layout logic says height=250 fixed internal.
+                // We clearly want to position it at midX + 5, 5.
+                this.infoSystem.resize(uiBaseWidth, midX + 5, 5);
+                this.infoSystem.setPosition(midX + 5, 5);
+
+                // --- BOTTOM LEFT: Log System ---
+                // Log takes left half of bottom bar?
+                // User said: "Log Screen on Bottom Left, Buttons on Bottom Right"
+                this.logSystem.setVisible(true);
+                this.logSystem.resize(midX - 10, barHeight - 10);
+                this.logSystem.setPosition(5, height - barHeight + 5);
+
+                // --- BOTTOM RIGHT: Buttons ---
+                // ButtonSystem isn't a panel, it creates buttons relative to pos.
+                // We place the anchor. 
+                // "End Turn" button size?
+                this.buttonSystem.setPosition(midX + (midX / 2), height - (barHeight / 2));
+                // Adjust button system to center button in its quadrant?
+                // ActionButtonSystem usually places button at (0,0) relative.
+
+                // Notifications (Transient) -> Center Overlay
                 this.notificationSystem.resize(300, 0);
-                this.notificationSystem.setPosition(width - 320, 20);
+                this.notificationSystem.setPosition((width - 300) / 2, mapY + 20);
 
-                // Buttons: Bottom Left of Map Area
-                this.buttonSystem.setPosition(sidebarW + 20, height - 80);
+            } else {
+                // --- LANDSCAPE MODE (Two Columns) ---
+                // Left Column: Status (Top), Info (Bottom)
+                // Right Column: Log (Top), Buttons (Bottom)
+                // Map: Strictly Center
+
+                const sidebarW = 280; // Fixed width for side panels
+
+                // Map Area (Center)
+                mapX = sidebarW;
+                mapY = 0;
+                mapAreaW = width - (sidebarW * 2);
+                mapAreaH = height;
+
+                // Draw Backgrounds
+                // Left Bar
+                this.trBg.clear().setVisible(true).fillStyle(0x111111, 0.9).fillRect(0, 0, sidebarW, height);
+                // Right Bar
+                this.blBg.clear().setVisible(true).fillStyle(0x111111, 0.9).fillRect(width - sidebarW, 0, sidebarW, height);
+                // Clear unused
+                this.brBg.clear().setVisible(false);
+
+                // Common Sizing
+                const uiScale = Math.min(1, (sidebarW - 20) / uiBaseWidth);
+                const halfH = height / 2;
+
+                // --- LEFT COLUMN ---
+                // Top Left: Status
+                this.playerStatusSystem.setScale(uiScale);
+                this.playerStatusSystem.resize(uiBaseWidth, halfH, 10, 10);
+                this.playerStatusSystem.setPosition(10, 10);
+
+                // Bottom Left: Info (User Req: CellInfo BL)
+                // Info height is fixed inside (approx 250), so we place it at bottom
+                // But resize signature is (width, x, y)
+                this.infoSystem.setScale(uiScale);
+                const infoY = height - 260; // 250 height + padding
+                this.infoSystem.resize(uiBaseWidth, 10, infoY);
+                this.infoSystem.setPosition(10, infoY);
+
+                // --- RIGHT COLUMN ---
+                // Top Right: Log (User Req: Log TR)
+                // Log fills top half of right bar
+                this.logSystem.setVisible(true);
+                this.logSystem.resize(sidebarW - 20, halfH - 20);
+                this.logSystem.setPosition(width - sidebarW + 10, 10);
+
+                // Bottom Right: Buttons (User Req: Buttons BR)
+                // Button Anchor
+                this.buttonSystem.setPosition(width - (sidebarW / 2), height - 80);
+
+                // Notifications Center map
+                this.notificationSystem.resize(300, 0);
+                this.notificationSystem.setPosition(mapX + (mapAreaW - 300) / 2, 20);
             }
+
+            // ... (rest of logic: refresh, map scaling)
 
             // Force data refresh
             if (this.engine) {
                 this.playerStatusSystem.update(this.engine);
                 this.infoSystem.update(this.engine, null, null);
+                // Log persists, no update needed
             }
 
             // --- MAP SCALING & CENTERING ---
             if (mapAreaW <= 0 || mapAreaH <= 0) return;
 
+            // ... (Copy existing map scaling logic)
             let gridW = GameConfig.GRID_WIDTH;
             let gridH = GameConfig.GRID_HEIGHT;
             if (this.engine && this.engine.state.grid.length > 0) {
@@ -393,23 +442,20 @@ export class MainScene extends Phaser.Scene {
                 if (scaledMapH > mapAreaH) targetY = mapY + 20;
 
                 this.cameraControlsContainer.setVisible(true);
-                this.cameraControlsContainer.setPosition(width - 80, height - (isPortrait ? height * 0.35 + 80 : 80)); // Approx button pos
+                // Adjust controls position
+                this.cameraControlsContainer.setPosition(width - 60, height / 2); // Center right?
             } else {
                 this.cameraControlsContainer.setVisible(false);
             }
 
             this.mapContainer.setPosition(targetX, targetY);
-
-            // Update Offsets for Input
             this.mapOffsetX = this.mapContainer.x;
             this.mapOffsetY = this.mapContainer.y;
 
-            // Force Redraw of Grid/Overlays to ensure Z-order and freshness
             this.drawMap();
 
         } catch (err) {
             console.error("MainScene.resize CRASHED:", err);
-            // Optionally try to recover or notify user via UI?
         }
     }
 
@@ -619,27 +665,24 @@ export class MainScene extends Phaser.Scene {
         const currentGold = currentPlayer.gold;
 
         let totalCost = 0;
-        let hasHighCost = false;
+        // let hasHighCost = false; // Unused
         for (const m of this.engine.pendingMoves) {
             const cost = this.engine.getMoveCost(m.r, m.c);
             totalCost += cost;
-            if (cost > GameConfig.COST_ATTACK) {
-                hasHighCost = true;
-            }
+            // if (cost > GameConfig.COST_ATTACK) {
+            //     hasHighCost = true;
+            // }
         }
 
         if (currentPlayer.isAI) {
-            // this.notificationSystem.show('🤖 AI is planning...', 'info');
-            // Don't spam notifications on updateUI
+            // this.logSystem.addLog('🤖 AI is planning...', 'info');
         } else if (this.engine.lastError) {
-            this.notificationSystem.show(`⚠️ ${this.engine.lastError}`, 'error');
+            this.logSystem.addLog(this.engine.lastError, 'warning');
+            this.notificationSystem.show(this.engine.lastError, 'error'); // Keep overlay warning for errors
         } else if (totalCost > currentGold) {
-            this.notificationSystem.show(`Insufficient Gold! Need ${totalCost}G`, 'error');
-        } else if (hasHighCost) {
-            this.notificationSystem.show('⚠️ Long range attack expensive!', 'warning');
+            // this.logSystem.addLog(`Need ${totalCost}G`, 'warning');
         } else {
-            // Keep last message or show default?
-            // this.notificationSystem.show('Select cells to move. Click End Turn when ready.', 'info');
+            // Default
         }
     }
 

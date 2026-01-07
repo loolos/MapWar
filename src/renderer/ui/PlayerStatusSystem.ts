@@ -27,7 +27,7 @@ export class PlayerStatusSystem {
         // Header
         const header = scene.add.text(130, 25, 'GAME STATUS', {
             fontFamily: 'Georgia, "Times New Roman", serif',
-            fontSize: '22px',
+            fontSize: '18px', // Reduced from 22
             color: '#ffffff',
             fontStyle: 'bold',
             shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 2, fill: true }
@@ -35,13 +35,13 @@ export class PlayerStatusSystem {
         this.container.add(header);
 
         // Turn Info
-        this.uiText = scene.add.text(130, 50, 'Turn 1', {
-            fontFamily: 'Georgia, serif', fontSize: '16px', color: '#dddddd'
+        this.uiText = scene.add.text(130, 45, 'Turn 1', { // Reduced Y slightly
+            fontFamily: 'Georgia, serif', fontSize: '14px', color: '#dddddd' // Reduced from 16
         }).setOrigin(0.5);
         this.container.add(this.uiText);
 
         // Scrollable List Container
-        this.listContainer = scene.add.container(0, 80);
+        this.listContainer = scene.add.container(0, 70); // Moved up from 80
         this.container.add(this.listContainer);
 
         // Setup Mask
@@ -49,10 +49,10 @@ export class PlayerStatusSystem {
         this.listMask = new Phaser.Display.Masks.GeometryMask(scene, this.maskShape);
         this.listContainer.setMask(this.listMask);
 
-        this.viewHeight = height - 90; // Top padding (80) + bottom padding (10)
+        this.viewHeight = height - 80; // Adjusted for padding
 
         // Enhance Interaction for Scroll
-        const hitArea = new Phaser.Geom.Rectangle(0, 80, 260, this.viewHeight);
+        const hitArea = new Phaser.Geom.Rectangle(0, 70, 260, this.viewHeight);
         this.container.setInteractive(hitArea, Phaser.Geom.Rectangle.Contains);
 
         this.container.on('pointermove', (pointer: Phaser.Input.Pointer) => {
@@ -63,15 +63,10 @@ export class PlayerStatusSystem {
         });
 
         // Wheel support
+        // ... (omitted unchanged wheel code)
         scene.input.on('wheel', (pointer: any, _gameObjects: any, _deltaX: number, deltaY: number, _deltaZ: number) => {
-            // Check if pointer is over this container?
             const localPoint = this.container.pointToContainer(pointer);
-
-            // Simple bounds check: x=[0, 260], y=[0, height] inside container
-            // ViewHeight is the "scrollable" area, but wheel should work on whole header too?
-            // Let's allow wheel on whole sidebar
             const hit = localPoint.x >= 0 && localPoint.x <= 260 && localPoint.y >= 0 && localPoint.y <= height;
-
             if (hit) {
                 this.scroll(-deltaY * 0.5);
             }
@@ -81,6 +76,7 @@ export class PlayerStatusSystem {
         this.updateMask(260, height, x, y);
     }
 
+    // ... scroll method ...
     private scroll(dy: number) {
         if (this.contentHeight <= this.viewHeight) return;
 
@@ -89,7 +85,7 @@ export class PlayerStatusSystem {
         if (this.scrollY > 0) this.scrollY = 0;
         if (this.scrollY < minScroll) this.scrollY = minScroll;
 
-        this.listContainer.y = 80 + this.scrollY;
+        this.listContainer.y = 70 + this.scrollY; // Match new Y
     }
 
     public update(engine: GameEngine) {
@@ -122,13 +118,13 @@ export class PlayerStatusSystem {
 
     private rebuildList(order: string[], players: any) {
         // Clear old
-        this.listContainer.removeAll(true); // Destroy children
+        this.listContainer.removeAll(true);
         this.playerRows = [];
 
         let currentY = 0;
-        const gap = 10;
+        const gap = 5; // Reduced from 10
         const useCompact = order.length > 5;
-        const actualCardH = useCompact ? 50 : 90;
+        const actualCardH = useCompact ? 40 : 60; // Reduced from 50/90
 
         order.forEach(pid => {
             const player = players[pid];
@@ -142,10 +138,10 @@ export class PlayerStatusSystem {
 
         this.contentHeight = currentY;
 
-        // Reset scroll if content shrinks
+        // Reset scroll
         if (this.scrollY < this.viewHeight - this.contentHeight) {
             this.scrollY = Math.min(0, this.viewHeight - this.contentHeight);
-            this.listContainer.y = 80 + this.scrollY;
+            this.listContainer.y = 70 + this.scrollY;
         }
     }
 
@@ -158,30 +154,37 @@ export class PlayerStatusSystem {
         this.drawCardPanel(bg, 240, h, player.color);
         row.add(bg);
 
+        // Compact Layout
+        const isCompact = h < 50;
+
         // Title
-        const titleY = h > 60 ? 10 : 8;
+        const titleY = isCompact ? 10 : 10;
         const title = scene.add.text(20, titleY, player.id, {
-            fontFamily: 'Georgia, serif', fontSize: '18px', color: '#' + player.color.toString(16).padStart(6, '0'), fontStyle: 'bold',
+            fontFamily: 'Georgia, serif', fontSize: '16px', // Reduced from 18
+            color: '#' + player.color.toString(16).padStart(6, '0'),
+            fontStyle: 'bold',
             shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 2, fill: true }
         });
+        title.setOrigin(0, 0.5); // Center vertically
+        title.y = h / 2;
         row.add(title);
 
-        // Coin Icon
-        const coinY = h > 60 ? 55 : 25;
-        const coin = scene.add.image(35, coinY, 'icon_gold_3d').setDisplaySize(24, 24);
-        row.add(coin);
-
-        // Gold Text
-        const goldText = scene.add.text(60, coinY - 10, player.gold.toString(), {
-            fontFamily: 'Arial', fontSize: '20px', color: '#ffd700', fontStyle: 'bold',
+        // Gold
+        const goldY = h / 2;
+        const goldText = scene.add.text(140, goldY, player.gold.toString(), {
+            fontFamily: 'Arial', fontSize: '16px', color: '#ffd700', fontStyle: 'bold', // Reduced from 20
             shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 2, fill: true }
         });
+        goldText.setOrigin(1, 0.5); // Right align
         row.add(goldText);
 
+        // Coin Icon (Next to gold)
+        const coin = scene.add.image(155, goldY, 'icon_gold_3d').setDisplaySize(18, 18); // Reduced from 24
+        row.add(coin);
+
         // Type Icon
-        const iconY = h > 60 ? 45 : 25;
-        const icon = scene.add.image(200, iconY, player.isAI ? 'icon_robot_badge' : 'icon_human_badge')
-            .setDisplaySize(h > 60 ? 42 : 32, h > 60 ? 42 : 32);
+        const icon = scene.add.image(210, h / 2, player.isAI ? 'icon_robot_badge' : 'icon_human_badge')
+            .setDisplaySize(24, 24); // Reduced from 32/42
         row.add(icon);
 
         return row;
