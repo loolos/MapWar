@@ -54,7 +54,7 @@ export class GameState {
         }
 
         // 2. Delegate to Generator
-        MapGenerator.generate(this.grid, this.currentMapType, GameConfig.GRID_WIDTH, GameConfig.GRID_HEIGHT);
+        MapGenerator.generate(this.grid, this.currentMapType, GameConfig.GRID_WIDTH, GameConfig.GRID_HEIGHT, this.playerOrder.length);
 
         this.setupBases();
     }

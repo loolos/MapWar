@@ -4,14 +4,11 @@ import { GameConfig } from '../GameConfig';
 export type MapType = 'default' | 'archipelago' | 'pangaea' | 'mountains' | 'rivers';
 
 export class MapGenerator {
-    static generate(grid: Cell[][], type: MapType, width: number, height: number) {
-        // Clear grid first (set to water or plain depending on strategy?)
-        // Standard approach: Start with all Plain, then erode? Or Start with Water and build?
-        // Let's reset to Plain by default for compatibility, but some modes might want Water start.
-
+    static generate(grid: Cell[][], type: MapType, width: number, height: number, playerCount: number = 2) {
+        // Reset to default state
         for (let r = 0; r < height; r++) {
             for (let c = 0; c < width; c++) {
-                grid[r][c].type = 'plain'; // Reset
+                grid[r][c].type = 'plain';
                 grid[r][c].building = 'none';
                 grid[r][c].owner = null;
             }
@@ -19,7 +16,7 @@ export class MapGenerator {
 
         switch (type) {
             case 'archipelago':
-                this.generateArchipelago(grid, width, height);
+                this.generateArchipelago(grid, width, height, playerCount);
                 break;
             case 'pangaea':
                 this.generatePangaea(grid, width, height);
@@ -38,6 +35,32 @@ export class MapGenerator {
 
         // Post-Processing: Distribute Towns
         this.distributeTowns(grid, width, height);
+
+        // Post-Processing: Ensure Spawn Accessibility
+        this.ensureAccessibility(grid, width, height, playerCount);
+    }
+
+    private static getSpawnPoint(index: number, total: number, width: number, height: number): { r: number, c: number } {
+        const margin = 2;
+        const boundedW = width - 2 * margin;
+        const boundedH = height - 2 * margin;
+
+        // Angle fraction matching GameState.setupBases
+        const angle = (index / total) * 2 * Math.PI - (Math.PI / 2);
+        // Start offset matching setupBases (-3*PI/4)
+        const startOffset = -3 * Math.PI / 4;
+        const finalAngle = angle + startOffset;
+
+        const cx = width / 2;
+        const cy = height / 2;
+
+        let r = Math.round(cy + (boundedH / 2) * Math.sin(finalAngle));
+        let c = Math.round(cx + (boundedW / 2) * Math.cos(finalAngle));
+
+        r = Math.max(0, Math.min(height - 1, r));
+        c = Math.max(0, Math.min(width - 1, c));
+
+        return { r, c };
     }
 
     private static generateDefault(grid: Cell[][], width: number, height: number) {
@@ -53,11 +76,11 @@ export class MapGenerator {
         for (let i = 0; i < hillClusters; i++) this.growCluster(grid, 'hill', 5);
     }
 
-    private static generateArchipelago(grid: Cell[][], width: number, height: number) {
+    private static generateArchipelago(grid: Cell[][], width: number, height: number, playerCount: number) {
         // Start with WATER
         this.fillGrid(grid, 'water');
 
-        // Create Islands
+        // Create Random Islands
         const area = width * height;
         const islandCount = Math.max(4, Math.floor(area / 25)); // Lots of small islands
 
@@ -69,20 +92,11 @@ export class MapGenerator {
             this.growClusterAt(grid, r, c, 'plain', Math.floor(Math.random() * 5) + 3, 'water');
         }
 
-        // GUARANTEE: Starting Islands for Players (Corners)
-        // GameState spawns players at inset(2).
-        const spawns = [
-            { r: 2, c: 2 },
-            { r: 2, c: width - 3 },
-            { r: height - 3, c: 2 },
-            { r: height - 3, c: width - 3 }
-        ];
-
-        for (const spawn of spawns) {
-            // Ensure a decent landmass at spawn (Size 8-12)
-            if (this.isValid(grid, spawn.r, spawn.c)) {
-                this.growClusterAt(grid, spawn.r, spawn.c, 'plain', 10, 'water');
-            }
+        // GUARANTEE: Starting Islands for Each Player using exact spawn logic
+        for (let i = 0; i < playerCount; i++) {
+            const spawn = this.getSpawnPoint(i, playerCount, width, height);
+            // Ensure island at spawn (Size 15 is substantial)
+            this.growClusterAt(grid, spawn.r, spawn.c, 'plain', 15, 'water');
         }
 
         // Add some hills on islands
@@ -166,6 +180,55 @@ export class MapGenerator {
                 // Clamp
                 if (r < 0 || r >= height || c < 0 || c >= width) break;
                 len++;
+            }
+        }
+    }
+
+    private static ensureAccessibility(grid: Cell[][], width: number, height: number, playerCount: number) {
+        // Ensure no player is boxed in by Water or Hills immediately
+        for (let i = 0; i < playerCount; i++) {
+            const spawn = this.getSpawnPoint(i, playerCount, width, height);
+            const { r, c } = spawn;
+
+            // Force spawn itself to be plain (just in case)
+            if (this.isValid(grid, r, c)) grid[r][c].type = 'plain';
+
+            // Check neighbors (Up, Down, Left, Right)
+            const neighbors = [
+                { r: r - 1, c }, { r: r + 1, c },
+                { r, c: c - 1 }, { r, c: c + 1 }
+            ];
+
+            const validNeighbors = [];
+            let walkableCount = 0;
+
+            for (const n of neighbors) {
+                if (this.isValid(grid, n.r, n.c)) {
+                    validNeighbors.push(n);
+                    const cell = grid[n.r][n.c];
+                    // Plain is best. Hill is walkable but slow. Water is blocked.
+                    // We want at least 2 PLAIN neighbors for easy start.
+                    if (cell.type === 'plain') {
+                        walkableCount++;
+                    }
+                }
+            }
+
+            // If boxed in (fewer than 2 plain neighbors), clear some space
+            if (walkableCount < 2 && validNeighbors.length > 0) {
+                // Shuffle validNeighbors
+                validNeighbors.sort(() => Math.random() - 0.5);
+
+                // Force convert to plain until we have 2
+                for (const n of validNeighbors) {
+                    const cell = grid[n.r][n.c];
+                    if (cell.type !== 'plain') {
+                        cell.type = 'plain';
+                        cell.owner = null; // Clear if needed
+                        walkableCount++;
+                        if (walkableCount >= 2) break;
+                    }
+                }
             }
         }
     }
@@ -262,3 +325,4 @@ export class MapGenerator {
         }
     }
 }
+
