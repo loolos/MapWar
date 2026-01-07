@@ -132,6 +132,16 @@ export class MenuScene extends Phaser.Scene {
                             <span>x</span>
                             <input type="number" id="mapHeightInput" placeholder="H" min="10" max="40" value="10" style="width:50px;">
                         </div>
+                        <div class="control-row" style="margin-top: 10px;">
+                             <span>Type:</span>
+                             <select id="mapTypeSelect" style="width: 120px;">
+                                 <option value="default">Default</option>
+                                 <option value="archipelago">Archipelago</option>
+                                 <option value="pangaea">Pangaea</option>
+                                 <option value="mountains">Mountains</option>
+                                 <option value="rivers">Rivers</option>
+                             </select>
+                        </div>
                     </div>
 
                     <div class="control-group">
@@ -231,10 +241,12 @@ export class MenuScene extends Phaser.Scene {
                     const wInput = domElement.getChildByID('mapWidthInput') as HTMLInputElement;
                     const hInput = domElement.getChildByID('mapHeightInput') as HTMLInputElement;
                     const cInput = domElement.getChildByID('playerCountInput') as HTMLInputElement;
+                    const typeInput = domElement.getChildByID('mapTypeSelect') as HTMLSelectElement;
 
                     const width = Phaser.Math.Clamp(parseInt(wInput.value) || 10, 10, 40);
                     const height = Phaser.Math.Clamp(parseInt(hInput.value) || 10, 10, 40);
                     const count = parseInt(cInput.value);
+                    const mapType = typeInput ? typeInput.value : 'default';
 
                     // Update Global
                     (GameConfig as any).GRID_WIDTH = width;
@@ -249,7 +261,7 @@ export class MenuScene extends Phaser.Scene {
                         configs.push({ id: `P${i}`, isAI, color });
                     }
 
-                    this.scene.start('MainScene', { playerConfigs: configs });
+                    this.scene.start('MainScene', { playerConfigs: configs, mapType: mapType });
                 }
             });
         }

@@ -76,7 +76,8 @@ export class MainScene extends Phaser.Scene {
 
     create(data?: any) {
         // 1. Initialize Engine
-        this.engine = new GameEngine(data && data.playerConfigs ? data.playerConfigs : []);
+        const mapType = data && data.mapType ? data.mapType : 'default';
+        this.engine = new GameEngine(data && data.playerConfigs ? data.playerConfigs : [], mapType);
 
         // 2. Check for Preset Load
         if (data && data.loadPreset) {

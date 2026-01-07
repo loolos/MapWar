@@ -2,6 +2,7 @@ import { GameState } from './GameState';
 import { GameConfig } from './GameConfig';
 import { AIController } from './AIController';
 import type { Action, EndTurnAction } from './Actions';
+import type { MapType } from './map/MapGenerator';
 
 type EventCallback = (data?: any) => void;
 
@@ -26,8 +27,8 @@ export class GameEngine {
     // Tutorial State
     hasTriggeredEnclaveTutorial: boolean = false;
 
-    constructor(playerConfigs: { id: string, isAI: boolean, color: number }[] = []) {
-        this.state = new GameState(playerConfigs);
+    constructor(playerConfigs: { id: string, isAI: boolean, color: number }[] = [], mapType: MapType = 'default') {
+        this.state = new GameState(playerConfigs, mapType);
         this.listeners = {};
         this.pendingMoves = [];
         this.ai = new AIController(this);
@@ -68,7 +69,8 @@ export class GameEngine {
         }
 
         // Pass undefined for configs (keep existing players), and keepMap
-        this.state.reset(undefined, keepMap);
+        // Pass current mapType to ensure same generator is used if map is reset
+        this.state.reset(undefined, keepMap, this.state.currentMapType);
         this.pendingMoves = [];
         this.lastAiMoves = [];
         this.lastError = null;

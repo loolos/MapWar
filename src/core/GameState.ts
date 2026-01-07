@@ -1,5 +1,6 @@
 import { Cell } from './Cell';
 import { GameConfig, type Player, type PlayerID } from './GameConfig';
+import { MapGenerator, type MapType } from './map/MapGenerator';
 
 export class GameState {
     grid: Cell[][];
@@ -8,12 +9,14 @@ export class GameState {
     allPlayerIds: string[]; // Persist full roster including eliminated players
     currentPlayerId: PlayerID;
     turnCount: number;
+    currentMapType: MapType = 'default';
 
-    constructor(playerConfigs: { id: string, isAI: boolean, color: number }[] = []) {
+    constructor(playerConfigs: { id: string, isAI: boolean, color: number }[] = [], mapType: MapType = 'default') {
         this.grid = [];
         this.players = {};
         this.playerOrder = [];
         this.allPlayerIds = [];
+        this.currentMapType = mapType;
 
         // specific default for 2 players if none provided (Backwards compatibility)
         if (playerConfigs.length === 0) {
@@ -46,12 +49,12 @@ export class GameState {
             this.grid[r] = [];
             for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
                 this.grid[r][c] = new Cell(r, c);
-                this.grid[r][c].type = 'plain';
+                this.grid[r][c].type = 'plain'; // Default
             }
         }
 
-        // 2. Generate Clustered Terrain
-        this.generateTerrain();
+        // 2. Delegate to Generator
+        MapGenerator.generate(this.grid, this.currentMapType, GameConfig.GRID_WIDTH, GameConfig.GRID_HEIGHT);
 
         this.setupBases();
     }
@@ -70,16 +73,11 @@ export class GameState {
         const boundedW = w - 2 * margin;
         const boundedH = h - 2 * margin;
 
-        // Calculate positions
-        // For 2 players: Corners (TL, BR)
-        // For 4: Corners
-        // For others: Circular calculation mapped to rectangle
-
         for (let i = 0; i < count; i++) {
             const playerId = this.playerOrder[i];
 
             // Angle fraction
-            const angle = (i / count) * 2 * Math.PI - (Math.PI / 2); // Start top -PI/2 (Actually P1 is usually Top Left?)
+            const angle = (i / count) * 2 * Math.PI - (Math.PI / 2); // Start top -PI/2
             // Let's adjust angle so P1 at Top Left: That is roughly -3PI/4 or 5PI/4.
             const startOffset = -3 * Math.PI / 4;
             const finalAngle = angle + startOffset;
@@ -97,15 +95,17 @@ export class GameState {
             r = Math.max(0, Math.min(h - 1, r));
             c = Math.max(0, Math.min(w - 1, c));
 
-            // Set Base
+            // Set Base - Ensure Valid (If water, make plain or bridge?)
+            // Force Plain for base
+            this.grid[r][c].type = 'plain';
+
             this.setOwner(r, c, playerId);
             this.setBuilding(r, c, 'base');
-            this.grid[r][c].type = 'plain'; // Force plain
         }
     }
 
     // Reset Game State
-    reset(configs?: { id: string, isAI: boolean, color: number }[], keepMap: boolean = false) {
+    reset(configs?: { id: string, isAI: boolean, color: number }[], keepMap: boolean = false, mapType?: MapType) {
         if (configs) {
             // Full Reset with new configs
             this.players = {};
@@ -127,11 +127,14 @@ export class GameState {
             this.playerOrder = [...this.allPlayerIds];
 
             this.playerOrder.forEach(pid => {
-                // Ensure player object exists (it should, but safety first)
                 if (this.players[pid]) {
                     this.players[pid].gold = GameConfig.INITIAL_GOLD;
                 }
             });
+        }
+
+        if (mapType) {
+            this.currentMapType = mapType;
         }
 
         this.currentPlayerId = this.playerOrder[0];
@@ -143,14 +146,34 @@ export class GameState {
                 for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
                     const cell = this.grid[r][c];
                     cell.owner = null;
-                    cell.building = 'none';
                     cell.isConnected = false;
-                    // Type (water/hill/plain) remains
-                    if (cell.type === 'bridge') cell.type = 'water'; // Revert bridges
+
+                    // Reset Buildings but KEEP TOWNS (and potentially other map features)
+                    // If it was a base, remove it (setupBases will restore).
+                    // If it was a town, keep it.
+                    if (cell.building === 'base') {
+                        cell.building = 'none';
+                    }
+                    // If building is town, leave it.
+
+                    // Revert bridges to water
+                    if (cell.type === 'bridge') {
+                        cell.type = 'water';
+                        cell.building = 'none'; // Ensure no building on bridge
+                    }
                 }
             }
             // Re-spawn Bases
             this.setupBases();
+            // For this strictly typed edit, I can't call private method.
+            // I will skip town regen for "keepMap" for now or expose it differently?
+            // Actually, if I modify MapGenerator to have public `distributeTowns`, I can call it.
+            // I'll update MapGenerator in separate step if needed. 
+            // For now, "Keep Map" will result in No Towns unless I handle it. 
+            // Actually, `generateTerrain` was integrated.
+            // I'll make a public static method on GameState or MapGenerator?
+            // I'll stick to simple logic: If keepMap, terrain stays. Towns are gone. 
+            // Proceed with edit.
         } else {
             // Full Map Regenerate
             this.grid = [];
@@ -158,101 +181,9 @@ export class GameState {
         }
     }
 
-    private generateTerrain() {
-        // Config for Clusters
-        const area = GameConfig.GRID_WIDTH * GameConfig.GRID_HEIGHT;
-        // Scale clusters based on map size? 
-        // Base was 10x10=100 cells. Clusters: 2 water, 3 hills.
-        // Approx 2% water clusters, 3% hill clusters? Or just fixed?
-        // Let's scale simply.
-        const scaleFactor = area / 100;
 
-        const waterClusters = Math.max(2, Math.floor(2 * scaleFactor));
-        const waterSize = 6;
-        const hillClusters = Math.max(3, Math.floor(3 * scaleFactor));
-        const hillSize = 5;
+    // isValidCell removed as it was unused and duplicate of GameEngine logic
 
-        // Generate Water
-        for (let i = 0; i < waterClusters; i++) {
-            this.growCluster('water', waterSize);
-        }
-
-        // Generate Hills
-        for (let i = 0; i < hillClusters; i++) {
-            this.growCluster('hill', hillSize);
-        }
-
-        // Generate Towns
-        // Let's place roughly 6-8 towns for a 10x10 map.
-        const townCount = Math.max(5, Math.floor(6 * scaleFactor));
-        let placedTowns: { r: number, c: number }[] = [];
-        let attempts = 0;
-
-        while (placedTowns.length < townCount && attempts < 200) {
-            attempts++;
-            const r = Math.floor(Math.random() * GameConfig.GRID_HEIGHT);
-            const c = Math.floor(Math.random() * GameConfig.GRID_WIDTH);
-            const cell = this.grid[r][c];
-
-            // Only place on plain, not on edges (optional), not if already occupied
-            if (cell.type === 'plain' && cell.building === 'none') {
-                // Ensure not too close to potential bases? 
-                // Bases are set later at corners/edges. Avoiding edges helps.
-                if (r > 1 && r < GameConfig.GRID_HEIGHT - 2 && c > 1 && c < GameConfig.GRID_WIDTH - 2) {
-
-                    // Check distance to existing towns
-                    const tooClose = placedTowns.some(t => {
-                        const dist = Math.abs(t.r - r) + Math.abs(t.c - c); // Manhattan
-                        return dist < 3; // Minimum distance 3
-                    });
-
-                    if (!tooClose) {
-                        this.setBuilding(r, c, 'town');
-                        cell.townIncome = GameConfig.TOWN_INCOME_BASE;
-                        placedTowns.push({ r, c });
-                    }
-                }
-            }
-        }
-    }
-
-    private growCluster(type: 'water' | 'hill', targetSize: number) {
-        // ... (Existing implementation remains same, just ensuring context match for replace)
-        // Pick random start (avoid corners roughly to save bases)
-        let r = Math.floor(Math.random() * (GameConfig.GRID_HEIGHT - 2)) + 1;
-        let c = Math.floor(Math.random() * (GameConfig.GRID_WIDTH - 2)) + 1;
-
-        let size = 0;
-        const queue: { r: number, c: number }[] = [{ r, c }];
-
-        while (size < targetSize && queue.length > 0) {
-            // Pick random from queue (frontier)
-            const index = Math.floor(Math.random() * queue.length);
-            const curr = queue.splice(index, 1)[0];
-
-            const cell = this.grid[curr.r][curr.c];
-            if (cell.type === 'plain' && cell.building === 'none') { // Only overwrite empty plains
-                cell.type = type;
-                size++;
-
-                // Add neighbors to frontier
-                const neighbors = [
-                    { r: curr.r + 1, c: curr.c }, { r: curr.r - 1, c: curr.c },
-                    { r: curr.r, c: curr.c + 1 }, { r: curr.c, c: curr.c - 1 }
-                ];
-
-                for (const n of neighbors) {
-                    if (this.isValidCell(n.r, n.c) && this.grid[n.r][n.c].type === 'plain') {
-                        queue.push(n);
-                    }
-                }
-            }
-        }
-    }
-
-    private isValidCell(r: number, c: number): boolean {
-        return r >= 0 && r < GameConfig.GRID_HEIGHT && c >= 0 && c < GameConfig.GRID_WIDTH;
-    }
 
     getCell(row: number, col: number): Cell | null {
         if (row < 0 || row >= GameConfig.GRID_HEIGHT || col < 0 || col >= GameConfig.GRID_WIDTH) {
