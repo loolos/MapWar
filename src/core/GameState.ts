@@ -206,7 +206,7 @@ export class GameState {
         return this.players[this.currentPlayerId!];
     }
 
-    endTurn(): { total: number, base: number, land: number, landCount: number } | null {
+    endTurn(): { total: number, base: number, land: number, landCount: number, depletedMines: { r: number, c: number }[] } | null {
         // Switch player
         const currentIndex = this.playerOrder.indexOf(this.currentPlayerId!);
         const nextIndex = (currentIndex + 1) % this.playerOrder.length;
@@ -229,6 +229,7 @@ export class GameState {
 
         let landCount = 0;
         let landIncome = 0;
+        const depletedMines: { r: number, c: number }[] = [];
 
         for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
             for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
@@ -255,13 +256,7 @@ export class GameState {
                         if (Math.random() < GameConfig.GOLD_MINE_DEPLETION_RATE) {
                             // Collapse!
                             cell.building = 'none';
-                            // We can emit an event here if we pass an emitter/context? 
-                            // But GameState is pure data mostly. 
-                            // GameEngine will notice the building change? 
-                            // Or we return a "depletionEvents" list?
-                            // For simplicity, let's just mutate state. 
-                            // Ideally, GameEngine handles the notification by diffing or we return it.
-                            // Let's add a `depletedMines` return to this function.
+                            depletedMines.push({ r, c });
                         }
                     }
                     else if (cell.type !== 'bridge') { // Bridges provide 0 income
@@ -283,7 +278,37 @@ export class GameState {
 
         this.players[playerId].gold += finalTotal;
 
-        return { total: finalTotal, base: baseIncome, land: landIncome, landCount };
+        return { total: finalTotal, base: baseIncome, land: landIncome, landCount, depletedMines };
+    }
+
+    public calculateIncome(playerId: PlayerID): number {
+        if (!playerId) return 0;
+
+        // Ensure connectivity is current
+        this.updateConnectivity(playerId);
+
+        let landIncome = 0;
+
+        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+                const cell = this.grid[r][c];
+                if (cell.owner === playerId) {
+                    if (cell.building === 'town') {
+                        landIncome += cell.townIncome;
+                    } else if (cell.building === 'gold_mine') {
+                        landIncome += GameConfig.GOLD_MINE_INCOME;
+                    } else if (cell.type !== 'bridge') {
+                        if (cell.isConnected) {
+                            landIncome += GameConfig.GOLD_PER_LAND;
+                        } else {
+                            landIncome += GameConfig.GOLD_PER_LAND * 0.5;
+                        }
+                    }
+                }
+            }
+        }
+
+        return Math.floor(GameConfig.GOLD_PER_TURN_BASE + landIncome);
     }
 
     public updateConnectivity(playerId: PlayerID) {

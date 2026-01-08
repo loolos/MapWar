@@ -110,7 +110,7 @@ describe('CellInfoSystem', () => {
         system.update(engine, 0, 0);
 
         // Check Owner Text Update
-        expect(mockText.setText).toHaveBeenCalledWith(expect.stringContaining('Disconnected: 50% Income'));
+        expect(mockText.setText).toHaveBeenCalledWith(expect.stringContaining('Disconnected: 50% Revenue'));
         expect(mockText.setColor).toHaveBeenCalledWith('#ff4444');
     });
 

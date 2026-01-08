@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 
 export class SoundManager {
     private scene: Phaser.Scene;
-    private isMuted: boolean = false;
+    public isMuted: boolean = false;
     private bgm: Phaser.Sound.BaseSound | null = null;
 
     // Volume Config
@@ -251,6 +251,19 @@ export class SoundManager {
                 // Dark Boom
                 playNoise(0.8, 0.6);
                 playTone(55, 'sawtooth', 0.8, 0.4); // Low A1
+            }
+            else if (key.includes('gold_found')) {
+                // Magical Chime / Sparkle
+                playTone(523.25, 'sine', 0.5, 0.3, 0.05); // C5
+                setTimeout(() => playTone(659.25, 'sine', 0.5, 0.3, 0.05), 100); // E5
+                setTimeout(() => playTone(783.99, 'sine', 0.5, 0.3, 0.05), 200); // G5
+                setTimeout(() => playTone(1046.50, 'sine', 0.8, 0.2, 0.1), 300); // C6
+            }
+            else if (key.includes('gold_depleted')) {
+                // Crumble / Collapse
+                playNoise(0.6, 0.5);
+                playTone(60, 'sawtooth', 0.5, 0.4, 0.01); // Low rumble
+                setTimeout(() => playTone(50, 'square', 0.4, 0.3, 0.01), 100);
             }
 
         } catch (e) {

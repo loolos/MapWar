@@ -71,11 +71,15 @@ export class MainScene extends Phaser.Scene {
 
         // Tactical UI Assets (Load as Raw)
         this.load.image('raw_icon_gold', 'assets/icon_gold_blackbg_1767659375024.png');
-        this.load.image('ui_icon_warrior', 'assets/ui_icon_warrior.png');
-        this.load.image('ui_icon_robot', 'assets/ui_icon_robot.png');
+        // this.load.image('ui_icon_warrior', 'assets/ui_icon_warrior.png'); // Unused
+        // this.load.image('ui_icon_robot', 'assets/ui_icon_robot.png'); // Unused
 
         // Gold Mine Asset
         this.load.image('gold_mine', 'assets/gold_mine.png');
+
+        // Avatar Assets (Raw)
+        this.load.image('raw_icon_human', 'assets/cartoon_human.png');
+        this.load.image('raw_icon_robot', 'assets/cartoon_robot.png');
 
         // Audio Assets (Placeholder or Real)
         this.load.audio('sfx_select', 'assets/audio/sfx_select.mp3');
@@ -420,7 +424,11 @@ export class MainScene extends Phaser.Scene {
 
                 // Bottom Right: Buttons (User Req: Buttons BR)
                 // Button Anchor
-                this.buttonSystem.setPosition(width - (sidebarW / 2), height - 80);
+                // Vertical Stack: Center in Sidebar (Width 280, Center 140 from right = width-140)
+                // Button Width 140. Center is 70.
+                // X = (width - 280) + (280 - 140)/2 = width - 280 + 70 = width - 210.
+                // Y: height - 130 (Space for 2 buttons + gap)
+                this.buttonSystem.setPosition(width - 210, height - 130);
 
                 // Notifications (Overlay Removed)
                 // this.notificationSystem.resize(300, 0);
@@ -474,15 +482,26 @@ export class MainScene extends Phaser.Scene {
                 this.cameraControlsContainer.setVisible(true);
                 // Adjust controls position
                 this.cameraControlsContainer.setPosition(width - 60, height / 2); // Center right?
+
+                // Clamp map position if scrollable
+                const minX = mapX + mapAreaW - scaledMapW - 20;
+                const maxX = mapX + 20;
+                const minY = mapY + mapAreaH - scaledMapH - 20;
+                const maxY = mapY + 20;
+
+                this.mapOffsetX = Phaser.Math.Clamp(this.mapOffsetX, minX, maxX);
+                this.mapOffsetY = Phaser.Math.Clamp(this.mapOffsetY, minY, maxY);
             } else {
                 this.cameraControlsContainer.setVisible(false);
+                this.mapOffsetX = targetX; // Center if not scrollable
+                this.mapOffsetY = targetY;
             }
-
-            this.mapContainer.setPosition(targetX, targetY);
-            this.mapOffsetX = this.mapContainer.x;
-            this.mapOffsetY = this.mapContainer.y;
+            this.mapContainer.setPosition(this.mapOffsetX, this.mapOffsetY);
 
             this.drawMap();
+
+            // Refresh buttons based on layout
+            this.setupButtons();
 
         } catch (err) {
             console.error("MainScene.resize CRASHED:", err);
@@ -492,11 +511,31 @@ export class MainScene extends Phaser.Scene {
 
 
     setupButtons() {
-        // Slot 0 (Row 0, Col 0): End Turn
-        // Use text update if button already exists? ActionButtonSystem recreate clears them.
         this.buttonSystem.clearButtons();
+
+        // Detect Layout
+        const isLandscape = this.scale.width > this.scale.height;
+
+        // Slot Configuration
+        // Portrait: Side-by-Side (0,0), (0,1)
+        // Landscape: Stacked (0,0), (1,0)
+
+        // Button 1: End Turn
         this.buttonSystem.addButton(0, 0, "END TURN", () => {
             this.engine.endTurn();
+        });
+
+        // Button 2: Mute
+        const isMuted = (this.soundManager as any).isMuted;
+        const label = isMuted ? "UNMUTE 🔇" : "MUTE 🔊";
+
+        const r2 = isLandscape ? 1 : 0;
+        const c2 = isLandscape ? 0 : 1;
+
+        this.buttonSystem.addButton(r2, c2, label, () => {
+            this.soundManager.toggleMute();
+            // Re-render buttons to update label
+            this.setupButtons();
         });
     }
 
@@ -613,7 +652,16 @@ export class MainScene extends Phaser.Scene {
                     const baseText = this.add.text(x + this.tileSize / 2, y + this.tileSize / 2, '🏰', { fontSize: '32px' }).setOrigin(0.5);
                     this.mapContainer.add(baseText);
                 } else if (cell.building === 'town') {
-                    const townText = this.add.text(x + this.tileSize / 2, y + this.tileSize / 2, '🏠', { fontSize: '28px' }).setOrigin(0.5);
+                    let icon = '🏠'; // Level 1 (Income < 4)
+                    let size = '28px';
+                    if (cell.townIncome >= 8) {
+                        icon = '🏘️'; // Level 3 (City)
+                        size = '32px';
+                    } else if (cell.townIncome >= 4) {
+                        icon = '🏡'; // Level 2 (Town)
+                        size = '30px';
+                    }
+                    const townText = this.add.text(x + this.tileSize / 2, y + this.tileSize / 2, icon, { fontSize: size }).setOrigin(0.5);
                     this.mapContainer.add(townText);
                 }
                 // Gold Mine removed from here

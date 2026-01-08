@@ -165,6 +165,12 @@ export class GameEngine {
         this.emit('turnChange');
         if (incomeReport) {
             this.emit('incomeReport', incomeReport);
+            if (incomeReport.depletedMines && incomeReport.depletedMines.length > 0) {
+                incomeReport.depletedMines.forEach(m => {
+                    this.emit('logMessage', `Gold Mine collapsed at (${m.r}, ${m.c})!`);
+                });
+                this.emit('sfx:gold_depleted');
+            }
         }
 
         // AI Check
@@ -399,16 +405,11 @@ export class GameEngine {
             this.state.setOwner(move.r, move.c, pid);
 
             // Gold Mine Discovery (Hill + Neutral Capture)
-            if (cell.type === 'hill' && !hasCombat) { // Must be neutral hill
+            if (cell.type === 'hill' && !hasCombat) {
                 if (Math.random() < GameConfig.GOLD_MINE_CHANCE) {
                     this.state.setBuilding(move.r, move.c, 'gold_mine');
                     this.emit('logMessage', `Gold Mine discovered at (${move.r}, ${move.c})!`);
-                    this.emit('sfx:gold_mine_found'); // We need to add this sfx or reuse one? Re-use 'conquer' for now? Wait, user asked for new sfx? No.
-                    // User didn't specify NEW SFX for mine, just mechanics. 
-                    // Using 'sfx:capture_town' style chime might be nice, or just let it be silent?
-                    // I'll emit 'sfx:capture_town' as a placeholder or add a specific one later.
-                    // Let's use 'sfx:capture_town' for the "Good Event" feel.
-                    this.emit('sfx:capture_town');
+                    this.emit('sfx:gold_found');
                 }
             }
 

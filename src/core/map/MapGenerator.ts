@@ -112,46 +112,65 @@ export class MapGenerator {
 
         // 1. Create Skeleton: Connect Center to All Spawns
         // This ensures everyone is on the main continent
-        const targetLand = Math.floor(width * height * 0.65);
+        const targetLand = Math.floor(width * height * 0.85); // Increased from 0.65 to 0.85
 
-        // Add center node
-        this.growClusterAt(grid, centerY, centerX, 'plain', Math.floor(targetLand * 0.2), 'water');
+        // Add Center Node - Larger Core
+        this.growClusterAt(grid, centerY, centerX, 'plain', Math.floor(targetLand * 0.3), 'water'); // 30% at center
 
         // Draw thick arms to each spawn
         for (let i = 0; i < playerCount; i++) {
-            const spawn = this.getSpawnPoint(i, playerCount, width, height);
+            // Force Edge Spawn calculation
+            // Use existing angle logic but push to very edge
+            const angle = (i / playerCount) * 2 * Math.PI - (Math.PI / 2);
+            // Angle matching standard spawn rotation (-3PI/4)
+            const finalAngle = angle + (-3 * Math.PI / 4);
 
-            // Draw line from center to spawn using Manhattan steps to ensure 4-way connectivity
-            let r = centerY;
-            let c = centerX;
+            const r = Math.round(centerY + (height * 0.45) * Math.sin(finalAngle)); // 45% radius (90% diam) -> Near edge
+            const c = Math.round(centerX + (width * 0.45) * Math.cos(finalAngle));
 
-            while (r !== spawn.r || c !== spawn.c) {
-                // Determine next step
-                // Mix axes prevents zigzag looking too artificial if we just did all X then all Y?
-                // Standard Bresenham is best for look, but 4-way requires "filling corners".
-                // Simple approach: Move along major axis first? Or behave like "King"?
-                // To guarantee 4-way, we must move only 1 tile in 1 axis per step.
+            // Clamp
+            const spawnR = Math.max(1, Math.min(height - 2, r));
+            const spawnC = Math.max(1, Math.min(width - 2, c));
 
-                const dr = spawn.r - r;
-                const dc = spawn.c - c;
+            // Force spawn point land immediately
+            this.growClusterAt(grid, spawnR, spawnC, 'plain', 20, 'water'); // Ensure spawn has land
+
+            // Draw line from center to spawn using simple march
+            let currR = centerY;
+            let currC = centerX;
+
+            while (Math.abs(currR - spawnR) > 1 || Math.abs(currC - spawnC) > 1) {
+                const dr = spawnR - currR;
+                const dc = spawnC - currC;
 
                 if (Math.abs(dr) > Math.abs(dc)) {
-                    r += Math.sign(dr);
+                    currR += Math.sign(dr);
                 } else {
-                    c += Math.sign(dc);
+                    currC += Math.sign(dc);
                 }
 
-                // Paint & Thicken
-                if (this.isValid(grid, r, c)) {
-                    grid[r][c].type = 'plain';
-                    // Thicken
-                    this.growClusterAt(grid, r, c, 'plain', 6, undefined);
+                if (this.isValid(grid, currR, currC)) {
+                    grid[currR][currC].type = 'plain';
+                    // Thicken Significantly (Arm width 8-10)
+                    this.growClusterAt(grid, currR, currC, 'plain', 12, undefined);
                 }
             }
         }
 
-        // 2. Bulk up the center to fuse arms
-        this.growClusterAt(grid, centerY, centerX, 'plain', Math.floor(targetLand * 0.4), 'water');
+        // 2. Bulk up randomly to reach target %
+        // Already did heavy clustering. Let's do a few random fills to fuse gaps
+        let currentLand = grid.flat().filter(c => c.type === 'plain').length;
+        let safety = 0;
+
+        while (currentLand < targetLand && safety < 100) {
+            safety++;
+            const rr = Math.floor(Math.random() * height);
+            const cc = Math.floor(Math.random() * width);
+            if (grid[rr][cc].type === 'plain') {
+                this.growClusterAt(grid, rr, cc, 'plain', 20, 'water');
+            }
+            currentLand = grid.flat().filter(c => c.type === 'plain').length;
+        }
 
         // 3. Add Hills
         this.scatterTerrain(grid, 'hill', 0.15, 'plain');

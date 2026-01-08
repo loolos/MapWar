@@ -109,6 +109,9 @@ vi.mock('phaser', () => {
                         setInteractive: vi.fn(() => t),
                         on: vi.fn(() => t),
                         setStyle: vi.fn(() => t),
+                        setText: vi.fn(() => t),
+                        setScrollFactor: vi.fn(() => t),
+                        setDepth: vi.fn(() => t),
                         width: 100,
                         setScale: vi.fn(() => t),
                         setPosition: vi.fn(() => t)
@@ -388,5 +391,27 @@ describe('MainScene', () => {
         // Let's verify it is NOT called with 0x555555 (NEUTRAL constant)
         expect(fillStyleSpy).not.toHaveBeenCalledWith(0x555555, expect.anything());
         // Also check it wasn't called with undefined/1.0 alpha for these tiles (only strokes)
+    });
+
+    it('adds mute button to action system', () => {
+        const addButtonSpy = scene.buttonSystem.addButton as any;
+
+        // Setup initial sound state
+        scene.soundManager.isMuted = false;
+
+        addButtonSpy.mockClear();
+        scene.setupButtons();
+
+        // Should add End Turn and Mute
+        expect(addButtonSpy).toHaveBeenCalledTimes(2);
+        // Mock is 800x600 (Landscape) -> Expect (1, 0)
+        expect(addButtonSpy).toHaveBeenCalledWith(1, 0, "MUTE 🔊", expect.any(Function));
+
+        // simulate click logic manually since we can't easily trigger the anonymous callback from here without capturing it
+        // But we can verify label logic
+
+        scene.soundManager.isMuted = true;
+        scene.setupButtons();
+        expect(addButtonSpy).toHaveBeenCalledWith(1, 0, "UNMUTE 🔇", expect.any(Function));
     });
 });

@@ -96,6 +96,8 @@ export class CellInfoSystem {
         let typeStr = cell.type.charAt(0).toUpperCase() + cell.type.slice(1);
         if (cell.building === 'gold_mine') {
             typeStr = "Gold Mine";
+        } else if (cell.building === 'town') {
+            typeStr = "Town (Village)";
         }
         this.typeText.setText(`Type: ${typeStr}`);
 
@@ -104,7 +106,7 @@ export class CellInfoSystem {
         let ownerDisplay = `Owner: ${owner}`;
 
         if (cell.owner && !cell.isConnected) {
-            ownerDisplay += '\n(Disconnected: 50% Income)';
+            ownerDisplay += '\n(Disconnected: 50% Revenue)';
         }
 
         this.ownerText.setText(ownerDisplay);
@@ -118,14 +120,28 @@ export class CellInfoSystem {
         if (cost === Infinity) costStr = 'X';
         this.costText.setText(`Cost: ${costStr}`);
 
-        // Description
+        // Description & Revenue
         let desc = GameConfig.TERRAIN_DESCRIPTIONS[cell.type.toUpperCase() as keyof typeof GameConfig.TERRAIN_DESCRIPTIONS];
+        let revenueMsg = "";
 
         if (cell.building === 'gold_mine') {
             desc = "Gold Mine: Generates +5 Gold/turn. Can deplete.";
+            revenueMsg = "\nRevenue: +5 G";
+        } else if (cell.building === 'town') {
+            desc = `Town: Generates +${cell.townIncome} G/turn.\nGrows over time (Inc: +${GameConfig.TOWN_INCOME_GROWTH} every ${GameConfig.TOWN_GROWTH_INTERVAL} turns).`;
+            revenueMsg = `\nRevenue: +${cell.townIncome} G`;
+        } else if (cell.type !== 'bridge') {
+            // Land Revenue
+            const baseRev = GameConfig.GOLD_PER_LAND;
+            if (cell.owner) {
+                const actual = cell.isConnected ? baseRev : baseRev * 0.5;
+                revenueMsg = `\nRevenue: +${actual} G`;
+            } else {
+                revenueMsg = `\nPotential: +${baseRev} G`;
+            }
         }
 
-        this.descText.setText(desc || '');
+        this.descText.setText((desc || '') + revenueMsg);
     }
 
     public setPosition(x: number, y: number) {

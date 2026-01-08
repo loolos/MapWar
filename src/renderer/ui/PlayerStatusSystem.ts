@@ -111,6 +111,14 @@ export class PlayerStatusSystem {
                 const goldTxt = row.getAt(2) as Phaser.GameObjects.Text;
                 goldTxt.setText(player.gold.toString());
 
+                // Income text (Index 5 - see creation)
+                // Wait, if I append, index is row.length - 1?
+                // Let's get index by checking if I added it
+                // I will add it as child 5 in create logic.
+                const incomeTxt = row.getAt(5) as Phaser.GameObjects.Text;
+                const income = engine.state.calculateIncome(pid);
+                incomeTxt.setText(`+${income}/t`);
+
                 // Alpha Update
                 const currentId = state.currentPlayerId || '';
                 const pAlpha = currentId === pid ? 1 : 0.4;
@@ -190,6 +198,22 @@ export class PlayerStatusSystem {
         const icon = scene.add.image(210, h / 2, iconKey)
             .setDisplaySize(28, 28); // Standard size for icon, keep it visible
         row.add(icon);
+
+        // Income (Bottom Right / Below Gold)
+        // Or Top Right?
+        // Let's put it top right in compact
+        // Let's put it top right in compact
+        const incomeText = scene.add.text(140, isCompact ? h / 2 : h - 10, '+0/t', {
+            fontFamily: 'Arial', fontSize: '10px', color: '#88ff88'
+        });
+        incomeText.setOrigin(1, isCompact ? -0.5 : 0.5); // Push below gold or tweak
+        // Actually, let's put it aligned with Gold but smaller
+        // Gold 140. Coin 155. Icon 210.
+        // Let's put Income at 100? Or replace "Turn" text somewhere?
+        // Let's put it next to Coin? 170?
+        incomeText.setPosition(175, goldY);
+        incomeText.setOrigin(0, 0.5);
+        row.add(incomeText);
 
         return row;
     }
