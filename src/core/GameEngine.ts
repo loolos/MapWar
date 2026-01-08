@@ -253,6 +253,12 @@ export class GameEngine {
             // Maybe they mean if disconnected? No, likely just standard attack rules apply.
         }
 
+        // Apply Global Multipliers
+        // isAttack is true if target is owned by Enemy
+        // if !isAttack, it is Neutral capture (since we can't move to own cell)
+        const multiplier = isAttack ? GameConfig.COST_MULTIPLIER_ATTACK : GameConfig.COST_MULTIPLIER_NEUTRAL;
+        baseCost = Math.floor(baseCost * multiplier);
+
         // Distance Penalty Logic (Double if chained)
         if (isAttack) {
             // Vulnerability Rule: Disconnected enemy land is CHEAPER (30% off)
