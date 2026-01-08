@@ -64,8 +64,13 @@ describe('GameEngine - Town Mechanics', () => {
         engine.state.setBuilding(0, 2, 'base');
         engine.state.updateConnectivity('P2');
 
+        engine.state.currentPlayerId = 'P1'; // Ensure P1
+
+        // Ensure adjacency check works
+        // const isAdj = engine.state.isAdjacentToOwned(0, 1, 'P1');
+
         const cost = engine.getMoveCost(0, 1);
-        expect(cost).toBe(GameConfig.COST_ATTACK); // 20 (Standard attack)
+        expect(cost).toBe(GameConfig.COST_ATTACK); // 20
     });
 
     it('charges higher cost to capture disconnected helper town? No, standard rules apply', () => {

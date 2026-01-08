@@ -8,73 +8,123 @@ export class AIController {
         this.engine = engine;
     }
 
-    // AI Logic (Simple Greedy / Random)
+    // AI Logic (Robust & Strategic)
     playTurn() {
         try {
             const aiPlayer = this.engine.state.getCurrentPlayer();
             if (!aiPlayer.isAI) return;
 
-            // Simple Strategy:
-            // 1. Identify all owned cells with potential expansion (adjacent unowned)
-            // 2. Prioritize capturing high value targets (bases > disconnected lands > hills > plains)
-            // 3. Or just random expansion if easy.
-
-            // Clear previous AI moves
+            // Clear previous stats
             this.engine.lastAiMoves = [];
 
-            const moves: { r: number, c: number, score: number }[] = [];
-            const grid = this.engine.state.grid;
+            // Helper: Refresh Valid Moves
+            const getValidMoves = () => {
+                const moves: { r: number, c: number, score: number, cell: any, cost: number }[] = [];
+                const grid = this.engine.state.grid;
 
-            for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-                for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
-                    // Check if valid move
-                    const validation = this.engine.validateMove(r, c);
-                    if (validation.valid) {
-                        let score = 1;
-                        const cell = grid[r][c];
+                for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+                    for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+                        const validation = this.engine.validateMove(r, c);
+                        if (validation.valid) {
+                            const cell = grid[r][c];
+                            const cost = this.engine.getMoveCost(r, c);
 
-                        if (cell.building === 'base') score += 100; // Attack Base!
-                        if (cell.building === 'town') score += 20; // Capture Town!
-                        if (cell.type === 'hill') score += 5; // Good defense
-                        if (cell.owner && cell.owner !== aiPlayer.id) {
-                            score += 10; // Attack Enemy Land
-                            if (!cell.isConnected) score += 5; // Cheap attack
+                            // HEURISTIC SCORING
+                            let score = 10; // Base value
+
+                            // 1. Objectives
+                            if (cell.building === 'base' && cell.owner !== aiPlayer.id) score += 10000; // WIN CONDITION
+                            else if (cell.building === 'town' && cell.owner !== aiPlayer.id) score += 500; // HIGH VALUE
+
+                            // 2. Aggression
+                            else if (cell.owner && cell.owner !== aiPlayer.id) {
+                                score += 100; // Capture Enemy Land
+                                if (!cell.isConnected) score += 50; // Cut off enemy (Mock logic: if we could detect it)
+                            }
+
+                            // 3. Defense / tactical
+                            else if (cell.type === 'hill') score += 50; // High Ground
+                            else if (cell.type === 'bridge') score += 60; // Chokepoint
+
+                            // 4. Expansion (Neutral)
+                            else if (cell.owner === null) {
+                                score += 20;
+                            }
+
+                            // 5. Look-Ahead Bonus (Proximity to targets)
+                            // Check neighbors of this candidate cell
+                            const neighbors = [
+                                { r: r + 1, c: c }, { r: r - 1, c: c },
+                                { r: r, c: c + 1 }, { r: r, c: c - 1 }
+                            ];
+
+                            for (const n of neighbors) {
+                                if (n.r >= 0 && n.r < GameConfig.GRID_HEIGHT && n.c >= 0 && n.c < GameConfig.GRID_WIDTH) {
+                                    const nCell = grid[n.r][n.c];
+                                    // If moving here puts us next to a Town/Base we don't own, that's good!
+                                    if (nCell.owner !== aiPlayer.id) {
+                                        if (nCell.building === 'town') score += 100; // Path to Town
+                                        if (nCell.building === 'base') score += 200; // Path to Base
+                                    }
+                                }
+                            }
+
+                            // 6. Cost Penalty (Optimize spending)
+                            // Ideally we want high value for low cost
+                            score -= (cost * 0.5);
+
+                            // Random noise to prevent identical loops
+                            score += Math.random() * 10;
+
+                            moves.push({ r, c, score, cell, cost });
                         }
-
-                        // Random noise
-                        score += Math.random() * 2;
-
-                        moves.push({ r, c, score });
                     }
                 }
-            }
+                return moves.sort((a, b) => b.score - a.score);
+            };
 
-            // Sort by score
-            moves.sort((a, b) => b.score - a.score);
+            // PASS 1: EXECUTION LOOP
+            // We loop until we can't afford any more moves or no valid moves exist
+            let safetyCounter = 0;
+            const MAX_MOVES = 50; // Prevent infinite loops
 
-            // Execute as many moves as possible from top of list
-            let attempts = 0;
-            for (const m of moves) {
-                if (attempts > 5) break;
+            while (safetyCounter < MAX_MOVES) {
+                // Re-evaluate moves every step because state changes (gold, connectivity)
+                const potentialMoves = getValidMoves();
 
-                // Validate again? engine.validateMove checks gold cost.
-                // If we run out of gold, this will just fail to add plan or execution.
-                // But we are using togglePlan.
-                this.engine.togglePlan(m.r, m.c);
+                if (potentialMoves.length === 0) break; // No moves possible
+
+                const bestMove = potentialMoves[0];
+
+                // Try to Execute
+                this.engine.togglePlan(bestMove.r, bestMove.c);
 
                 if (this.engine.lastError) {
-                    // Failed (likely money). Try next move!
-                    continue;
+                    // Check if error is 'Not enough gold'
+                    // If so, we are done (since we sorted by score, maybe a cheaper move is lower? 
+                    // But getValidMoves checks validateMove which checks gold)
+                    // So this error shouldn't theoretically happen if validateMove is accurate.
+                    // But if it does, break to avoid infinite loop of trying same failing move.
+                    console.warn(`AI Failed to execute valid move at ${bestMove.r},${bestMove.c}: ${this.engine.lastError}`);
+                    break;
                 } else {
-                    this.engine.lastAiMoves.push({ r: m.r, c: m.c });
+                    // Success - Commit immediately
+                    this.engine.lastAiMoves.push({ r: bestMove.r, c: bestMove.c });
                     this.engine.commitMoves();
-                    attempts++;
                 }
+
+                safetyCounter++;
             }
+
+            if (safetyCounter === 0) {
+                // If we did nothing, log why (Debugging)
+                console.log(`AI (${aiPlayer.id}) passed turn (No valid moves). Gold: ${aiPlayer.gold}`);
+            }
+
         } catch (err) {
             console.error("AI Logic Exception:", err);
         } finally {
-            // End Turn ALWAYS
+            // End Turn ALWAYS to prevent hang
             this.engine.endTurn();
         }
     }

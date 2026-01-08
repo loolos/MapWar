@@ -60,14 +60,20 @@ export class SoundManager {
         }
     }
 
+    // Dynamic BGM State
+    public intensity: number = 0.0; // 0.0 (Peaceful) to 1.0 (War)
     private bgmInterval: any = null;
+
+    public setIntensity(val: number) {
+        this.intensity = Math.max(0, Math.min(1, val));
+    }
 
     private playBgmFallback() {
         if (this.bgmInterval) clearInterval(this.bgmInterval);
 
-        // Simple "March" Loop: Dum... Dum... Dum-Dum-Dum
-        // const beatInterval = 1000; // Unused
         let beat = 0;
+        // Pentatonic Scale (C Maj): C4, D4, E4, G4, A4, C5
+        const SCALE = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25]; // Hz
 
         const loop = () => {
             if (this.isMuted) return;
@@ -76,49 +82,52 @@ export class SoundManager {
                 if (!ctx || ctx.state === 'suspended') return;
                 const now = ctx.currentTime;
 
-                const playDrum = (vol: number, pitch = 100) => {
-                    // Reuse playSynths logic or simple quick implementation here to avoid scope issues
-                    // Thud
+                // --- TRACK 1: AMBIENT MELODY (Always On, "Minecraft-like") ---
+                // Probability of playing a note depends on "Peaceful" vibes. 
+                // In war (intensity 1), melody becomes sparse or frantic? Let's keep it calm to contrast.
+                // 25% chance per beat to play a note
+                if (Math.random() < 0.25) {
+                    const note = SCALE[Math.floor(Math.random() * SCALE.length)];
                     const osc = ctx.createOscillator();
                     const gain = ctx.createGain();
-                    osc.frequency.setValueAtTime(pitch, now);
-                    osc.type = 'triangle';
-                    gain.gain.setValueAtTime(vol, now);
-                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+
+                    osc.type = 'sine'; // Pure, calm tone
+                    osc.frequency.setValueAtTime(note, now);
+
                     osc.connect(gain);
                     gain.connect(ctx.destination);
-                    osc.start(now);
-                    osc.stop(now + 0.2);
-                };
 
-                // Beat Pattern: 1 (Strong), 2 (Weak), 3 (Strong), 4 (Roll)
-                if (beat % 4 === 0) playDrum(0.3, 80);
-                else if (beat % 4 === 2) playDrum(0.3, 80);
-                else if (beat % 4 === 3) playDrum(0.1, 120); // Offbeat
-
-                // Ambient String swell every 4 beats
-                if (beat % 8 === 0) {
-                    // Low Cello Drone
-                    const osc = ctx.createOscillator();
-                    const gain = ctx.createGain();
-                    osc.frequency.setValueAtTime(130.81, now); // C3
-                    osc.type = 'sawtooth';
-
-                    // Lowpass filter for "String" sound
-                    const filter = ctx.createBiquadFilter();
-                    filter.type = 'lowpass';
-                    filter.frequency.setValueAtTime(400, now);
-
-                    osc.connect(filter);
-                    filter.connect(gain);
-                    gain.connect(ctx.destination);
-
+                    // Long attack/release for pad/ambient feel
                     gain.gain.setValueAtTime(0, now);
-                    gain.gain.linearRampToValueAtTime(0.1, now + 1.0);
-                    gain.gain.linearRampToValueAtTime(0, now + 4.0);
+                    gain.gain.linearRampToValueAtTime(0.1, now + 0.5);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 4.0); // Long tail
 
                     osc.start(now);
                     osc.stop(now + 4.0);
+                }
+
+                // --- TRACK 2: WAR DRUMS (Intensity Layer) ---
+                // Volume scales with intensity. At 0 intensity, volume is 0.
+                const drumVol = this.intensity * 0.4;
+
+                if (drumVol > 0.01) {
+                    const playDrum = (vol: number, pitch = 100) => {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.frequency.setValueAtTime(pitch, now);
+                        osc.type = 'triangle';
+                        gain.gain.setValueAtTime(vol, now);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start(now);
+                        osc.stop(now + 0.1);
+                    };
+
+                    // Marching Rhythm
+                    if (beat % 4 === 0) playDrum(drumVol, 80);
+                    else if (beat % 4 === 2) playDrum(drumVol, 80);
+                    else if (beat % 4 === 3) playDrum(drumVol * 0.5, 120);
                 }
 
                 beat++;
@@ -127,7 +136,9 @@ export class SoundManager {
             }
         };
 
-        this.bgmInterval = setInterval(loop, 500); // Quarter notes at 120BPM logic (500ms)
+        // Variable Tempo? For now fixed interval, but maybe faster update?
+        // 500ms = 120 BPM. 
+        this.bgmInterval = setInterval(loop, 500);
     }
 
     public toggleMute() {

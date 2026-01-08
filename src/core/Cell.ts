@@ -7,7 +7,7 @@ export class Cell {
     col: number;
     owner: PlayerID;
     unit: any | null; // Placeholder for Unit class
-    building: 'base' | 'town' | 'none';
+    building: 'base' | 'town' | 'gold_mine' | 'none';
     isConnected: boolean;
     type: CellType;
 

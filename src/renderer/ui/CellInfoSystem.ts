@@ -93,7 +93,10 @@ export class CellInfoSystem {
         this.coordsText.setText(`Pos: (${selectedRow}, ${selectedCol})`);
 
         // Type
-        const typeStr = cell.type.charAt(0).toUpperCase() + cell.type.slice(1);
+        let typeStr = cell.type.charAt(0).toUpperCase() + cell.type.slice(1);
+        if (cell.building === 'gold_mine') {
+            typeStr = "Gold Mine";
+        }
         this.typeText.setText(`Type: ${typeStr}`);
 
         // Owner
@@ -116,7 +119,12 @@ export class CellInfoSystem {
         this.costText.setText(`Cost: ${costStr}`);
 
         // Description
-        const desc = GameConfig.TERRAIN_DESCRIPTIONS[cell.type.toUpperCase() as keyof typeof GameConfig.TERRAIN_DESCRIPTIONS];
+        let desc = GameConfig.TERRAIN_DESCRIPTIONS[cell.type.toUpperCase() as keyof typeof GameConfig.TERRAIN_DESCRIPTIONS];
+
+        if (cell.building === 'gold_mine') {
+            desc = "Gold Mine: Generates +5 Gold/turn. Can deplete.";
+        }
+
         this.descText.setText(desc || '');
     }
 

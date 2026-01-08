@@ -71,8 +71,11 @@ export class MainScene extends Phaser.Scene {
 
         // Tactical UI Assets (Load as Raw)
         this.load.image('raw_icon_gold', 'assets/icon_gold_blackbg_1767659375024.png');
-        this.load.image('raw_icon_human', 'assets/cartoon_human.png');
-        this.load.image('raw_icon_robot', 'assets/cartoon_robot.png');
+        this.load.image('ui_icon_warrior', 'assets/ui_icon_warrior.png');
+        this.load.image('ui_icon_robot', 'assets/ui_icon_robot.png');
+
+        // Gold Mine Asset
+        this.load.image('gold_mine', 'assets/gold_mine.png');
 
         // Audio Assets (Placeholder or Real)
         this.load.audio('sfx_select', 'assets/audio/sfx_select.mp3');
@@ -548,25 +551,19 @@ export class MainScene extends Phaser.Scene {
         // Phaser graphics clear is cheap.
         // We reuse Text objects for Bases? We probably should pool them.
         // For now, let's clear texts.
-        // Clean up transient objects (Base Labels)
-        // We do NOT want to destroy our Graphics layers or Terrain images here.
-        // Terrain images are managed by initializeTerrainVisuals.
-        // Graphics layers are persistent.
-
-        // We only need to remove/destroy Labels (Text) created in previous drawMap
-        // Iterate backwards to safely remove
+        // Clean up transient objects (Base Labels, Gold Mines)
         const children = this.mapContainer.list;
         for (let i = children.length - 1; i >= 0; i--) {
-            const child = children[i];
+            const child = children[i] as any;
             if (child.type === 'Text') {
                 child.destroy();
             }
+            // Explicitly remove dynamic Gold Mine sprites (Images)
+            // But verify it's not a terrain tile (which are also Images)
+            else if (child.type === 'Image' && child.texture && child.texture.key === 'gold_mine') {
+                child.destroy();
+            }
         }
-
-        // Ensure layers are in correct order (in case things got shuffled?)
-        // Usually not needed if we just append Texts on top.
-        // But let's ensure Z-order if needed.
-        // mapContainer.bringToTop(this.highlightGraphics);
 
         // --- RENDER LOOP ---
         const grid = this.engine.state.grid;
@@ -578,6 +575,18 @@ export class MainScene extends Phaser.Scene {
                 const cell = grid[r][c];
                 const x = c * this.tileSize;
                 const y = r * this.tileSize;
+
+                // 0. SPECIAL TERRAIN REPLACEMENT (Gold Mine)
+                if (cell.building === 'gold_mine') {
+                    // Render Gold Mine Image acting as Terrain
+                    const mineSprite = this.add.image(x + this.tileSize / 2, y + this.tileSize / 2, 'gold_mine');
+                    mineSprite.setDisplaySize(this.tileSize * 1.0, this.tileSize * 1.0); // Full tile
+                    this.mapContainer.add(mineSprite);
+
+                    // Crucial: Move it BELOW the gridGraphics (which draws the color overlay)
+                    // but ABOVE the static terrain (which is sentToBack)
+                    this.mapContainer.moveBelow(mineSprite, this.gridGraphics as any);
+                }
 
                 // 1. TERRAIN & OWNER COLOR
                 // We do NOT draw opaque backgrounds for terrain types anymore.
@@ -595,36 +604,19 @@ export class MainScene extends Phaser.Scene {
                         this.drawDisconnectedPattern(this.gridGraphics, x, y, this.tileSize, color);
                     }
                 }
-
                 // Always draw a faint grid border to separate tiles visually
                 this.gridGraphics.lineStyle(1, 0x000000, 0.3);
                 this.gridGraphics.strokeRect(x, y, this.tileSize, this.tileSize);
 
-                // 2. BUILDINGS
+                // 3. BUILDINGS (Towns, Bases) - Gold Mine already drawn
                 if (cell.building === 'base') {
-                    // Add Base Icon/Text
-                    const baseText = this.add.text(x + this.tileSize / 2, y + this.tileSize / 2, '⌂', {
-                        fontSize: `${this.tileSize * 0.6}px`,
-                        color: '#ffffff',
-                        stroke: '#000000',
-                        strokeThickness: 4
-                    }).setOrigin(0.5);
+                    const baseText = this.add.text(x + this.tileSize / 2, y + this.tileSize / 2, '🏰', { fontSize: '32px' }).setOrigin(0.5);
                     this.mapContainer.add(baseText);
                 } else if (cell.building === 'town') {
-                    // Towns
-                    const icon = '🏠';
-                    const income = cell.townIncome;
-                    const label = cell.owner ? `${icon}\n+${income}` : `${icon}`;
-
-                    const townText = this.add.text(x + this.tileSize / 2, y + this.tileSize / 2, label, {
-                        fontSize: `${this.tileSize * 0.35}px`,
-                        color: '#ffff00',
-                        stroke: '#000000',
-                        strokeThickness: 3,
-                        align: 'center'
-                    }).setOrigin(0.5);
+                    const townText = this.add.text(x + this.tileSize / 2, y + this.tileSize / 2, '🏠', { fontSize: '28px' }).setOrigin(0.5);
                     this.mapContainer.add(townText);
                 }
+                // Gold Mine removed from here
 
                 // 3. SELECTION / HIGHLIGHTS
                 // Pending Moves
@@ -721,7 +713,7 @@ export class MainScene extends Phaser.Scene {
             this.logSystem.addLog(this.engine.lastError, 'error');
             // Overlay warning for errors removed
         } else if (totalCost > currentGold) {
-            // this.logSystem.addLog(`Need ${totalCost}G`, 'warning');
+            // this.logSystem.addLog(`Need ${ totalCost } G`, 'warning');
         } else {
             // Default
         }
@@ -740,6 +732,12 @@ export class MainScene extends Phaser.Scene {
             this.drawMap();
             this.updateUI();
             this.hasRenderedOnce = true;
+        }
+
+        // Update Audio Intensity
+        if (this.engine) {
+            const intensity = this.engine.calculateIntensity();
+            this.soundManager.setIntensity(intensity);
         }
 
         // Handle Map Scrolling

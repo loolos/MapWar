@@ -14,6 +14,10 @@ export const GameConfig = {
     TOWN_INCOME_GROWTH: 1,
     TOWN_INCOME_CAP: 10,
     TOWN_GROWTH_INTERVAL: 2,
+    // Gold Mine Configs
+    GOLD_MINE_CHANCE: 0.2, // 20%
+    GOLD_MINE_INCOME: 5,
+    GOLD_MINE_DEPLETION_RATE: 0.05, // 5% per turn
     TERRAIN_COSTS: {
         PLAIN: 1,
         HILL: 2,

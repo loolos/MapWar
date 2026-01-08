@@ -13,7 +13,6 @@ export class LogSystem {
     private logLines: Phaser.GameObjects.Text[] = [];
     private messages: LogEntry[] = [];
     private maxMessages: number = 8;
-    private lineHeight: number = 20;
 
     constructor(scene: Phaser.Scene, x: number, y: number, width: number, height: number) {
         this.container = scene.add.container(x, y);
@@ -77,23 +76,55 @@ export class LogSystem {
     }
 
     private refresh() {
-        // Render from bottom up: index 0 = newest message (at the bottom)
+        // Render from bottom up: index 0 = newest message
         const reversedMessages = [...this.messages].reverse();
+
+        // Start from bottom of the container
+        // We need to access container height. We stored it? No.
+        // Let's assume resize was called and we can get it from background?
+        // Or store it.
+        // Let's rely on stored dimensions if possible, or pass it. 
+        // We'll add 'lastWidth' and 'lastHeight' props to class.
+        if (!this.lastHeight) return;
+
+        let currentY = this.lastHeight - 5; // Bottom margin
 
         for (let i = 0; i < this.maxMessages; i++) {
             const lineObj = this.logLines[i];
+
             if (i < reversedMessages.length) {
                 const msg = reversedMessages[i];
                 lineObj.setText(msg.text);
                 lineObj.setColor(msg.color);
                 lineObj.setVisible(true);
+
+                // Force update to get correct height
+                lineObj.updateText();
+
+                const h = lineObj.height;
+
+                // Position: Bottom of text = currentY
+                // Top of text = currentY - h
+                lineObj.setPosition(5, currentY - h);
+
+                // Move cursor up
+                currentY -= (h + 2); // 2px gap
+
+                // If we go above the top, hide it?
+                if (currentY < 0) {
+                    lineObj.setVisible(false);
+                }
             } else {
                 lineObj.setVisible(false);
             }
         }
     }
 
+    private lastHeight: number = 300;
+
     public resize(width: number, height: number) {
+        this.lastHeight = height;
+
         this.background.clear();
         this.background.fillStyle(0x000000, 0.8);
         this.background.fillRoundedRect(0, 0, width, height, 4);
@@ -102,18 +133,13 @@ export class LogSystem {
         this.background.lineStyle(1, 0x444444);
         this.background.strokeRoundedRect(0, 0, width, height, 4);
 
-        // Update Text Lines Positions
-        const bottomMargin = 5;
-
+        // Update Text Wrapping Width
         for (let i = 0; i < this.logLines.length; i++) {
             const lineObj = this.logLines[i];
             lineObj.setStyle({ wordWrap: { width: width - 10 } });
-
-            // i=0 is the bottom-most line
-            const yPos = height - bottomMargin - ((i + 1) * this.lineHeight);
-
-            lineObj.setPosition(5, yPos);
         }
+
+        this.refresh();
     }
 
     public setPosition(x: number, y: number) {

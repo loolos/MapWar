@@ -106,6 +106,10 @@ export class GameState {
 
     // Reset Game State
     reset(configs?: { id: string, isAI: boolean, color: number }[], keepMap: boolean = false, mapType?: MapType) {
+        if (mapType) {
+            this.currentMapType = mapType;
+        }
+
         if (configs) {
             // Full Reset with new configs
             this.players = {};
@@ -131,10 +135,6 @@ export class GameState {
                     this.players[pid].gold = GameConfig.INITIAL_GOLD;
                 }
             });
-        }
-
-        if (mapType) {
-            this.currentMapType = mapType;
         }
 
         this.currentPlayerId = this.playerOrder[0];
@@ -197,7 +197,7 @@ export class GameState {
         if (cell) cell.owner = owner;
     }
 
-    setBuilding(row: number, col: number, type: 'base' | 'town' | 'none') {
+    setBuilding(row: number, col: number, type: 'base' | 'town' | 'gold_mine' | 'none') {
         const cell = this.getCell(row, col);
         if (cell) cell.building = type;
     }
@@ -237,24 +237,32 @@ export class GameState {
 
                     if (cell.building === 'town') {
                         // Town Growth Logic
-                        // Assuming this is called ONCE per turn start for the player
-                        // We rely on GameEngine only calling this on turn start/end.
-                        // Wait, GameEngine calls it on endTurn.
-
-                        // Increment turn count
                         cell.townTurnCount++;
-
-                        // Check for Growth
                         if (cell.townTurnCount % GameConfig.TOWN_GROWTH_INTERVAL === 0) {
                             if (cell.townIncome < GameConfig.TOWN_INCOME_CAP) {
                                 cell.townIncome += GameConfig.TOWN_INCOME_GROWTH;
                             }
                         }
-
-                        // Add Income
                         landIncome += cell.townIncome;
-                        // Towns count as land? Usually yes.
                         landCount++;
+                    }
+                    else if (cell.building === 'gold_mine') {
+                        // Gold Mine Logic
+                        landIncome += GameConfig.GOLD_MINE_INCOME;
+                        landCount++;
+
+                        // Depletion Check (Only if owned and active)
+                        if (Math.random() < GameConfig.GOLD_MINE_DEPLETION_RATE) {
+                            // Collapse!
+                            cell.building = 'none';
+                            // We can emit an event here if we pass an emitter/context? 
+                            // But GameState is pure data mostly. 
+                            // GameEngine will notice the building change? 
+                            // Or we return a "depletionEvents" list?
+                            // For simplicity, let's just mutate state. 
+                            // Ideally, GameEngine handles the notification by diffing or we return it.
+                            // Let's add a `depletedMines` return to this function.
+                        }
                     }
                     else if (cell.type !== 'bridge') { // Bridges provide 0 income
                         landCount++;

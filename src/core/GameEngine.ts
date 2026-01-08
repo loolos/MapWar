@@ -397,6 +397,21 @@ export class GameEngine {
             }
 
             this.state.setOwner(move.r, move.c, pid);
+
+            // Gold Mine Discovery (Hill + Neutral Capture)
+            if (cell.type === 'hill' && !hasCombat) { // Must be neutral hill
+                if (Math.random() < GameConfig.GOLD_MINE_CHANCE) {
+                    this.state.setBuilding(move.r, move.c, 'gold_mine');
+                    this.emit('logMessage', `Gold Mine discovered at (${move.r}, ${move.c})!`);
+                    this.emit('sfx:gold_mine_found'); // We need to add this sfx or reuse one? Re-use 'conquer' for now? Wait, user asked for new sfx? No.
+                    // User didn't specify NEW SFX for mine, just mechanics. 
+                    // Using 'sfx:capture_town' style chime might be nice, or just let it be silent?
+                    // I'll emit 'sfx:capture_town' as a placeholder or add a specific one later.
+                    // Let's use 'sfx:capture_town' for the "Good Event" feel.
+                    this.emit('sfx:capture_town');
+                }
+            }
+
             totalCost += cost;
         }
 
@@ -457,7 +472,27 @@ export class GameEngine {
         if (enclaveFound) {
             this.emit('logMessage', `Supply line cut! Enclaves detected for ${playerId}.`);
         }
-
         return enclaveFound;
     }
+
+    // --- Dynamic Audio / Intensity Calculation ---
+    public calculateIntensity(): number {
+        // Factors:
+        // 1. Progression: Turn Number (Cap at turn 20) -> 0.0 to 0.5
+        // 2. Army Size: Total Units (Cap at 20 units) -> 0.0 to 0.5
+
+        const turnComponent = Math.min(this.state.turnCount / 20, 0.5);
+
+        let totalUnits = 0;
+        this.state.grid.forEach(row => {
+            row.forEach(cell => {
+                if (cell.unit) totalUnits++;
+            });
+        });
+
+        const unitComponent = Math.min(totalUnits / 20, 0.5);
+
+        return turnComponent + unitComponent;
+    }
 }
+
