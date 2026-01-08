@@ -202,6 +202,7 @@ export class GameEngine {
             if (validation.valid) {
                 this.pendingMoves.push({ r: row, c: col });
                 this.lastError = null;
+                this.emit('sfx:select');
             } else {
                 this.lastError = validation.reason || "Invalid move";
             }
@@ -336,14 +337,22 @@ export class GameEngine {
         let totalCost = 0;
         let gameWon = false;
 
+        let hasCombat = false;
+        let hasCapture = false;
+        let hasTownCapture = false;
+        let hasConquer = false;
+
         for (const move of this.pendingMoves) {
             const cost = this.getMoveCost(move.r, move.c);
             const cell = this.state.getCell(move.r, move.c);
 
+            if (!cell) continue; // Safety Check
+
             // Win Condition Check: Capture Enemy Base
-            if (cell && cell.building === 'base' && cell.owner !== pid) {
+            if (cell.building === 'base' && cell.owner !== pid) {
                 // ELIMINATION LOGIC
                 const loserId = cell.owner;
+                this.emit('sfx:eliminate');
                 if (loserId) {
                     this.emit('logMessage', `${loserId} has been eliminated by ${pid}!`);
 
@@ -366,8 +375,17 @@ export class GameEngine {
                 }
             }
 
+            // Check if Combat (Attack/Conquer)
+            if (cell.owner && cell.owner !== pid) {
+                hasCombat = true;
+                hasConquer = true; // Capturing enemy land
+            } else if (cell.owner === null) {
+                hasCapture = true;
+            }
+
             // Check for Town Capture
-            if (cell && cell.building === 'town') {
+            if (cell.building === 'town' && cell.owner !== pid) {
+                hasTownCapture = true; // Distinct flag
                 // Reset Income and Growth on Capture (whether from neutral or enemy)
                 cell.townIncome = GameConfig.TOWN_INCOME_BASE;
                 cell.townTurnCount = 0;
@@ -380,6 +398,20 @@ export class GameEngine {
 
             this.state.setOwner(move.r, move.c, pid);
             totalCost += cost;
+        }
+
+        // Emit Audio Events based on aggregate actions (Priority Order)
+        if (gameWon) {
+            this.emit('sfx:victory');
+            this.isGameOver = true;
+            this.emit('gameOver', pid);
+        } else {
+            // Priority: Town Capture > Conquer (Enemy) > Combat > Capture (Neutral) > Move
+            if (hasTownCapture) this.emit('sfx:capture_town');
+            else if (hasConquer) this.emit('sfx:conquer');
+            else if (hasCombat) this.emit('sfx:attack');
+            else if (hasCapture) this.emit('sfx:capture');
+            else this.emit('sfx:move');
         }
 
         if (totalCost > 0) {
@@ -404,8 +436,6 @@ export class GameEngine {
             this.emit('gameOver', pid); // Winner is current player
         }
     }
-
-    // Check if a player has any disconnected lands
     private checkForEnclaves(playerId: string): boolean {
         // Reset Pending Moves
         this.pendingMoves = [];

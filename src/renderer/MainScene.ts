@@ -8,6 +8,7 @@ import { PlayerStatusSystem } from './ui/PlayerStatusSystem';
 import { CellInfoSystem } from './ui/CellInfoSystem';
 import { SaveRegistry } from '../core/saves/SaveRegistry';
 import { TextureUtils } from '../utils/TextureUtils';
+import { SoundManager } from '../core/audio/SoundManager'; // NEW
 
 import { LogSystem } from './ui/LogSystem';
 
@@ -28,7 +29,8 @@ export class MainScene extends Phaser.Scene {
     buttonSystem!: ActionButtonSystem;
     playerStatusSystem!: PlayerStatusSystem;
     infoSystem!: CellInfoSystem;
-    logSystem!: LogSystem; // NEW
+    logSystem!: LogSystem;
+    soundManager!: SoundManager; // NEW
 
     // Interaction State
     selectedRow: number | null = null;
@@ -60,10 +62,9 @@ export class MainScene extends Phaser.Scene {
     }
 
     preload() {
-        this.load.image('coin', 'assets/coin.png');
         this.load.image('ui_button', 'assets/ui_button.png');
-        this.load.image('robot', 'assets/robot.png'); // AI
-        this.load.image('human', 'assets/human.png'); // Human
+        // this.load.image('robot', 'assets/robot.png'); // Unused
+        // this.load.image('human', 'assets/human.png'); // Unused
         this.load.image('tile_plain', 'assets/tile_plain.png');
         this.load.image('tile_hill', 'assets/tile_hill.png');
         this.load.image('tile_water', 'assets/tile_water.png');
@@ -72,6 +73,15 @@ export class MainScene extends Phaser.Scene {
         this.load.image('raw_icon_gold', 'assets/icon_gold_blackbg_1767659375024.png');
         this.load.image('raw_icon_human', 'assets/cartoon_human.png');
         this.load.image('raw_icon_robot', 'assets/cartoon_robot.png');
+
+        // Audio Assets (Placeholder or Real)
+        this.load.audio('sfx_select', 'assets/audio/sfx_select.mp3');
+        this.load.audio('sfx_move', 'assets/audio/sfx_move.mp3');
+        this.load.audio('sfx_attack', 'assets/audio/sfx_attack.mp3');
+        this.load.audio('sfx_capture', 'assets/audio/sfx_capture.mp3');
+        this.load.audio('sfx_eliminate', 'assets/audio/sfx_eliminate.mp3');
+        this.load.audio('sfx_victory', 'assets/audio/sfx_victory.mp3');
+        // this.load.audio('bgm_main', 'assets/audio/bgm_main.mp3'); // Uncomment when file exists
     }
 
     create(data?: any) {
@@ -104,7 +114,6 @@ export class MainScene extends Phaser.Scene {
         TextureUtils.makeTransparent(this, 'raw_icon_gold', 'icon_gold_3d', 40);
         // ...
         // ...
-
         TextureUtils.makeTransparent(this, 'raw_icon_human', 'icon_human_cartoon', 30, 'white');
         TextureUtils.makeTransparent(this, 'raw_icon_robot', 'icon_robot_cartoon', 30, 'black');
 
@@ -160,7 +169,10 @@ export class MainScene extends Phaser.Scene {
         this.infoSystem = new CellInfoSystem(this, 0, 0, 100);
         this.buttonSystem = new ActionButtonSystem(this, 0, 0);
         // this.notificationSystem = new NotificationSystem(this, 0, 0, 100, 100);
-        this.logSystem = new LogSystem(this, 0, 0, 200, 100); // NEW
+        this.logSystem = new LogSystem(this, 0, 0, 200, 100);
+
+        // Initialize Sound Manager
+        this.soundManager = new SoundManager(this);
 
         this.setupButtons();
 
@@ -192,6 +204,20 @@ export class MainScene extends Phaser.Scene {
             // Refresh info system to show updated plan cost
             this.infoSystem.update(this.engine, this.selectedRow, this.selectedCol);
         });
+
+        // Audio Bindings
+        this.engine.on('sfx:select', () => this.soundManager.playSfx('sfx_select'));
+        this.engine.on('sfx:move', () => this.soundManager.playSfx('sfx_move'));
+        this.engine.on('sfx:attack', () => this.soundManager.playSfx('sfx_attack'));
+        this.engine.on('sfx:conquer', () => this.soundManager.playSfx('sfx_conquer')); // Epic
+        this.engine.on('sfx:capture', () => this.soundManager.playSfx('sfx_capture'));
+        this.engine.on('sfx:capture_town', () => this.soundManager.playSfx('sfx_capture_town')); // Bell
+        this.engine.on('sfx:eliminate', () => this.soundManager.playSfx('sfx_eliminate'));
+        this.engine.on('sfx:victory', () => this.soundManager.playSfx('sfx_victory'));
+
+        // Start BGM
+        this.soundManager.playBgm('bgm_main');
+
         this.engine.on('gameRestart', () => {
             if (this.overlayContainer) {
                 this.overlayContainer.destroy();

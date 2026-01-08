@@ -22,8 +22,35 @@ vi.mock('phaser', () => {
         time: any;
         make: any;
         textures: any;
+        sound: any; // NEW
 
         constructor(_key: string) {
+            this.sound = {
+                get: vi.fn(),
+                add: vi.fn(() => ({
+                    play: vi.fn(),
+                    stop: vi.fn(),
+                    pause: vi.fn(),
+                    resume: vi.fn()
+                })),
+                play: vi.fn(),
+                context: {
+                    createOscillator: vi.fn(() => ({
+                        connect: vi.fn(),
+                        start: vi.fn(),
+                        stop: vi.fn(),
+                        frequency: { setValueAtTime: vi.fn() },
+                        type: 'sine'
+                    })),
+                    createGain: vi.fn(() => ({
+                        connect: vi.fn(),
+                        gain: { setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() }
+                    })),
+                    currentTime: 0,
+                    destination: {}
+                }
+            };
+
             this.cameras = {
                 main: {
                     setBackgroundColor: vi.fn(),
