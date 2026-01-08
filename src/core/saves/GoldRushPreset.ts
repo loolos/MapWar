@@ -1,8 +1,6 @@
 
 import { Cell } from '../Cell';
-import { GameConfig } from '../GameConfig';
-import { GameState } from '../GameState';
-import { MapGenerator } from '../map/MapGenerator';
+
 
 export const GoldRushPreset = {
     name: 'Gold Rush (Debug)',
