@@ -70,8 +70,8 @@ export class MainScene extends Phaser.Scene {
 
         // Tactical UI Assets (Load as Raw)
         this.load.image('raw_icon_gold', 'assets/icon_gold_blackbg_1767659375024.png');
-        this.load.image('raw_icon_human', 'assets/icon_human_blackbg_1767659388348.png');
-        this.load.image('raw_icon_robot', 'assets/icon_robot_blackbg_1767659401523.png');
+        this.load.image('raw_icon_human', 'assets/cartoon_human.png');
+        this.load.image('raw_icon_robot', 'assets/cartoon_robot.png');
     }
 
     create(data?: any) {
@@ -105,8 +105,8 @@ export class MainScene extends Phaser.Scene {
         // ...
         // ...
 
-        TextureUtils.makeTransparent(this, 'raw_icon_human', 'icon_human_badge', 40);
-        TextureUtils.makeTransparent(this, 'raw_icon_robot', 'icon_robot_badge', 40);
+        TextureUtils.makeTransparent(this, 'raw_icon_human', 'icon_human_cartoon', 30, 'white');
+        TextureUtils.makeTransparent(this, 'raw_icon_robot', 'icon_robot_cartoon', 30, 'black');
 
         this.cameras.main.setBackgroundColor(GameConfig.COLORS.BG);
 

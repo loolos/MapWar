@@ -103,19 +103,57 @@ export class MapGenerator {
         this.scatterTerrain(grid, 'hill', 0.2, 'plain'); // 20% of plains become hills
     }
 
-    private static generatePangaea(grid: Cell[][], width: number, height: number) {
+    private static generatePangaea(grid: Cell[][], width: number, height: number, playerCount: number = 2) {
         // Start with WATER
         this.fillGrid(grid, 'water');
 
-        // Single Large Landmass
         const centerX = Math.floor(width / 2);
         const centerY = Math.floor(height / 2);
 
-        // Grow massive cluster
-        const targetLand = Math.floor(width * height * 0.6); // 60% land
-        this.growClusterAt(grid, centerY, centerX, 'plain', targetLand, 'water');
+        // 1. Create Skeleton: Connect Center to All Spawns
+        // This ensures everyone is on the main continent
+        const targetLand = Math.floor(width * height * 0.65);
 
-        // Add Hills
+        // Add center node
+        this.growClusterAt(grid, centerY, centerX, 'plain', Math.floor(targetLand * 0.2), 'water');
+
+        // Draw thick arms to each spawn
+        for (let i = 0; i < playerCount; i++) {
+            const spawn = this.getSpawnPoint(i, playerCount, width, height);
+
+            // Draw line from center to spawn using Manhattan steps to ensure 4-way connectivity
+            let r = centerY;
+            let c = centerX;
+
+            while (r !== spawn.r || c !== spawn.c) {
+                // Determine next step
+                // Mix axes prevents zigzag looking too artificial if we just did all X then all Y?
+                // Standard Bresenham is best for look, but 4-way requires "filling corners".
+                // Simple approach: Move along major axis first? Or behave like "King"?
+                // To guarantee 4-way, we must move only 1 tile in 1 axis per step.
+
+                const dr = spawn.r - r;
+                const dc = spawn.c - c;
+
+                if (Math.abs(dr) > Math.abs(dc)) {
+                    r += Math.sign(dr);
+                } else {
+                    c += Math.sign(dc);
+                }
+
+                // Paint & Thicken
+                if (this.isValid(grid, r, c)) {
+                    grid[r][c].type = 'plain';
+                    // Thicken
+                    this.growClusterAt(grid, r, c, 'plain', 6, undefined);
+                }
+            }
+        }
+
+        // 2. Bulk up the center to fuse arms
+        this.growClusterAt(grid, centerY, centerX, 'plain', Math.floor(targetLand * 0.4), 'water');
+
+        // 3. Add Hills
         this.scatterTerrain(grid, 'hill', 0.15, 'plain');
     }
 
@@ -135,53 +173,61 @@ export class MapGenerator {
         this.scatterTerrain(grid, 'hill', 0.2, 'plain');
     }
 
-    private static generateRivers(grid: Cell[][], width: number, height: number) {
+    private static generateRivers(grid: Cell[][], width: number, height: number, playerCount: number = 2) {
         this.generateDefault(grid, width, height);
 
-        // Create Rivers
-        const riverCount = Math.max(1, Math.floor(width / 6)); // Fewer rivers to avoid mess
+        // Strategic Rivers: Barriers BETWEEN players
+        // Calculate angles between players and flow rivers there
+        const centerX = width / 2;
+        const centerY = height / 2;
 
-        for (let i = 0; i < riverCount; i++) {
-            // Determine Axis (Vertical vs Horizontal)
-            const isVertical = Math.random() > 0.5;
+        for (let i = 0; i < playerCount; i++) {
+            // Angle for Player i
+            const angleI = (i / playerCount) * 2 * Math.PI - (Math.PI / 2) - (3 * Math.PI / 4);
+            // Angle for Player i+1
+            const angleNext = ((i + 1) / playerCount) * 2 * Math.PI - (Math.PI / 2) - (3 * Math.PI / 4);
 
-            let r = isVertical ? 0 : Math.floor(Math.random() * height);
-            let c = isVertical ? Math.floor(Math.random() * width) : 0;
+            // Mid-Angle (Barrier direction)
+            // Handle wrap-around logic roughly
+            const midAngle = (angleI + angleNext) / 2; // Simply average acts as mid vector
 
-            // Random Walk with Momentum
-            let len = 0;
+            // Start river near center but not exactly ON center (keep center passable?)
+            // Flow OUTWARDS to edge
+            let r = centerY;
+            let c = centerX;
+
+            const dr = Math.sin(midAngle); // y component
+            const dc = Math.cos(midAngle); // x component
+
+            // Trace river
+            // Wiggle variables
+            let currentR = r;
+            let currentC = c;
+
             const maxLen = Math.max(width, height) * 1.5;
+            let len = 0;
 
-            while (this.isValid(grid, r, c) && len < maxLen) {
-                // Paint River
-                grid[r][c].type = 'water';
+            while (this.isValid(grid, Math.floor(currentR), Math.floor(currentC)) && len < maxLen) {
+                const cellR = Math.floor(currentR);
+                const cellC = Math.floor(currentC);
 
-                // Move Logic (High Momentum)
-                const moveForward = Math.random() < 0.8; // 80% chance to continue straight-ish
+                grid[cellR][cellC].type = 'water';
 
-                if (isVertical) {
-                    if (moveForward) {
-                        r += 1; // Down
-                        // Slight jitter
-                        if (Math.random() > 0.8) c += (Math.random() > 0.5 ? 1 : -1);
-                    } else {
-                        // Meander sideways
-                        c += (Math.random() > 0.5 ? 1 : -1);
-                    }
-                } else {
-                    if (moveForward) {
-                        c += 1; // Right
-                        if (Math.random() > 0.8) r += (Math.random() > 0.5 ? 1 : -1);
-                    } else {
-                        r += (Math.random() > 0.5 ? 1 : -1);
-                    }
-                }
+                // Move outwards
+                currentR += dr;
+                currentC += dc;
 
-                // Clamp
-                if (r < 0 || r >= height || c < 0 || c >= width) break;
+                // Add "Meander" noise
+                // Perpendicular vector (-dy, dx) = (-cost, sint) or (cost, -sint)
+                const noise = (Math.random() - 0.5) * 1.0;
+                currentR += dc * noise; // Add perp component
+                currentC += -dr * noise;
+
                 len++;
             }
         }
+
+
     }
 
     private static ensureAccessibility(grid: Cell[][], width: number, height: number, playerCount: number) {

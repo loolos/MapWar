@@ -25,9 +25,9 @@ export class PlayerStatusSystem {
         this.drawPanel(sidebarBg, 260, height);
 
         // Header
-        const header = scene.add.text(130, 25, 'GAME STATUS', {
+        const header = scene.add.text(130, 20, 'GAME STATUS', {
             fontFamily: 'Georgia, "Times New Roman", serif',
-            fontSize: '18px', // Reduced from 22
+            fontSize: '14px', // Reduced 18 -> 14
             color: '#ffffff',
             fontStyle: 'bold',
             shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 2, fill: true }
@@ -35,13 +35,13 @@ export class PlayerStatusSystem {
         this.container.add(header);
 
         // Turn Info
-        this.uiText = scene.add.text(130, 45, 'Turn 1', { // Reduced Y slightly
-            fontFamily: 'Georgia, serif', fontSize: '14px', color: '#dddddd' // Reduced from 16
+        this.uiText = scene.add.text(130, 35, 'Turn 1', {
+            fontFamily: 'Georgia, serif', fontSize: '12px', color: '#dddddd' // Reduced 14 -> 12
         }).setOrigin(0.5);
         this.container.add(this.uiText);
 
         // Scrollable List Container
-        this.listContainer = scene.add.container(0, 70); // Moved up from 80
+        this.listContainer = scene.add.container(0, 50); // Moved up 70 -> 50
         this.container.add(this.listContainer);
 
         // Setup Mask
@@ -49,10 +49,10 @@ export class PlayerStatusSystem {
         this.listMask = new Phaser.Display.Masks.GeometryMask(scene, this.maskShape);
         this.listContainer.setMask(this.listMask);
 
-        this.viewHeight = height - 80; // Adjusted for padding
+        this.viewHeight = height - 60; // Adjusted for padding
 
         // Enhance Interaction for Scroll
-        const hitArea = new Phaser.Geom.Rectangle(0, 70, 260, this.viewHeight);
+        const hitArea = new Phaser.Geom.Rectangle(0, 50, 260, this.viewHeight);
         this.container.setInteractive(hitArea, Phaser.Geom.Rectangle.Contains);
 
         this.container.on('pointermove', (pointer: Phaser.Input.Pointer) => {
@@ -85,7 +85,9 @@ export class PlayerStatusSystem {
         if (this.scrollY > 0) this.scrollY = 0;
         if (this.scrollY < minScroll) this.scrollY = minScroll;
 
-        this.listContainer.y = 70 + this.scrollY; // Match new Y
+        this.listContainer.y = 50 + this.scrollY; // Match header offset
+
+        // Update mask position if it tracks scroll? No, mask stays fixed.
     }
 
     public update(engine: GameEngine) {
@@ -123,9 +125,9 @@ export class PlayerStatusSystem {
         this.playerRows = [];
 
         let currentY = 0;
-        const gap = 5; // Reduced from 10
+        const gap = 3; // Reduced 5 -> 3
         const useCompact = order.length > 5;
-        const actualCardH = useCompact ? 40 : 60; // Reduced from 50/90
+        const actualCardH = useCompact ? 28 : 36; // Reduced 40/60 -> 28/36
 
         order.forEach(pid => {
             const player = players[pid];
@@ -142,7 +144,7 @@ export class PlayerStatusSystem {
         // Reset scroll
         if (this.scrollY < this.viewHeight - this.contentHeight) {
             this.scrollY = Math.min(0, this.viewHeight - this.contentHeight);
-            this.listContainer.y = 70 + this.scrollY;
+            this.listContainer.y = 50 + this.scrollY;
         }
     }
 
@@ -156,36 +158,37 @@ export class PlayerStatusSystem {
         row.add(bg);
 
         // Compact Layout
-        const isCompact = h < 50;
+        const isCompact = h < 30;
 
         // Title
-        const titleY = isCompact ? 10 : 10;
+        const titleY = isCompact ? h / 2 : h / 2; // Center
         const title = scene.add.text(20, titleY, player.id, {
-            fontFamily: 'Georgia, serif', fontSize: '16px', // Reduced from 18
+            fontFamily: 'Georgia, serif', fontSize: '13px', // Reduced 16 -> 13
             color: '#' + player.color.toString(16).padStart(6, '0'),
             fontStyle: 'bold',
             shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 2, fill: true }
         });
         title.setOrigin(0, 0.5); // Center vertically
-        title.y = h / 2;
         row.add(title);
 
         // Gold
         const goldY = h / 2;
         const goldText = scene.add.text(140, goldY, player.gold.toString(), {
-            fontFamily: 'Arial', fontSize: '16px', color: '#ffd700', fontStyle: 'bold', // Reduced from 20
+            fontFamily: 'Arial', fontSize: '13px', color: '#ffd700', fontStyle: 'bold', // Reduced 16 -> 13
             shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 2, fill: true }
         });
         goldText.setOrigin(1, 0.5); // Right align
         row.add(goldText);
 
         // Coin Icon (Next to gold)
-        const coin = scene.add.image(155, goldY, 'icon_gold_3d').setDisplaySize(18, 18); // Reduced from 24
+        const coin = scene.add.image(155, goldY, 'icon_gold_3d').setDisplaySize(14, 14); // Reduced 18 -> 14
         row.add(coin);
 
-        // Type Icon
-        const icon = scene.add.image(210, h / 2, player.isAI ? 'icon_robot_badge' : 'icon_human_badge')
-            .setDisplaySize(24, 24); // Reduced from 32/42
+        // Type Icon (Cartoon)
+        // Use new texture keys
+        const iconKey = player.isAI ? 'icon_robot_cartoon' : 'icon_human_cartoon';
+        const icon = scene.add.image(210, h / 2, iconKey)
+            .setDisplaySize(28, 28); // Standard size for icon, keep it visible
         row.add(icon);
 
         return row;
@@ -221,20 +224,12 @@ export class PlayerStatusSystem {
         if (this.maskShape) {
             this.maskShape.clear();
             this.maskShape.fillStyle(0xffffff);
-            // Mask in Absolute World Coords
-            // x, y is the top-left of the container
-            // Mask should start at y + 80
-            // Height is viewHeight
-            // Scale awareness
-            // For MainScene resize, passed x/y are container coords? Yes.
 
-            // Note: MaskShape is a Graphics object. GeometryMask uses it.
-            // Graphics coordinates are local unless added to scene?
-            // "The Graphics object is rendered to the Mask Buffer".
-            // It needs world coordinates usually.
+            // Mask must cover the list area logic
+            // The list starts at container Y+50
+            const absoluteY = y + 50;
 
-            // Let's assume standard camera/zoom (1.0).
-            const absoluteY = y + 80;
+            // Draw rect
             this.maskShape.fillRect(x, absoluteY, w, this.viewHeight);
         }
     }

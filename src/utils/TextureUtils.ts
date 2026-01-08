@@ -9,7 +9,7 @@ export class TextureUtils {
      * @param newKey The key for the new, transparent texture.
      * @param info Configuration for transparency.
      */
-    static makeTransparent(scene: Phaser.Scene, sourceKey: string, newKey: string, threshold = 30) {
+    static makeTransparent(scene: Phaser.Scene, sourceKey: string, newKey: string, threshold = 30, targetColor: 'black' | 'white' = 'black') {
         if (!scene.textures.exists(sourceKey)) {
             console.error(`TextureUtils: Source texture '${sourceKey}' not found.`);
             return;
@@ -43,9 +43,22 @@ export class TextureUtils {
             const g = data[i + 1];
             const b = data[i + 2];
 
-            // Check if pixel matches "Black" (or dark background)
-            // We assume the background is solid black or very dark.
-            if (r < threshold && g < threshold && b < threshold) {
+            let isMatch = false;
+
+            if (targetColor === 'black') {
+                // Remove Dark
+                if (r < threshold && g < threshold && b < threshold) {
+                    isMatch = true;
+                }
+            } else {
+                // Remove Light (White)
+                const minVal = 255 - threshold;
+                if (r > minVal && g > minVal && b > minVal) {
+                    isMatch = true;
+                }
+            }
+
+            if (isMatch) {
                 data[i + 3] = 0; // Set Alpha to 0
             }
         }
