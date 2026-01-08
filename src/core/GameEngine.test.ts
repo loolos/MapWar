@@ -110,7 +110,7 @@ describe('GameEngine', () => {
 
             // P1 (0,0) attacks (0,1)
             const cost = engine.getMoveCost(0, 1);
-            expect(cost).toBe(GameConfig.COST_ATTACK); // 20
+            expect(cost).toBe(Math.floor(GameConfig.COST_ATTACK * GameConfig.COST_MULTIPLIER_ATTACK));
         });
 
         it('charges 40G for chained distance attack', () => {
@@ -132,7 +132,7 @@ describe('GameEngine', () => {
             // Now check cost of (0,2)
             // (0,2) is adjacent to (0,1) [Pending], but NOT (0,0) [Owned].
             const cost = engine.getMoveCost(0, 2);
-            expect(cost).toBe(GameConfig.COST_ATTACK * 2); // 40
+            expect(cost).toBe(Math.floor(GameConfig.COST_ATTACK * GameConfig.COST_MULTIPLIER_ATTACK) * 2);
         });
     });
 
@@ -341,7 +341,10 @@ describe('GameEngine', () => {
             // Calculate cost for P1 to attack (0,2)
             const cost = engine.getMoveCost(0, 2);
             // Normal Attack: 20 -> Discounted 30% -> 14
-            expect(cost).toBe(14);
+            // Dynamic: floor(floor(BASE * ATTACK_MULT) * 0.7)
+            const base = Math.floor(GameConfig.COST_ATTACK * GameConfig.COST_MULTIPLIER_ATTACK);
+            const discounted = Math.floor(base * 0.7);
+            expect(cost).toBe(discounted);
         });
 
         it('Supply Line: Cannot expand from disconnected territory', () => {

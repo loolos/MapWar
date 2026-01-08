@@ -47,7 +47,8 @@ describe('GameEngine - Town Mechanics', () => {
         engine.state.getCell(0, 1)!.owner = null;
 
         const cost = engine.getMoveCost(0, 1);
-        expect(cost).toBe(GameConfig.COST_CAPTURE_TOWN); // 30
+        const expected = Math.floor(GameConfig.COST_CAPTURE_TOWN * GameConfig.COST_MULTIPLIER_NEUTRAL);
+        expect(cost).toBe(expected);
     });
 
     it('charges standard attack cost to capture enemy town', () => {
@@ -70,7 +71,8 @@ describe('GameEngine - Town Mechanics', () => {
         // const isAdj = engine.state.isAdjacentToOwned(0, 1, 'P1');
 
         const cost = engine.getMoveCost(0, 1);
-        expect(cost).toBe(GameConfig.COST_ATTACK); // 20
+        const expected = Math.floor(GameConfig.COST_ATTACK * GameConfig.COST_MULTIPLIER_ATTACK);
+        expect(cost).toBe(expected);
     });
 
     it('charges higher cost to capture disconnected helper town? No, standard rules apply', () => {

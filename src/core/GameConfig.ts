@@ -16,7 +16,7 @@ export const GameConfig = {
     TOWN_GROWTH_INTERVAL: 2,
     // Global Cost Multipliers (System Parameters)
     COST_MULTIPLIER_NEUTRAL: 1.0,
-    COST_MULTIPLIER_ATTACK: 1.0,
+    COST_MULTIPLIER_ATTACK: 1.2,
     // Gold Mine Configs
     GOLD_MINE_CHANCE: 0.2, // 20%
     GOLD_MINE_INCOME: 5,
