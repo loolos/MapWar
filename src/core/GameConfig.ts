@@ -14,6 +14,13 @@ export const GameConfig = {
     TOWN_INCOME_GROWTH: 1,
     TOWN_INCOME_CAP: 10,
     TOWN_GROWTH_INTERVAL: 2,
+    // Base Upgrade Configs
+    UPGRADE_DEFENSE_COST: 10,
+    UPGRADE_DEFENSE_BONUS: 30, // Increase capture cost
+    UPGRADE_DEFENSE_MAX: 3,
+    UPGRADE_INCOME_COST: 20,
+    UPGRADE_INCOME_BONUS: [1, 2, 3, 4], // Cumulative income bonus per level
+    UPGRADE_INCOME_MAX: 4,
     // Global Cost Multipliers (System Parameters)
     COST_MULTIPLIER_NEUTRAL: 1.0,
     COST_MULTIPLIER_ATTACK: 1.2,

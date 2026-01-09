@@ -98,6 +98,15 @@ export class CellInfoSystem {
             typeStr = "Gold Mine";
         } else if (cell.building === 'town') {
             typeStr = "Town (Village)";
+        } else if (cell.building === 'base') {
+            typeStr = "Base";
+            // Show Upgrade Levels
+            if (cell.defenseLevel > 0) {
+                typeStr += `\nDef Lvl: ${cell.defenseLevel}`;
+            }
+            if (cell.incomeLevel > 0) {
+                typeStr += `\nInc Lvl: ${cell.incomeLevel}`;
+            }
         }
         this.typeText.setText(`Type: ${typeStr}`);
 
@@ -130,6 +139,21 @@ export class CellInfoSystem {
         } else if (cell.building === 'town') {
             desc = `Town: Generates +${cell.townIncome} G/turn.\nGrows over time (Inc: +${GameConfig.TOWN_INCOME_GROWTH} every ${GameConfig.TOWN_GROWTH_INTERVAL} turns).`;
             revenueMsg = `\nRevenue: +${cell.townIncome} G`;
+        } else if (cell.building === 'base') {
+            // Base specifics
+            desc = "Main Base: Generates gold and projects power.";
+
+            // Income Upgrade Details
+            let incomeBonus = 0;
+            if (cell.incomeLevel > 0) {
+                for (let i = 1; i <= cell.incomeLevel; i++) incomeBonus += i; // 1+2+3...
+            }
+
+            revenueMsg = `\nRevenue: +${GameConfig.GOLD_PER_LAND + incomeBonus} G`;
+
+            if (cell.defenseLevel > 0) {
+                desc += `\nDefense Lvl ${cell.defenseLevel}: Enemy Cost +${cell.defenseLevel * GameConfig.UPGRADE_DEFENSE_BONUS}`;
+            }
         } else if (cell.type !== 'bridge') {
             // Land Revenue
             const baseRev = GameConfig.GOLD_PER_LAND;

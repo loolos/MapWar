@@ -11,6 +11,7 @@ import { TextureUtils } from '../utils/TextureUtils';
 import { SoundManager } from '../core/audio/SoundManager'; // NEW
 
 import { LogSystem } from './ui/LogSystem';
+import { InteractionMenu } from './ui/InteractionMenu';
 
 // ... imports
 
@@ -30,7 +31,9 @@ export class MainScene extends Phaser.Scene {
     playerStatusSystem!: PlayerStatusSystem;
     infoSystem!: CellInfoSystem;
     logSystem!: LogSystem;
+
     soundManager!: SoundManager; // NEW
+    interactionMenu!: InteractionMenu; // NEW
 
     // Interaction State
     selectedRow: number | null = null;
@@ -177,6 +180,7 @@ export class MainScene extends Phaser.Scene {
         this.buttonSystem = new ActionButtonSystem(this, 0, 0);
         // this.notificationSystem = new NotificationSystem(this, 0, 0, 100, 100);
         this.logSystem = new LogSystem(this, 0, 0, 200, 100);
+        this.interactionMenu = new InteractionMenu(this, this.engine); // NEW
 
         // Initialize Sound Manager
         this.soundManager = new SoundManager(this);
@@ -210,6 +214,18 @@ export class MainScene extends Phaser.Scene {
             this.updateUI();
             // Refresh info system to show updated plan cost
             this.infoSystem.update(this.engine, this.selectedRow, this.selectedCol);
+
+            // Refresh Interaction Menu if still selected
+            if (this.selectedRow !== null && this.selectedCol !== null) {
+                // Calculate Screen Pos (Re-use logic from handleInput or simpler?)
+                // We don't have screen pos here easily without recalculating.
+                // Ideally, we just call show again with same pos?
+                // But show requires x, y.
+                // Let's just hide for now? Or keep it if we store x/y?
+                this.interactionMenu.hide();
+                // Actually, if we plan an interaction, we probably want to see the updated state (e.g. cost paid).
+                // But usually interaction consumes the action.
+            }
         });
 
         // Audio Bindings
@@ -371,6 +387,15 @@ export class MainScene extends Phaser.Scene {
                 // Adjust button system to center button in its quadrant?
                 // ActionButtonSystem usually places button at (0,0) relative.
 
+                // --- INTERACTION MENU (Portrait: aligned with Buttons in Bottom Right) ---
+                // Horizontal Flow to fit side-by-side if possible?
+                // Or just Vertical stack over the buttons?
+                // User said "menu please put in button area".
+                // If it opens, it might cover buttons. Ideally we want both or toggle.
+                // Let's overlay for now (modal action).
+                this.interactionMenu.resize(midX - 10, true); // Horizontal flow
+                this.interactionMenu.setPosition(midX + 5, height - barHeight + 5);
+
                 // Notifications (Overlay Removed)
                 // this.notificationSystem.resize(300, 0);
                 // this.notificationSystem.setPosition((width - 300) / 2, mapY + 20);
@@ -429,6 +454,15 @@ export class MainScene extends Phaser.Scene {
                 // X = (width - 280) + (280 - 140)/2 = width - 280 + 70 = width - 210.
                 // Y: height - 130 (Space for 2 buttons + gap)
                 this.buttonSystem.setPosition(width - 210, height - 130);
+
+                // --- INTERACTION MENU (Right Sidebar, above Buttons) ---
+                // Vertical Flow
+                this.interactionMenu.resize(sidebarW - 20, false);
+                // Place above buttons. Buttons take ~100px.
+                // Place at height - 300? Or just below Log?
+                // Log ends at halfH - 20 (plus 10 y pos = halfH - 10).
+                // Let's place at halfH + 10.
+                this.interactionMenu.setPosition(width - sidebarW + 10, halfH + 10);
 
                 // Notifications (Overlay Removed)
                 // this.notificationSystem.resize(300, 0);
@@ -569,19 +603,59 @@ export class MainScene extends Phaser.Scene {
         const row = Math.floor(localY / this.tileSize);
 
         if (col >= 0 && col < gridWidth && row >= 0 && row < gridHeight) {
+            // Check for Cancellation (Clicking same tile with pending interaction)
+            const isSameTile = this.selectedRow === row && this.selectedCol === col;
+            const pendingInteraction = this.engine.pendingInteractions.find(i => i.r === row && i.c === col);
+
+            if (isSameTile && pendingInteraction) {
+                // Cancel Interaction (Toggle off)
+                this.engine.planInteraction(row, col, pendingInteraction.actionId);
+                // Return early to avoid re-selecting or toggling move
+                return;
+            }
+
             // Update Selection
             this.selectedRow = row;
             this.selectedCol = col;
             this.infoSystem.update(this.engine, row, col);
 
-            this.engine.togglePlan(row, col);
+            // Auto-Select Logic
+            // If valid tile and NOT already selected/planned
+            // Check options
+            const options = this.engine.interactionRegistry.getAvailableActions(this.engine, row, col);
+
+            // If exactly 1 option and it's a MOVE/Attack type (or general policy for single options?)
+            // User said "normal capture... also considered interaction... only one option so adopt".
+            // So if 1 option, auto-plan.
+            if (options.length === 1 && !this.engine.pendingInteractions.some(i => i.r === row && i.c === col)) {
+                // Auto-Plan
+                // But wait, if it's a move, we used to togglePlan.
+                // togglePlan handles moves.
+                // Now MOVE is an interaction.
+                // planInteraction(..., 'MOVE') calls togglePlan.
+                // So we just call planInteraction.
+
+                // However, we must ensure we don't double-toggle if user clicked to CANCEL.
+                // We handled cancellation above (early return).
+                // So here we are in "New Selection" territory.
+
+                this.engine.planInteraction(row, col, options[0].id);
+            }
+
+            // Show Interaction Menu if options exist
+            this.interactionMenu.show(row, col);
+        } else {
+            // Deselect
+            this.selectedRow = null;
+            this.selectedCol = null;
+            // Update Menu to empty state (Persistent)
+            this.interactionMenu.show(null as any, null as any); // Will need Update in InteractionMenu to handle null
         }
     }
 
     drawMap() {
         if (!this.engine) return;
 
-        this.gridGraphics.clear();
         this.terrainGraphics.clear();
         this.selectionGraphics.clear();
         this.highlightGraphics.clear();
@@ -680,6 +754,13 @@ export class MainScene extends Phaser.Scene {
                     this.highlightGraphics.lineStyle(4, GameConfig.COLORS.HIGHLIGHT_AI, 1.0);
                     this.highlightGraphics.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
                 }
+
+                // 4. PENDING INTERACTIONS (Yellow Box Frame)
+                const isInteraction = this.engine.pendingInteractions.some(i => i.r === r && i.c === c);
+                if (isInteraction) {
+                    this.highlightGraphics.lineStyle(4, 0xFFFF00, 1.0); // Yellow
+                    this.highlightGraphics.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
+                }
             }
         }
 
@@ -745,15 +826,8 @@ export class MainScene extends Phaser.Scene {
         const currentPlayer = this.engine.state.getCurrentPlayer();
         const currentGold = currentPlayer.gold;
 
-        let totalCost = 0;
-        // let hasHighCost = false; // Unused
-        for (const m of this.engine.pendingMoves) {
-            const cost = this.engine.getMoveCost(m.r, m.c);
-            totalCost += cost;
-            // if (cost > GameConfig.COST_ATTACK) {
-            //     hasHighCost = true;
-            // }
-        }
+        // Calculate Total Cost (Moves + Interactions)
+        const totalCost = this.engine.calculatePlannedCost();
 
         if (currentPlayer.isAI) {
             // this.logSystem.addLog('🤖 AI is planning...', 'info');

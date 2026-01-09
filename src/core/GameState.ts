@@ -273,7 +273,41 @@ export class GameState {
         }
 
         const baseIncome = GameConfig.GOLD_PER_TURN_BASE;
-        const total = baseIncome + landIncome;
+
+        // Calculate Base Upgrade Bonuses
+        let upgradeBonus = 0;
+        // Scan all bases owned by player to add their upgrade bonuses
+        // Wait, baseIncome is global "base" income? Or "from Base buildings"?
+        // Original logic: "baseIncome = 10". Then adding land logic.
+        // If I own multiple bases (from capturing), do I get multiple base incomes?
+        // Currently: "active bases" logic isn't explicit, it's just a flat 10.
+        // I should probably add the upgrade bonus based on the cell's level.
+
+        // Re-scan or integrate into loop above? 
+        // Iterate grid for Base Upgrades (since they are properties of the cell)
+        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+                const cell = this.grid[r][c];
+                if (cell.owner === playerId && cell.building === 'base' && cell.incomeLevel > 0) {
+                    // Arrays are 0-indexed. Level 1 -> index 0.
+                    // Bonus is cumulative? "Increases income BY 1, 2...". 
+                    // User said: "Upgrade 4 times... increase income 1G, 2G... total 20".
+                    // Implicit: Level 1 adds 1. Level 2 adds 2? Or Total is 1, 2, 3?
+                    // "respectively increase income 1G, 2G... total 20"
+                    // 1+2+3+4 = 10. 
+                    // Base is 10. Total 20.
+                    // So Level 1 adds +1. Level 2 adds +2 (Total +3). 
+                    // I will implement as: Sum of bonuses up to current level.
+                    let bonus = 0;
+                    for (let i = 0; i < cell.incomeLevel; i++) {
+                        bonus += GameConfig.UPGRADE_INCOME_BONUS[i];
+                    }
+                    upgradeBonus += bonus;
+                }
+            }
+        }
+
+        const total = baseIncome + landIncome + upgradeBonus;
         const finalTotal = Math.floor(total);
 
         this.players[playerId].gold += finalTotal;

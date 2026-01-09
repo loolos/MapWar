@@ -137,7 +137,58 @@ export class AIController {
 
             if (safetyCounter === 0) {
                 // If we did nothing, log why (Debugging)
-                console.log(`AI (${aiPlayer.id}) passed turn (No valid moves). Gold: ${aiPlayer.gold}`);
+                // console.log(`AI (${aiPlayer.id}) passed turn (No valid moves). Gold: ${aiPlayer.gold}`);
+            }
+
+            // Post-Move Interactions (Spend excess gold on Upgrades)
+            // Re-fetch player state as gold has changed
+            const playerAfterMoves = this.engine.state.getCurrentPlayer();
+
+            if (playerAfterMoves.gold > 0) {
+                // console.log("[AI] Checking for upgrades. Gold:", playerAfterMoves.gold);
+                // Check My Bases
+                const myBases = [];
+                for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+                    for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+                        const cell = this.engine.state.getCell(r, c);
+                        if (cell && cell.building === 'base' && cell.owner === aiPlayer.id) {
+                            myBases.push({ r, c, cell });
+                        }
+                    }
+                }
+                // console.log("[AI] Found Bases:", myBases.length);
+
+                for (const base of myBases) {
+                    const { r, c, cell } = base;
+
+                    // Priority 1: Income (Early Game or Low Level)
+                    // If income level < max, and cost is affordable
+                    const incomeCost = GameConfig.UPGRADE_INCOME_COST;
+                    if (cell.incomeLevel < GameConfig.UPGRADE_INCOME_MAX && playerAfterMoves.gold >= incomeCost) {
+                        // console.log("[AI] Planning Income Upgrade at", r, c);
+                        // Simple Heuristic: Always buy income if we have spare cash?
+                        // Maybe reserve some for units next turn?
+                        // Let's say: Buy if we have > 30g (so we can still move next turn) OR if it's very early.
+                        // For now: Aggressive Economy.
+
+                        // Use Interaction
+                        this.engine.planInteraction(r, c, 'UPGRADE_INCOME');
+                        // Deduct specific to this local reasoning (Engine handles real deduction on commit)
+                        playerAfterMoves.gold -= incomeCost;
+                        continue; // Done with this base for now (one upgrade per turn?)
+                    }
+
+                    // Priority 2: Defense (If threatened)
+                    // Heuristic: If enemy within 3 tiles
+                    // Scan nearby? Expensive.
+                    // Simple check: Random or if gold is high?
+                    // Let's maintain "If Gold > 50", buy defense.
+                    const defenseCost = GameConfig.UPGRADE_DEFENSE_COST;
+                    if (cell.defenseLevel < GameConfig.UPGRADE_DEFENSE_MAX && playerAfterMoves.gold >= defenseCost + 20) {
+                        this.engine.planInteraction(r, c, 'UPGRADE_DEFENSE');
+                        playerAfterMoves.gold -= defenseCost;
+                    }
+                }
             }
 
         } catch (err) {

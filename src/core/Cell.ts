@@ -15,6 +15,10 @@ export class Cell {
     townIncome: number;
     townTurnCount: number;
 
+    // Base Upgrade State
+    defenseLevel: number;
+    incomeLevel: number;
+
     constructor(row: number, col: number) {
         this.row = row;
         this.col = col;
@@ -26,6 +30,9 @@ export class Cell {
 
         this.townIncome = 0; // Config default will apply on creation if town
         this.townTurnCount = 0;
+
+        this.defenseLevel = 0;
+        this.incomeLevel = 0;
     }
 
     isOwnedBy(playerId: PlayerID): boolean {
@@ -41,7 +48,9 @@ export class Cell {
             isConnected: this.isConnected,
             type: this.type,
             townIncome: this.townIncome,
-            townTurnCount: this.townTurnCount
+            townTurnCount: this.townTurnCount,
+            defenseLevel: this.defenseLevel,
+            incomeLevel: this.incomeLevel
         };
     }
 
@@ -53,6 +62,8 @@ export class Cell {
         cell.type = data.type || 'plain';
         cell.townIncome = data.townIncome || 0;
         cell.townTurnCount = data.townTurnCount || 0;
+        cell.defenseLevel = data.defenseLevel || 0;
+        cell.incomeLevel = data.incomeLevel || 0;
         return cell;
     }
 }

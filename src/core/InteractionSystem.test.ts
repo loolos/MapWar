@@ -1,0 +1,112 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { GameEngine } from './GameEngine';
+
+describe('Interaction System', () => {
+    let engine: GameEngine;
+
+    beforeEach(() => {
+        engine = new GameEngine();
+        // Setup P1 with lots of gold
+        engine.state.players['P1'].gold = 1000;
+
+        // P1 Owns (0,0) - Plain
+        engine.state.setOwner(0, 0, 'P1');
+        engine.state.setBuilding(0, 0, 'none');
+        engine.state.getCell(0, 0)!.type = 'plain';
+
+        // P2 Owns (0,1)
+        engine.state.setOwner(0, 1, 'P2');
+    });
+
+    it('returns BUILD_OUTPOST for owned plain tile', () => {
+        const spy = vi.fn();
+        engine.on('tileSelected', spy);
+
+        engine.selectTile(0, 0);
+
+        expect(spy).toHaveBeenCalled();
+        const eventData = spy.mock.calls[0][0];
+        expect(eventData.r).toBe(0);
+        expect(eventData.c).toBe(0);
+
+        const options = eventData.options;
+        expect(options.some((o: any) => o.id === 'BUILD_OUTPOST')).toBe(true);
+        expect(options.some((o: any) => o.id === 'REMOTE_STRIKE')).toBe(false);
+    });
+
+    it('returns REMOTE_STRIKE for enemy tile', () => {
+        const spy = vi.fn();
+        engine.on('tileSelected', spy);
+
+        engine.selectTile(0, 1);
+
+        const options = spy.mock.calls[0][0].options;
+        expect(options.some((o: any) => o.id === 'REMOTE_STRIKE')).toBe(true);
+        expect(options.some((o: any) => o.id === 'BUILD_OUTPOST')).toBe(false);
+    });
+
+    it('plans and executes interaction', () => {
+        // Plan BUILD_OUTPOST at (0,0)
+        engine.planInteraction(0, 0, 'BUILD_OUTPOST');
+
+        // Verify Pending
+        expect(engine.pendingInteractions).toHaveLength(1);
+        expect(engine.pendingInteractions[0].actionId).toBe('BUILD_OUTPOST');
+
+        // Commit
+        const logSpy = vi.fn();
+        engine.on('logMessage', logSpy);
+
+        const initialGold = engine.state.players['P1'].gold;
+        // Cost of Outpost is 50
+
+        engine.commitMoves();
+
+        // Verify Execution (Log)
+        expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Outpost construction'));
+
+        // Verify Cost Deduction
+        expect(engine.state.players['P1'].gold).toBe(initialGold - 50);
+
+        // Verify Pending Cleared
+        expect(engine.pendingInteractions).toHaveLength(0);
+    });
+
+    it('prevents interaction if not enough gold', () => {
+        engine.state.players['P1'].gold = 0;
+
+        engine.planInteraction(0, 0, 'BUILD_OUTPOST');
+
+        expect(engine.pendingInteractions).toHaveLength(0);
+        expect(engine.lastError).toContain('Not enough gold');
+    });
+
+    it('cancels interaction on toggle', () => {
+        engine.planInteraction(0, 0, 'BUILD_OUTPOST');
+        expect(engine.pendingInteractions).toHaveLength(1);
+
+        // Toggle off
+        engine.planInteraction(0, 0, 'BUILD_OUTPOST');
+        expect(engine.pendingInteractions).toHaveLength(0);
+    });
+
+    it('cancels interaction even if funds are exactly enough for one (prevent double cost check)', () => {
+        // Setup: 50 Gold. Cost: 50.
+        const p1 = engine.state.players['P1'];
+        p1.gold = 50;
+
+        // 1. Plan (Cost 50). OK.
+        engine.planInteraction(0, 0, 'BUILD_OUTPOST'); // Cost 50
+        expect(engine.pendingInteractions).toHaveLength(1);
+        expect(engine.calculatePlannedCost()).toBe(50); // Engine sees 50 committed.
+
+        // 2. Cancel.
+        // If logic is flawed, it checks cost: current(50) + new(50) = 100.
+        // Player has 50. 50 < 100 -> Fail.
+        engine.planInteraction(0, 0, 'BUILD_OUTPOST');
+
+        // Expect: Toggled Off (Length 0)
+        expect(engine.pendingInteractions).toHaveLength(0);
+        expect(engine.lastError).toBeNull();
+    });
+});

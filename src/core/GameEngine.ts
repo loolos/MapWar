@@ -1,6 +1,8 @@
 import { GameState } from './GameState';
 import { GameConfig } from './GameConfig';
 import { AIController } from './AIController';
+import { InteractionRegistry } from './interaction/InteractionRegistry';
+
 import type { Action, EndTurnAction } from './Actions';
 import type { MapType } from './map/MapGenerator';
 
@@ -12,6 +14,11 @@ export class GameEngine {
 
     // State for Planning Phase
     pendingMoves: { r: number, c: number }[];
+    // Interactivity
+    selectedTile: { r: number, c: number } | null = null;
+    pendingInteractions: { r: number, c: number, actionId: string }[] = [];
+    interactionRegistry: InteractionRegistry;
+
     lastError: string | null = null;
 
     // AI Visualization
@@ -31,6 +38,7 @@ export class GameEngine {
         this.state = new GameState(playerConfigs, mapType);
         this.listeners = {};
         this.pendingMoves = [];
+        this.interactionRegistry = new InteractionRegistry();
         this.ai = new AIController(this);
 
         // Initial Income for first player
@@ -72,6 +80,7 @@ export class GameEngine {
         // Pass current mapType to ensure same generator is used if map is reset
         this.state.reset(undefined, keepMap, this.state.currentMapType);
         this.pendingMoves = [];
+        this.pendingInteractions = [];
         this.lastAiMoves = [];
         this.lastError = null;
         this.isGameOver = false;
@@ -90,6 +99,7 @@ export class GameEngine {
     loadState(json: string) {
         this.state.deserialize(json);
         this.pendingMoves = [];
+        this.pendingInteractions = [];
         this.lastAiMoves = [];
         this.lastError = null;
         this.isGameOver = false;
@@ -193,6 +203,107 @@ export class GameEngine {
         }
     }
 
+    // Interaction System
+    selectTile(row: number, col: number) {
+        if (!this.isValidCell(row, col)) return;
+
+        // If same tile, toggle off? or keep? Let's keep for now, UI decides toggle
+        this.selectedTile = { r: row, c: col };
+
+        // Get Options
+        const options = this.interactionRegistry.getAvailableActions(this, row, col);
+
+        this.emit('tileSelected', { r: row, c: col, options });
+        this.emit('sfx:select_tile'); // A softer sound than move plan
+    }
+
+    deselectTile() {
+        this.selectedTile = null;
+        this.emit('tileDeselected');
+    }
+
+    planInteraction(row: number, col: number, actionId: string) {
+        if (this.isGameOver) return;
+
+        const action = this.interactionRegistry.get(actionId);
+        if (!action) return;
+
+        // Check if ALREADY planned (Toggle Off) - Do this BEFORE cost/validation to allow cancellation
+        const existingIdx = this.pendingInteractions.findIndex(i => i.r === row && i.c === col && i.actionId === actionId);
+        if (existingIdx >= 0) {
+            this.pendingInteractions.splice(existingIdx, 1);
+            this.lastError = null; // Clear error if toggling off
+            this.emit('planUpdate');
+            this.emit('sfx:select'); // Feedback
+            return;
+        }
+
+        // Validation
+        if (!action.isAvailable(this, row, col)) {
+            console.log(`[PlanInteraction] Action ${actionId} not available at ${row},${col}. Owner: ${this.state.getCell(row, col)?.owner}, Current: ${this.state.currentPlayerId}, Building: ${this.state.getCell(row, col)?.building}`);
+            this.lastError = "Action not available";
+            this.emit('planUpdate');
+            return;
+        }
+
+        // Resolve Cost (Value or Function)
+        let cost = 0;
+        if (typeof action.cost === 'function') {
+            cost = action.cost(this, row, col);
+        } else {
+            cost = action.cost;
+        }
+
+        const label = typeof action.label === 'function' ? action.label(this, row, col) : action.label;
+
+        // Cost Check
+        const player = this.state.getCurrentPlayer();
+        const currentCost = this.calculatePlannedCost();
+        if (player.gold < currentCost + cost) {
+            console.log(`[PlanInteraction] Not enough gold. Gold: ${player.gold}, Cost: ${currentCost + cost}`);
+            this.lastError = `Not enough gold for ${label}`;
+            this.emit('planUpdate');
+            return;
+        }
+
+        // IMMEDIATE EXECUTION (e.g. Move)
+        if (action.immediate) {
+            console.log(`[PlanInteraction] Immediate execution for ${action.id}`);
+            action.execute(this, row, col);
+            // Do NOT add to pendingInteractions list
+            return;
+        }
+
+        // Add New Interaction
+        // Ensure no other interaction exists at this tile (Replace strategy)
+        const existingAtTile = this.pendingInteractions.findIndex(i => i.r === row && i.c === col);
+        if (existingAtTile >= 0) {
+            this.pendingInteractions.splice(existingAtTile, 1);
+        }
+
+        this.pendingInteractions.push({ r: row, c: col, actionId });
+
+        this.emit('planUpdate');
+        this.emit('sfx:select'); // Feedback
+    }
+
+    // Helper to calculate TOTAL cost including moves and interactions
+    calculatePlannedCost(): number {
+        let total = 0;
+        // Moves
+        for (const m of this.pendingMoves) {
+            total += this.getMoveCost(m.r, m.c);
+        }
+        // Interactions
+        for (const i of this.pendingInteractions) {
+            const act = this.interactionRegistry.get(i.actionId);
+            if (act) {
+                const c = typeof act.cost === 'function' ? act.cost(this, i.r, i.c) : act.cost;
+                total += c;
+            }
+        }
+        return total;
+    }
     // New: Toggle a move in the plan
     togglePlan(row: number, col: number) {
         if (this.isGameOver) return;
@@ -251,6 +362,14 @@ export class GameEngine {
             // Let's assume bridge is flat terrain difficulty for attack, so 20. But user said "double".
             // "invade bridge... same double cost". Standard attack IS expensive (20 vs 10 capture).
             // Maybe they mean if disconnected? No, likely just standard attack rules apply.
+
+            // Check for Base Defense Upgrade
+            if (cell.building === 'base') {
+                const level = cell.defenseLevel;
+                if (level > 0) {
+                    baseCost += level * GameConfig.UPGRADE_DEFENSE_BONUS;
+                }
+            }
         }
 
         // Apply Global Multipliers
@@ -308,11 +427,8 @@ export class GameEngine {
         }
 
         // 4. Cost Check
-        // Calculate total cost of pending moves + this move
-        let plannedCost = 0;
-        for (const m of this.pendingMoves) {
-            plannedCost += this.getMoveCost(m.r, m.c);
-        }
+        // Calculate total cost of pending moves + this move (Refactored to helper)
+        const plannedCost = this.calculatePlannedCost();
         const thisMoveCost = this.getMoveCost(row, col);
 
         if (player.gold < plannedCost + thisMoveCost) {
@@ -422,6 +538,31 @@ export class GameEngine {
             totalCost += cost;
         }
 
+        // Process Interactions
+        // Note: Interactions happen AFTER moves (or concurrent). 
+        // If an interaction relies on ownership, and a move changes ownership...
+        // Interaction validity should be checked at execution time too.
+
+        // Filter valid interactions (in case environment changed)
+        // copy pending
+        const interactionsToRun = [...this.pendingInteractions];
+
+        interactionsToRun.forEach(interaction => {
+            const action = this.interactionRegistry.get(interaction.actionId);
+            if (action) {
+                // Re-validate cost (Should be covered by loop check but safe to double check?)
+                // Re-validate availability
+                if (action.isAvailable(this, interaction.r, interaction.c)) {
+                    console.log(`[Commit] Executing ${interaction.actionId}`);
+                    action.execute(this, interaction.r, interaction.c);
+                    const c = typeof action.cost === 'function' ? action.cost(this, interaction.r, interaction.c) : action.cost;
+                    totalCost += c;
+                } else {
+                    console.warn(`Interaction ${interaction.actionId} failed validation at commit`);
+                }
+            }
+        });
+
         // Emit Audio Events based on aggregate actions (Priority Order)
         if (gameWon) {
             this.emit('sfx:victory');
@@ -450,6 +591,7 @@ export class GameEngine {
         }
 
         this.pendingMoves = []; // Clear
+        this.pendingInteractions = []; // Clear Interactions
         this.lastError = null;
         this.emit('planUpdate');
 

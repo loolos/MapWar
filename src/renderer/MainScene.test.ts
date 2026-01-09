@@ -118,6 +118,7 @@ vi.mock('phaser', () => {
                     };
                     return t;
                 }),
+                existing: vi.fn()
             };
             this.scale = {
                 width: 800,
@@ -170,7 +171,22 @@ vi.mock('phaser', () => {
             GameObjects: {
                 Graphics: class { },
                 Group: class { },
-                Container: class { }
+                Container: class {
+                    scene: any;
+                    constructor(scene: any) {
+                        this.scene = scene;
+                    }
+                    add = vi.fn();
+                    removeAll = vi.fn();
+                    setPosition = vi.fn();
+                    setVisible = vi.fn();
+                    destroy = vi.fn();
+                    setScale = vi.fn();
+                    width = 0;
+                    height = 0;
+                    x = 0;
+                    y = 0;
+                }
             },
             Structs: {
                 Size: class {
