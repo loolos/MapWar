@@ -69,52 +69,59 @@ export class InteractionMenu extends Phaser.GameObjects.Container {
             // Background
             const btnBg = this.scene.add.graphics();
             const color = canAfford ? 0x222222 : 0x110000;
-            const hoverColor = canAfford ? 0x444444 : 0x110000;
+            const hoverColor = canAfford ? 0x444444 : 0x221111;
 
-            // Highlight if Selected/Planned?
+            // Highlight if Selected/Planned
             const isPlanned = this.engine.pendingInteractions.some(i => i.r === r && i.c === c && i.actionId === opt.id);
             // Move is special: check pendingMoves
             const isMove = opt.id === 'MOVE' && this.engine.pendingMoves.some(m => m.r === r && m.c === c);
             const isActive = isPlanned || isMove;
 
             if (isActive) {
-                // Active State style (Green border? or brighter bg?)
-                btnBg.lineStyle(2, 0x00FF00);
+                btnBg.lineStyle(2, 0x00FF00); // Green Border for Active
+            } else if (!canAfford) {
+                btnBg.lineStyle(1, 0xFF0000); // Red Border for Unaffordable
             }
 
             btnBg.fillStyle(color, 1);
             btnBg.fillRoundedRect(0, 0, btnWidth, btnHeight, 4);
 
-            if (isActive) {
+            if (isActive || !canAfford) {
                 btnBg.strokeRoundedRect(0, 0, btnWidth, btnHeight, 4);
             }
 
             // Text
             const label = this.scene.add.text(10, 10, labelVal, {
                 fontSize: '14px',
-                color: canAfford ? '#ffffff' : '#888888',
+                color: canAfford ? '#ffffff' : '#ff8888', // Red tint if unaffordable
                 fontStyle: 'bold'
             });
 
             const cost = this.scene.add.text(btnWidth - 10, 10, `${costVal}G`, {
                 fontSize: '14px',
-                color: canAfford ? '#ffff00' : '#ff0000'
+                color: canAfford ? '#ffff00' : '#ff0000' // Red if unaffordable
             }).setOrigin(1, 0);
 
             // Click Area
             const zone = this.scene.add.zone(btnWidth / 2, btnHeight / 2, btnWidth, btnHeight)
-                .setInteractive({ useHandCursor: canAfford });
+                .setInteractive({ useHandCursor: canAfford }); // Only interact if afford? 
+            // User said "不可选选项为红色". This usually means disabled.
+            // If I click it, maybe it should show error? Or just do nothing.
+            // useHandCursor: canAfford ensures it's not clickable pointer.
 
             zone.on('pointerover', () => {
+                if (!canAfford) return; // No hover effect if disabled
                 btnBg.clear();
                 btnBg.fillStyle(hoverColor, 1);
                 btnBg.fillRoundedRect(0, 0, btnWidth, btnHeight, 4);
+                if (isActive) btnBg.strokeRoundedRect(0, 0, btnWidth, btnHeight, 4);
             });
 
             zone.on('pointerout', () => {
                 btnBg.clear();
                 btnBg.fillStyle(color, 1);
                 btnBg.fillRoundedRect(0, 0, btnWidth, btnHeight, 4);
+                if (isActive || !canAfford) btnBg.strokeRoundedRect(0, 0, btnWidth, btnHeight, 4);
             });
 
             zone.on('pointerdown', () => {

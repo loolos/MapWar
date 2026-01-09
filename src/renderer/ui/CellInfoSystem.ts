@@ -67,13 +67,11 @@ export class CellInfoSystem {
 
     update(engine: GameEngine, selectedRow: number | null, selectedCol: number | null) {
         // Always update Plan Cost
-        let totalCost = 0;
         const currentPlayer = engine.state.getCurrentPlayer();
         const currentGold = currentPlayer.gold;
 
-        for (const m of engine.pendingMoves) {
-            totalCost += engine.getMoveCost(m.r, m.c);
-        }
+        const totalCost = engine.calculatePlannedCost();
+
         this.planText.setText(`Total Plan: ${totalCost} G`);
         this.planText.setColor(totalCost > currentGold ? '#ff0000' : '#88ff88');
 

@@ -603,14 +603,21 @@ export class MainScene extends Phaser.Scene {
         const row = Math.floor(localY / this.tileSize);
 
         if (col >= 0 && col < gridWidth && row >= 0 && row < gridHeight) {
-            // Check for Cancellation (Clicking same tile with pending interaction)
-            const isSameTile = this.selectedRow === row && this.selectedCol === col;
+            // Check for Cancellation (Clicking ANY tile with pending interaction OR pending move)
+            // 1. Check Pending Interaction
             const pendingInteraction = this.engine.pendingInteractions.find(i => i.r === row && i.c === col);
-
-            if (isSameTile && pendingInteraction) {
+            if (pendingInteraction) {
                 // Cancel Interaction (Toggle off)
                 this.engine.planInteraction(row, col, pendingInteraction.actionId);
-                // Return early to avoid re-selecting or toggling move
+                return;
+            }
+
+            // 2. Check Pending Move
+            // If we click a tile that is already scheduled for a move, we cancel it.
+            const pendingMove = this.engine.pendingMoves.find(m => m.r === row && m.c === col);
+            if (pendingMove) {
+                // Cancel Move
+                this.engine.togglePlan(row, col);
                 return;
             }
 
@@ -624,32 +631,41 @@ export class MainScene extends Phaser.Scene {
             // Check options
             const options = this.engine.interactionRegistry.getAvailableActions(this.engine, row, col);
 
-            // If exactly 1 option and it's a MOVE/Attack type (or general policy for single options?)
-            // User said "normal capture... also considered interaction... only one option so adopt".
-            // So if 1 option, auto-plan.
-            if (options.length === 1 && !this.engine.pendingInteractions.some(i => i.r === row && i.c === col)) {
-                // Auto-Plan
-                // But wait, if it's a move, we used to togglePlan.
-                // togglePlan handles moves.
-                // Now MOVE is an interaction.
-                // planInteraction(..., 'MOVE') calls togglePlan.
-                // So we just call planInteraction.
+            const isPlanned = this.engine.pendingInteractions.some(i => i.r === row && i.c === col) ||
+                this.engine.pendingMoves.some(m => m.r === row && m.c === col);
 
-                // However, we must ensure we don't double-toggle if user clicked to CANCEL.
-                // We handled cancellation above (early return).
-                // So here we are in "New Selection" territory.
+            if (options.length === 1 && !isPlanned) {
+                // Check if affordable?
+                const opt = options[0];
+                const action = this.engine.interactionRegistry.get(opt.id);
+                // Cost calculation
+                const costVal = typeof action?.cost === 'function' ? action!.cost(this.engine, row, col) : action!.cost;
+                const canAfford = this.engine.state.getCurrentPlayer().gold >= this.engine.calculatePlannedCost() + costVal;
 
-                this.engine.planInteraction(row, col, options[0].id);
+                if (canAfford) {
+                    // Auto-Plan
+                    this.engine.planInteraction(row, col, opt.id);
+                }
+            } else if (options.length > 0 && !isPlanned) {
+                // Multiple options: Show Menu.
+                this.interactionMenu.show(row, col);
             }
 
-            // Show Interaction Menu if options exist
-            this.interactionMenu.show(row, col);
+            // Should we hide menu if we just selected something else?
+            // If we didn't show it above, we should hide it.
+            // Actually, the cancellation check returns early.
+            // If we select a generic tile with no options, hide menu.
+            if (options.length === 0 || isPlanned) {
+                this.interactionMenu.hide();
+            }
+
         } else {
             // Deselect
             this.selectedRow = null;
             this.selectedCol = null;
             // Update Menu to empty state (Persistent)
             this.interactionMenu.show(null as any, null as any); // Will need Update in InteractionMenu to handle null
+            this.interactionMenu.hide();
         }
     }
 
@@ -741,24 +757,32 @@ export class MainScene extends Phaser.Scene {
                 // Gold Mine removed from here
 
                 // 3. SELECTION / HIGHLIGHTS
-                // Pending Moves
-                const isPending = this.engine.pendingMoves.some(m => m.r === r && m.c === c);
-                if (isPending) {
-                    this.selectionGraphics.lineStyle(4, GameConfig.COLORS.HIGHLIGHT_MOVE, 0.8);
+                // 3. SELECTION / HIGHLIGHTS
+                // Pending Moves OR Interactions (Unified "Planned")
+                const isPendingMove = this.engine.pendingMoves.some(m => m.r === r && m.c === c);
+                const isPendingInteraction = this.engine.pendingInteractions.some(i => i.r === r && i.c === c);
+
+                if (isPendingMove || isPendingInteraction) {
+                    this.selectionGraphics.lineStyle(4, 0x00FF00, 1.0); // Green for Confirmed Plan
                     this.selectionGraphics.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
+                } else if (this.selectedRow === r && this.selectedCol === c) {
+                    // Selected but NOT planned (e.g. Menu Open with Multiple Options)
+                    // Check if options exist
+                    const opts = this.engine.interactionRegistry.getAvailableActions(this.engine, r, c);
+                    if (opts.length > 1) {
+                        this.selectionGraphics.lineStyle(4, 0xFFFF00, 1.0); // Yellow for "Decision Pending"
+                        this.selectionGraphics.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
+                    } else {
+                        // Default Selection Color (Blue or White)
+                        this.selectionGraphics.lineStyle(4, 0xFFFFFF, 0.8);
+                        this.selectionGraphics.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
+                    }
                 }
 
-                // AI Moves History
+                // AI Moves History (Keep as is)
                 const isAiMove = this.engine.lastAiMoves.some(m => m.r === r && m.c === c);
                 if (isAiMove) {
                     this.highlightGraphics.lineStyle(4, GameConfig.COLORS.HIGHLIGHT_AI, 1.0);
-                    this.highlightGraphics.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
-                }
-
-                // 4. PENDING INTERACTIONS (Yellow Box Frame)
-                const isInteraction = this.engine.pendingInteractions.some(i => i.r === r && i.c === c);
-                if (isInteraction) {
-                    this.highlightGraphics.lineStyle(4, 0xFFFF00, 1.0); // Yellow
                     this.highlightGraphics.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
                 }
             }

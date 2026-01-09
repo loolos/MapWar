@@ -69,7 +69,8 @@ export const GameConfig = {
         SIDEBAR_WIDTH: 260,
         ACTION_BAR_HEIGHT: 150
     },
-    AI_DIFFICULTY: 'MEDIUM' as Difficulty
+    AI_DIFFICULTY: 'MEDIUM' as Difficulty,
+    ENABLE_EXPERIMENTAL: false, // Set to true to enable experimental features
 };
 
 export type Difficulty = 'EASY' | 'MEDIUM' | 'HARD';

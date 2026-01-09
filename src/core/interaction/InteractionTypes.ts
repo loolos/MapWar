@@ -11,4 +11,6 @@ export interface InteractionDefinition {
     execute: (engine: GameEngine, row: number, c: number) => void;
     // If true, executes immediately upon planning (e.g. Move planning) instead of queuing
     immediate?: boolean;
+    // If true, this interaction is considered experimental and hidden unless enabled in config
+    isExperimental?: boolean;
 }

@@ -233,6 +233,10 @@ export class GameEngine {
         if (existingIdx >= 0) {
             this.pendingInteractions.splice(existingIdx, 1);
             this.lastError = null; // Clear error if toggling off
+
+            // Re-validate everything (Cascade Cancellation for interactions?)
+            this.revalidatePendingPlan();
+
             this.emit('planUpdate');
             this.emit('sfx:select'); // Feedback
             return;
@@ -271,6 +275,7 @@ export class GameEngine {
             console.log(`[PlanInteraction] Immediate execution for ${action.id}`);
             action.execute(this, row, col);
             // Do NOT add to pendingInteractions list
+            // Note: execute for Move calls togglePlan, which calls revalidatePendingPlan.
             return;
         }
 
@@ -282,6 +287,9 @@ export class GameEngine {
         }
 
         this.pendingInteractions.push({ r: row, c: col, actionId });
+
+        // Re-validate everything (e.g. check cost limits)
+        this.revalidatePendingPlan();
 
         this.emit('planUpdate');
         this.emit('sfx:select'); // Feedback
@@ -324,7 +332,156 @@ export class GameEngine {
                 this.lastError = validation.reason || "Invalid move";
             }
         }
+
+        // Cascade Cancellation: Re-validate all pending items
+        this.revalidatePendingPlan();
+
         this.emit('planUpdate');
+    }
+
+    revalidatePendingPlan() {
+        let changed = true;
+        let loops = 0;
+        while (changed && loops < 20) { // Safety break
+            changed = false;
+            loops++;
+
+            // CRUCIAL: To re-validate B properly, we must assess it AS IF it's being added, 
+            // meaning it shouldn't be in the base "pendingMoves" list during the check, 
+            // OR we accept double counting cost (bad) 
+            // OR we just check adjacency rules here manually?
+
+            // Reuse validateMove but handle the list temporarily.
+            // We'll filter `pendingMoves` to exclude current `move`.
+            // Efficient approach:
+            // We want to remove invalid ones.
+            // If we remove one, it might invalidate others in the SAME pass or NEXT pass?
+            // "Cascade" implies iterative.
+
+            // We need to iterate carefully. If A and B depend on each other (cycle? not possible with tree expansion from base), 
+            // they might both stay?
+            // We must enforce "Connected to OWNED eventually".
+            // Since we expand from Owned -> A -> B.
+            // If we just check "Valid", valid means "Adjacent to Connected OR Pending".
+            // If A and B are pending and adjacent, they validate each other!
+            // This is the "Floating Island" problem.
+            // If I delete Base connection, A and B form a floating valid island.
+
+            // FIX: "Adjacency" must eventually trace back to `isConnected` (Owned land that is connected to base).
+            // Actually `isAdjacentToConnected` checks owned land.
+            // `isAdjacentToPending` checks pending land.
+            // We need a BFS/Search to ensure every pending move connects to an Actual Owned-and-Connected tile.
+
+            // Graph Algo:
+            // Sources: All Owned tiles that are `isConnected`.
+            // Nodes: Pending Moves.
+            // Edges: Adjacency.
+            // We only keep Pending Moves that act as nodes reachable from Sources.
+
+            const reachable = new Set<string>(); // "r,c"
+
+            // 1. Identify direct connections to owned land
+            // Queue for BFS
+            const queue: { r: number, c: number }[] = [];
+            const pendingSet = new Set(this.pendingMoves.map(m => `${m.r},${m.c}`));
+
+            for (const m of this.pendingMoves) {
+                if (this.state.isAdjacentToConnected(m.r, m.c, this.state.currentPlayerId!)) {
+                    queue.push(m);
+                    reachable.add(`${m.r},${m.c}`);
+                }
+            }
+
+            // 2. BFS
+            let head = 0;
+            while (head < queue.length) {
+                const curr = queue[head++];
+                // Check neighbors in pendingSet
+                const neighbors = [
+                    { r: curr.r - 1, c: curr.c }, { r: curr.r + 1, c: curr.c },
+                    { r: curr.r, c: curr.c - 1 }, { r: curr.r, c: curr.c + 1 }
+                ];
+
+                for (const n of neighbors) {
+                    const key = `${n.r},${n.c}`;
+                    if (pendingSet.has(key) && !reachable.has(key)) {
+                        reachable.add(key);
+                        queue.push(n);
+                    }
+                }
+            }
+
+            // 3. Filter pendingMoves
+            const newMoves = this.pendingMoves.filter(m => reachable.has(`${m.r},${m.c}`));
+
+            if (newMoves.length !== this.pendingMoves.length) {
+                this.pendingMoves = newMoves;
+                changed = true;
+                this.emit('sfx:cancel'); // Feedback for auto-cancel?
+            }
+
+            // COST CHECK (After connectivity pruning)
+            // If total cost exceeds gold, prune FROM END (most recently added?) or just fail?
+            // User: "Also checks ... if cost changes ... cancel interactive".
+            // If logic forces pruning, we should probably prune the LAST added ones (stack behavior)?
+            // Or just mark them Invalid?
+            // User said: "Show as Red". 
+            // So we might NOT remove them if they are just expensive, only if disconnected.
+            // "if already selected... connection... or cost changed and money insufficient, also cancel".
+            // OK, so we MUST cancel if insufficient funds.
+
+            // Connectivity is strictly enforced (Floating islands removed).
+            // Cost is enforcing?
+            // "if cost changed and gold insufficient, also cancel" -> Yes, remove.
+
+            if (changed) continue; // Restart loop if connectivity changed things
+
+            // Check Cost
+            const currentCost = this.calculatePlannedCost();
+            const player = this.state.getCurrentPlayer();
+            if (player.gold < currentCost) {
+                // Remove last interaction or move to reduce cost?
+                // Simple approach: Remove the last pending Move/Interaction?
+                // Logic: Pending items are ordered by addition. Remove from end.
+
+                // Try removing last Pending Action (Move or Interaction)
+                // But they are separate lists.
+                // We don't track global order of addition between moves vs interactions easily (unless we add timestamps).
+                // heuristic: Remove from `pendingInteractions` first, then `pendingMoves`.
+
+                if (this.pendingInteractions.length > 0) {
+                    this.pendingInteractions.pop();
+                    changed = true;
+                } else if (this.pendingMoves.length > 0) {
+                    this.pendingMoves.pop();
+                    changed = true;
+                }
+            }
+
+            // Also validate Interactions Availability
+            // e.g. If I planned to "Build Outpost" on a tile I was planning to capture, but capture got cancelled.
+            // Note: Interactions often depend on OWNERSHIP.
+            // My pendingMoves usually Target Neutral/Enemy. So I don't own them yet.
+            // Interaction on Pending Move?
+            // If I plan Move to A, can I plan "Build" on A same turn?
+            // Usually not implemented yet.
+            // But if I have interaction on Existing Owned Tile A.
+            // And that interaction requires something?
+            // Most interactions are local.
+            // But checking `isAvailable` is safe.
+
+            const validInteractions = this.pendingInteractions.filter(i => {
+                const action = this.interactionRegistry.get(i.actionId);
+                if (!action) return false;
+                // Note: isAvailable might revert to false if game state changes
+                return action.isAvailable(this, i.r, i.c);
+            });
+
+            if (validInteractions.length !== this.pendingInteractions.length) {
+                this.pendingInteractions = validInteractions;
+                changed = true;
+            }
+        }
     }
 
     // Helper to get cost of a specific move

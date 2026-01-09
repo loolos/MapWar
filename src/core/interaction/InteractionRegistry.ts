@@ -21,6 +21,11 @@ export class InteractionRegistry {
     getAvailableActions(engine: GameEngine, row: number, col: number): InteractionDefinition[] {
         const valid: InteractionDefinition[] = [];
         for (const action of this.actions.values()) {
+            // Check Experimental Flag
+            if (action.isExperimental && !GameConfig.ENABLE_EXPERIMENTAL) {
+                continue;
+            }
+
             if (action.isAvailable(engine, row, col)) {
                 valid.push(action);
             }
@@ -56,6 +61,7 @@ export class InteractionRegistry {
             label: 'Remote Strike',
             description: 'Launch a missile strike (Mock)',
             cost: 100,
+            isExperimental: true, // Experimental Feature
             isAvailable: (engine, r, c) => {
                 const cell = engine.state.getCell(r, c);
                 const pid = engine.state.currentPlayerId;

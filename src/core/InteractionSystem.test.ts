@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { GameEngine } from './GameEngine';
+import { GameConfig } from './GameConfig';
 
 describe('Interaction System', () => {
     let engine: GameEngine;
@@ -34,15 +35,24 @@ describe('Interaction System', () => {
         expect(options.some((o: any) => o.id === 'REMOTE_STRIKE')).toBe(false);
     });
 
-    it('returns REMOTE_STRIKE for enemy tile', () => {
-        const spy = vi.fn();
-        engine.on('tileSelected', spy);
+    it('returns REMOTE_STRIKE for enemy tile only if experimental enabled', () => {
+        // Setup Enemy Tile
+        engine.state.setOwner(0, 1, 'P2');
+        engine.state.currentPlayerId = 'P1';
 
-        engine.selectTile(0, 1);
+        // 1. Default: Should NOT be available
+        let actions = engine.interactionRegistry.getAvailableActions(engine, 0, 1);
+        const hasStrikeDefault = actions.some(a => a.id === 'REMOTE_STRIKE');
+        expect(hasStrikeDefault).toBe(false);
 
-        const options = spy.mock.calls[0][0].options;
-        expect(options.some((o: any) => o.id === 'REMOTE_STRIKE')).toBe(true);
-        expect(options.some((o: any) => o.id === 'BUILD_OUTPOST')).toBe(false);
+        // 2. Enable Experimental
+        GameConfig.ENABLE_EXPERIMENTAL = true;
+        actions = engine.interactionRegistry.getAvailableActions(engine, 0, 1);
+        const hasStrike = actions.some(a => a.id === 'REMOTE_STRIKE');
+        expect(hasStrike).toBe(true);
+
+        // Cleanup
+        GameConfig.ENABLE_EXPERIMENTAL = false;
     });
 
     it('plans and executes interaction', () => {
@@ -108,5 +118,33 @@ describe('Interaction System', () => {
         // Expect: Toggled Off (Length 0)
         expect(engine.pendingInteractions).toHaveLength(0);
         expect(engine.lastError).toBeNull();
+    });
+
+    it('Cascade Cancellation: Cancelling A cancels dependent B', () => {
+        // Setup:
+        // [Base/Owned] [A] [B]
+        // Player at (0,0). A at (0,1). B at (0,2).
+
+        // Ensure Grid is valid for this
+        // (0,0) is Owned P1 (from beforeEach)
+        // (0,1) is Owned P2 (from beforeEach) -> Let's reset it to Neutral for this test to be a simple Move/Capture
+        engine.state.setOwner(0, 1, null);
+        engine.state.setOwner(0, 2, null);
+
+        // 1. Plan A (Valid, adjacent to Base)
+        engine.togglePlan(0, 1);
+        expect(engine.pendingMoves).toHaveLength(1);
+
+        // 2. Plan B (Valid, adjacent to Pending A)
+        engine.togglePlan(0, 2);
+        expect(engine.pendingMoves).toHaveLength(2);
+
+        // 3. Cancel A
+        // B relies on A to be connected to Base.
+        // Without A, B is not adjacent to owned, nor adjacent to a VALID pending chain connected to owned.
+        engine.togglePlan(0, 1);
+
+        // Expectation: Both A (explicit) and B (implicit cascade) are removed.
+        expect(engine.pendingMoves).toHaveLength(0);
     });
 });

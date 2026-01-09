@@ -13,6 +13,7 @@ describe('GameEngine - Town Mechanics', () => {
         for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
             for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
                 engine.state.grid[r][c].owner = null;
+                engine.state.grid[r][c].type = 'plain'; // Ensure plain terrain
                 engine.state.grid[r][c].building = 'none';
                 engine.state.grid[r][c].isConnected = false;
                 engine.state.grid[r][c].townIncome = 0;
