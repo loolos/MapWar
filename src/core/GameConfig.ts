@@ -19,8 +19,8 @@ export const GameConfig = {
     UPGRADE_DEFENSE_BONUS: 30, // Increase capture cost
     UPGRADE_DEFENSE_MAX: 3,
     UPGRADE_INCOME_COST: 20,
-    UPGRADE_INCOME_BONUS: [1, 2, 3, 4], // Cumulative income bonus per level
-    UPGRADE_INCOME_MAX: 4,
+    UPGRADE_INCOME_BONUS: [1, 2, 3, 4, 5], // Cumulative income bonus per level
+    UPGRADE_INCOME_MAX: 5,
     // Global Cost Multipliers (System Parameters)
     COST_MULTIPLIER_NEUTRAL: 1.0,
     COST_MULTIPLIER_ATTACK: 1.2,

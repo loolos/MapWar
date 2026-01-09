@@ -342,7 +342,24 @@ export class GameState {
             }
         }
 
-        return Math.floor(GameConfig.GOLD_PER_TURN_BASE + landIncome);
+        return Math.floor(GameConfig.GOLD_PER_TURN_BASE + landIncome + this.calculateBaseUpgradeBonus(playerId));
+    }
+
+    private calculateBaseUpgradeBonus(playerId: PlayerID): number {
+        let upgradeBonus = 0;
+        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+                const cell = this.grid[r][c];
+                if (cell.owner === playerId && cell.building === 'base' && cell.incomeLevel > 0) {
+                    let bonus = 0;
+                    for (let i = 0; i < cell.incomeLevel; i++) {
+                        bonus += GameConfig.UPGRADE_INCOME_BONUS[i];
+                    }
+                    upgradeBonus += bonus;
+                }
+            }
+        }
+        return upgradeBonus;
     }
 
     public updateConnectivity(playerId: PlayerID) {

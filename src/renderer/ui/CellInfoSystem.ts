@@ -142,12 +142,15 @@ export class CellInfoSystem {
             desc = "Main Base: Generates gold and projects power.";
 
             // Income Upgrade Details
+            // Income Upgrade Details
             let incomeBonus = 0;
             if (cell.incomeLevel > 0) {
-                for (let i = 1; i <= cell.incomeLevel; i++) incomeBonus += i; // 1+2+3...
+                for (let i = 1; i <= cell.incomeLevel; i++) {
+                    incomeBonus += GameConfig.UPGRADE_INCOME_BONUS[i - 1];
+                }
             }
 
-            revenueMsg = `\nRevenue: +${GameConfig.GOLD_PER_LAND + incomeBonus} G`;
+            revenueMsg = `\nRevenue: +${GameConfig.GOLD_PER_TURN_BASE + incomeBonus} G`;
 
             if (cell.defenseLevel > 0) {
                 desc += `\nDefense Lvl ${cell.defenseLevel}: Enemy Cost +${cell.defenseLevel * GameConfig.UPGRADE_DEFENSE_BONUS}`;
