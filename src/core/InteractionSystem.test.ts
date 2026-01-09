@@ -131,6 +131,9 @@ describe('Interaction System', () => {
         engine.state.setOwner(0, 1, null);
         engine.state.setOwner(0, 2, null);
 
+        // CRITICAL FOR REVALIDATION: Start node must be connected!
+        engine.state.getCell(0, 0)!.isConnected = true;
+
         // 1. Plan A (Valid, adjacent to Base)
         engine.togglePlan(0, 1);
         expect(engine.pendingMoves).toHaveLength(1);

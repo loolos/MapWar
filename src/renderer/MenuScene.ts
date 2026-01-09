@@ -14,12 +14,23 @@ export class MenuScene extends Phaser.Scene {
 
         // Title (Phaser)
         // Adjust Y dynamically if needed, or keep it simple.
-        this.add.text(this.scale.width / 2, 50, 'MAP WAR', {
-            fontSize: '48px',
+        // Title (Phaser)
+        const fontSize = Math.min(48, this.scale.width * 0.1); // Dynamic font size
+        const title = this.add.text(this.scale.width / 2, 50, 'MAP WAR', {
+            fontSize: `${fontSize}px`,
             color: '#ffffff',
             fontStyle: 'bold',
             shadow: { offsetX: 2, offsetY: 2, color: '#000', blur: 4, fill: true }
         }).setOrigin(0.5);
+
+        // Handle Resize for Title
+        this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
+            title.setPosition(gameSize.width / 2, 50);
+            title.setFontSize(Math.min(48, gameSize.width * 0.1));
+            // DOM element handles itself via CSS, but we might need to reposition it?
+            // Phaser DOM objects don't auto-center if we used explicit x/y.
+            // We need to update DOM position too.
+        });
 
         // HTML UI Container
         // responsive-layout class will handle 2-column on desktop, stack on mobile
@@ -28,21 +39,22 @@ export class MenuScene extends Phaser.Scene {
                 .menu-container {
                     display: grid;
                     grid-template-columns: 1fr 1fr;
-                    gap: 20px;
+                    gap: 15px;
                     width: 90vw;
                     max-width: 800px;
-                    height: 70vh;
-                    background: rgba(0,0,0,0.6);
-                    padding: 20px;
+                    height: 80vh; /* More height on mobile */
+                    background: rgba(0,0,0,0.7);
+                    padding: 3vw;
                     border-radius: 12px;
                     color: white;
                     font-family: 'Arial', sans-serif;
-                    overflow: hidden; /* Inner scroll */
+                    overflow: hidden; 
+                    font-size: clamp(14px, 2vw, 18px); /* Dynamic Font */
                 }
                 .col-left {
                     display: flex;
                     flex-direction: column;
-                    gap: 20px;
+                    gap: 10px;
                     justify-content: flex-start;
                 }
                 .col-right {
@@ -56,7 +68,7 @@ export class MenuScene extends Phaser.Scene {
                     flex-direction: column;
                     gap: 5px;
                     background: rgba(255,255,255,0.05);
-                    padding: 10px;
+                    padding: 8px;
                     border-radius: 8px;
                 }
                 .control-row {
@@ -66,7 +78,7 @@ export class MenuScene extends Phaser.Scene {
                     justify-content: center;
                 }
                 input, select {
-                    font-size: 16px;
+                    font-size: 1em; /* inherit scale */
                     padding: 5px;
                     border-radius: 4px;
                     border: none;
@@ -76,7 +88,7 @@ export class MenuScene extends Phaser.Scene {
                     flex: 1;
                     overflow-y: auto;
                     background: rgba(0,0,0,0.3);
-                    padding: 10px;
+                    padding: 8px;
                     border-radius: 8px;
                     border: 1px solid #444;
                 }
@@ -91,8 +103,8 @@ export class MenuScene extends Phaser.Scene {
                 }
 
                 .btn-start {
-                    font-size: 24px;
-                    padding: 15px;
+                    font-size: 1.2em;
+                    padding: 12px;
                     background: #4444ff;
                     color: white;
                     border: none;
@@ -101,6 +113,7 @@ export class MenuScene extends Phaser.Scene {
                     font-weight: bold;
                     width: 100%;
                     box-shadow: 0 4px 0 #2222aa;
+                    margin-top: 5px;
                 }
                 .btn-start:hover { background: #6666ff; }
                 .btn-start:active { transform: translateY(2px); box-shadow: 0 2px 0 #2222aa; }
@@ -109,15 +122,20 @@ export class MenuScene extends Phaser.Scene {
                     margin-top: auto; 
                 }
                 
-                @media (max-width: 600px) {
+                @media (max-width: 700px) {
                     .menu-container {
                         grid-template-columns: 1fr;
-                        height: 75vh;
-                        overflow-y: auto;
+                        height: 85vh;
+                        overflow-y: auto; /* Scroll whole container on mobile if needed */
+                        padding: 15px;
+                        font-size: 16px; /* Fixed legible size on mobile */
                     }
                     /* On mobile, stack: Configs first, then Player List */
                     .col-left { order: 1; }
-                    .col-right { order: 2; height: 300px; /* Fixed height for scrollable list on mobile */ }
+                    .col-right { order: 2; height: auto; min-height: 200px; }
+                    .control-group { padding: 10px; }
+                    .player-list { min-height: 200px; }
+                    input, select { font-size: 16px; /* Prevent zoom */ }
                 }
             </style>
 
@@ -128,13 +146,13 @@ export class MenuScene extends Phaser.Scene {
                         <label style="font-weight:bold; text-align:center;">MAP CONFIG</label>
                         <div class="control-row">
                             <span>Size:</span>
-                            <input type="number" id="mapWidthInput" placeholder="W" min="10" max="40" value="10" style="width:50px;">
+                            <input type="number" id="mapWidthInput" placeholder="W" min="10" max="40" value="10" style="width:3em;">
                             <span>x</span>
-                            <input type="number" id="mapHeightInput" placeholder="H" min="10" max="40" value="10" style="width:50px;">
+                            <input type="number" id="mapHeightInput" placeholder="H" min="10" max="40" value="10" style="width:3em;">
                         </div>
-                        <div class="control-row" style="margin-top: 10px;">
+                        <div class="control-row" style="margin-top: 5px;">
                              <span>Type:</span>
-                             <select id="mapTypeSelect" style="width: 120px;">
+                             <select id="mapTypeSelect" style="width: 8em;">
                                  <option value="default">Default</option>
                                  <option value="archipelago">Archipelago</option>
                                  <option value="pangaea">Pangaea</option>
@@ -148,12 +166,12 @@ export class MenuScene extends Phaser.Scene {
                         <label style="font-weight:bold; text-align:center;">PLAYERS</label>
                         <div class="control-row">
                             <span>Count:</span>
-                            <input type="number" id="playerCountInput" min="2" max="8" value="2" style="width:60px;">
+                            <input type="number" id="playerCountInput" min="2" max="8" value="2" style="width:4em;">
                         </div>
                     </div>
 
                     <div class="preset-section">
-                        <label style="font-size: 14px; display:block; margin-bottom:5px;">Load Preset:</label>
+                        <label style="display:block; margin-bottom:5px;">Load Preset:</label>
                         <select id="presetSelect" style="width: 100%; padding: 8px;">
                             <option value="">-- New Game --</option>
                             <!-- Populated via JS -->
@@ -161,6 +179,8 @@ export class MenuScene extends Phaser.Scene {
                     </div>
 
                     <button id="startGameBtn" class="btn-start">START GAME</button>
+                    <!-- Spacer for scroll -->
+                    <div style="height:10px;"></div>
                 </div>
 
                 <!-- Right Column: Player List -->
@@ -265,5 +285,10 @@ export class MenuScene extends Phaser.Scene {
                 }
             });
         }
+
+        // Handle Resize for DOM Element
+        this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
+            domElement.setPosition(gameSize.width / 2, gameSize.height / 2 + 20);
+        });
     }
 }

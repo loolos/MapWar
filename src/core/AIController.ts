@@ -145,6 +145,7 @@ export class AIController {
             const playerAfterMoves = this.engine.state.getCurrentPlayer();
 
             if (playerAfterMoves.gold > 0) {
+                let simulatedGold = playerAfterMoves.gold;
                 // console.log("[AI] Checking for upgrades. Gold:", playerAfterMoves.gold);
                 // Check My Bases
                 const myBases = [];
@@ -164,17 +165,13 @@ export class AIController {
                     // Priority 1: Income (Early Game or Low Level)
                     // If income level < max, and cost is affordable
                     const incomeCost = GameConfig.UPGRADE_INCOME_COST;
-                    if (cell.incomeLevel < GameConfig.UPGRADE_INCOME_MAX && playerAfterMoves.gold >= incomeCost) {
+                    if (cell.incomeLevel < GameConfig.UPGRADE_INCOME_MAX && simulatedGold >= incomeCost) {
                         // console.log("[AI] Planning Income Upgrade at", r, c);
-                        // Simple Heuristic: Always buy income if we have spare cash?
-                        // Maybe reserve some for units next turn?
-                        // Let's say: Buy if we have > 30g (so we can still move next turn) OR if it's very early.
-                        // For now: Aggressive Economy.
 
                         // Use Interaction
                         this.engine.planInteraction(r, c, 'UPGRADE_INCOME');
                         // Deduct specific to this local reasoning (Engine handles real deduction on commit)
-                        playerAfterMoves.gold -= incomeCost;
+                        simulatedGold -= incomeCost;
                         continue; // Done with this base for now (one upgrade per turn?)
                     }
 
@@ -184,9 +181,9 @@ export class AIController {
                     // Simple check: Random or if gold is high?
                     // Let's maintain "If Gold > 50", buy defense.
                     const defenseCost = GameConfig.UPGRADE_DEFENSE_COST;
-                    if (cell.defenseLevel < GameConfig.UPGRADE_DEFENSE_MAX && playerAfterMoves.gold >= defenseCost + 20) {
+                    if (cell.defenseLevel < GameConfig.UPGRADE_DEFENSE_MAX && simulatedGold >= defenseCost + 20) {
                         this.engine.planInteraction(r, c, 'UPGRADE_DEFENSE');
-                        playerAfterMoves.gold -= defenseCost;
+                        simulatedGold -= defenseCost;
                     }
                 }
             }

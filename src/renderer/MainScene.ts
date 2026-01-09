@@ -178,6 +178,7 @@ export class MainScene extends Phaser.Scene {
         this.playerStatusSystem = new PlayerStatusSystem(this, 0, 0, 100);
         this.infoSystem = new CellInfoSystem(this, 0, 0, 100);
         this.buttonSystem = new ActionButtonSystem(this, 0, 0);
+        this.buttonSystem.setGrid(1, 2);
         // this.notificationSystem = new NotificationSystem(this, 0, 0, 100, 100);
         this.logSystem = new LogSystem(this, 0, 0, 200, 100);
         this.interactionMenu = new InteractionMenu(this, this.engine); // NEW
@@ -318,14 +319,13 @@ export class MainScene extends Phaser.Scene {
 
             // Define Regions
             let mapX = 0, mapY = 0, mapAreaW = 0, mapAreaH = 0;
-            const uiBaseWidth = 260;
+            // uiBaseWidth removed (unused)
 
             if (isPortrait) {
                 // --- PORTRAIT MODE (4-Corner Layout) ---
                 // Header (Status + Info): Top 15% (min 120px)
-                // Footer (Log + Buttons): Bottom 15% (min 120px)
-
-                const barHeight = Phaser.Math.Clamp(height * 0.15, 120, 180);
+                // Footer (Log + Buttons + Menu): Bottom (min 160px for Menu+Buttons)
+                const barHeight = Phaser.Math.Clamp(height * 0.22, 160, 220);
 
                 // Map fills the middle
                 mapX = 0;
@@ -356,44 +356,43 @@ export class MainScene extends Phaser.Scene {
                 const midX = width / 2;
 
                 // --- TOP LEFT: Player Status ---
-                const statusScale = Math.min(1, (midX - 10) / uiBaseWidth);
-                this.playerStatusSystem.setScale(statusScale);
-                // Note: resize takes (width, height, x, y) for mask generation
-                this.playerStatusSystem.resize(uiBaseWidth, barHeight / statusScale, 5, 5);
+                const statusW = midX - 15;
+                const statusH = barHeight - 10;
+
+                this.playerStatusSystem.setScale(1); // Reset scale
+                this.playerStatusSystem.resize(statusW, statusH, 5, 5);
                 this.playerStatusSystem.setPosition(5, 5);
 
                 // --- TOP RIGHT: Cell Info ---
-                const infoScale = Math.min(1, (midX - 10) / uiBaseWidth);
-                this.infoSystem.setScale(infoScale);
-                // Note: resize takes (width, x, y) for mask generation. 
-                // Wait, CellInfoSystem.resize signature is (width, x, y). 
-                // It does NOT take height? layout logic says height=250 fixed internal.
-                // We clearly want to position it at midX + 5, 5.
-                this.infoSystem.resize(uiBaseWidth, midX + 5, 5);
+                const infoW = midX - 15;
+                // infoH unused
+
+                this.infoSystem.setScale(1);
+                this.infoSystem.resize(infoW, barHeight - 10, midX + 5, 5);
                 this.infoSystem.setPosition(midX + 5, 5);
 
                 // --- BOTTOM LEFT: Log System ---
-                // Log takes left half of bottom bar?
-                // User said: "Log Screen on Bottom Left, Buttons on Bottom Right"
+                const logW = midX - 15;
+                const logH = barHeight - 10;
+
                 this.logSystem.setVisible(true);
-                this.logSystem.resize(midX - 10, barHeight - 10);
+                this.logSystem.resize(logW, logH);
                 this.logSystem.setPosition(5, height - barHeight + 5);
 
-                // --- BOTTOM RIGHT: Buttons ---
-                // ButtonSystem isn't a panel, it creates buttons relative to pos.
-                // We place the anchor. 
-                // "End Turn" button size?
-                this.buttonSystem.setPosition(midX + (midX / 2), height - (barHeight / 2));
-                // Adjust button system to center button in its quadrant?
-                // ActionButtonSystem usually places button at (0,0) relative.
+                // --- BOTTOM RIGHT: Buttons & Interaction Menu ---
+                // Vertical Split: Menu on Top, Buttons on Bottom
+                const brW = midX - 15;
+                const btnH = 35; // Fixed height for 2 rows of small buttons
+                const menuH = barHeight - btnH - 10; // Allowing for padding
 
-                // --- INTERACTION MENU (Portrait: aligned with Buttons in Bottom Right) ---
-                // Horizontal Flow to fit side-by-side if possible?
-                // Or just Vertical stack over the buttons?
-                // User said "menu please put in button area".
-                // If it opens, it might cover buttons. Ideally we want both or toggle.
-                // Let's overlay for now (modal action).
-                this.interactionMenu.resize(midX - 10, true); // Horizontal flow
+                // Buttons (Bottom)
+                this.buttonSystem.setScale(1);
+                this.buttonSystem.resize(brW, btnH);
+                this.buttonSystem.setPosition(midX + 5, height - btnH - 5);
+
+                // Interaction Menu (Top of BR Area)
+                // User Request: "In button area", "accommodate both"
+                this.interactionMenu.resize(brW, menuH, false);
                 this.interactionMenu.setPosition(midX + 5, height - barHeight + 5);
 
                 // Notifications (Overlay Removed)
@@ -406,7 +405,9 @@ export class MainScene extends Phaser.Scene {
                 // Right Column: Log (Top), Buttons (Bottom)
                 // Map: Strictly Center
 
-                const sidebarW = 280; // Fixed width for side panels
+                // Dynamic Sidebar Width: Min 180, Max 280, but allow shrinking on small screens
+                // On 667px width: 0.3 * 667 = 200px.
+                const sidebarW = Math.max(180, Math.min(280, width * 0.3));
 
                 // Map Area (Center)
                 mapX = sidebarW;
@@ -423,21 +424,24 @@ export class MainScene extends Phaser.Scene {
                 this.brBg.clear().setVisible(false);
 
                 // Common Sizing
-                const uiScale = Math.min(1, (sidebarW - 20) / uiBaseWidth);
+                // const uiScale = Math.min(1, (sidebarW - 20) / uiBaseWidth); // Removed
                 const halfH = height / 2;
 
                 // --- LEFT COLUMN ---
+                const availableH = height - 20;
+                // Info preference: 250, but max 55% of height to leave room for Status
+                const infoH = Math.min(250, Math.floor(availableH * 0.55));
+                const statusH = availableH - infoH - 10;
+
                 // Top Left: Status
-                this.playerStatusSystem.setScale(uiScale);
-                this.playerStatusSystem.resize(uiBaseWidth, halfH, 10, 10);
+                this.playerStatusSystem.setScale(1);
+                this.playerStatusSystem.resize(sidebarW - 20, statusH, 10, 10);
                 this.playerStatusSystem.setPosition(10, 10);
 
                 // Bottom Left: Info (User Req: CellInfo BL)
-                // Info height is fixed inside (approx 250), so we place it at bottom
-                // But resize signature is (width, x, y)
-                this.infoSystem.setScale(uiScale);
-                const infoY = height - 260; // 250 height + padding
-                this.infoSystem.resize(uiBaseWidth, 10, infoY);
+                const infoY = height - infoH - 10;
+                this.infoSystem.setScale(1);
+                this.infoSystem.resize(sidebarW - 20, infoH, 10, infoY);
                 this.infoSystem.setPosition(10, infoY);
 
                 // --- RIGHT COLUMN ---
@@ -449,19 +453,18 @@ export class MainScene extends Phaser.Scene {
 
                 // Bottom Right: Buttons (User Req: Buttons BR)
                 // Button Anchor
-                // Vertical Stack: Center in Sidebar (Width 280, Center 140 from right = width-140)
-                // Button Width 140. Center is 70.
-                // X = (width - 280) + (280 - 140)/2 = width - 280 + 70 = width - 210.
-                // Y: height - 130 (Space for 2 buttons + gap)
-                this.buttonSystem.setPosition(width - 210, height - 130);
+                // Vertical Stack: Center in Sidebar
+                this.buttonSystem.setScale(1);
+                const btnAreaH = 35; // Compact buttons
+                this.buttonSystem.resize(sidebarW - 20, btnAreaH);
+                this.buttonSystem.setPosition(width - sidebarW + 10, height - btnAreaH - 10);
 
                 // --- INTERACTION MENU (Right Sidebar, above Buttons) ---
                 // Vertical Flow
-                this.interactionMenu.resize(sidebarW - 20, false);
-                // Place above buttons. Buttons take ~100px.
-                // Place at height - 300? Or just below Log?
-                // Log ends at halfH - 20 (plus 10 y pos = halfH - 10).
-                // Let's place at halfH + 10.
+                // Available Height: (Height - Buttons) - (HalfH + 10)
+                const interactionMaxH = (height - btnAreaH - 20) - (halfH + 10);
+                this.interactionMenu.resize(sidebarW - 20, interactionMaxH, false);
+                // Place above buttons.
                 this.interactionMenu.setPosition(width - sidebarW + 10, halfH + 10);
 
                 // Notifications (Overlay Removed)
@@ -515,7 +518,21 @@ export class MainScene extends Phaser.Scene {
 
                 this.cameraControlsContainer.setVisible(true);
                 // Adjust controls position
-                this.cameraControlsContainer.setPosition(width - 60, height / 2); // Center right?
+                // LANDSCAPE: Center Right (in Sidebar?) - No, Sidebar has buttons.
+                // PORTRAIT: Bottom Right (above Bottom Bar)
+
+                if (width > height) {
+                    // Landscape: Place above buttons in Right Sidebar?
+                    // Buttons are at bottom. Log is at top. Middle is free-ish.
+                    // SidebarW is calculated above but not available in this scope easily?
+                    // Re-calculate or use 'width - 60' which is inside the 280px sidebar.
+                    this.cameraControlsContainer.setPosition(width - 60, height / 2);
+                } else {
+                    // Portrait: Place above Bottom Bar
+                    // barHeight is stored? No. Re-calc: max(160, h*0.25).
+                    const barH = Math.max(160, height * 0.25);
+                    this.cameraControlsContainer.setPosition(width - 60, height - barH - 60);
+                }
 
                 // Clamp map position if scrollable
                 const minX = mapX + mapAreaW - scaledMapW - 20;
@@ -547,12 +564,7 @@ export class MainScene extends Phaser.Scene {
     setupButtons() {
         this.buttonSystem.clearButtons();
 
-        // Detect Layout
-        const isLandscape = this.scale.width > this.scale.height;
-
-        // Slot Configuration
-        // Portrait: Side-by-Side (0,0), (0,1)
-        // Landscape: Stacked (0,0), (1,0)
+        // Slot Configuration: Always Horizontal (1 Row, 2 Cols)
 
         // Button 1: End Turn
         this.buttonSystem.addButton(0, 0, "END TURN", () => {
@@ -563,10 +575,7 @@ export class MainScene extends Phaser.Scene {
         const isMuted = (this.soundManager as any).isMuted;
         const label = isMuted ? "UNMUTE 🔇" : "MUTE 🔊";
 
-        const r2 = isLandscape ? 1 : 0;
-        const c2 = isLandscape ? 0 : 1;
-
-        this.buttonSystem.addButton(r2, c2, label, () => {
+        this.buttonSystem.addButton(0, 1, label, () => {
             this.soundManager.toggleMute();
             // Re-render buttons to update label
             this.setupButtons();
@@ -675,6 +684,7 @@ export class MainScene extends Phaser.Scene {
         this.terrainGraphics.clear();
         this.selectionGraphics.clear();
         this.highlightGraphics.clear();
+        this.gridGraphics.clear();
 
         // Remove old logic objects logic if heavy? 
         // Phaser graphics clear is cheap.
@@ -726,7 +736,8 @@ export class MainScene extends Phaser.Scene {
 
                     if (cell.isConnected) {
                         // Normal Connected State: Solid Semi-Transparent
-                        this.gridGraphics.fillStyle(color, 0.5);
+                        // User Request: "Transparency slightly lower about 70%" -> 0.7 Alpha
+                        this.gridGraphics.fillStyle(color, 0.7);
                         this.gridGraphics.fillRect(x, y, this.tileSize - 2, this.tileSize - 2);
                     } else {
                         // Disconnected State: Zebra Stripes
@@ -868,14 +879,18 @@ export class MainScene extends Phaser.Scene {
     private hasRenderedOnce: boolean = false;
 
     update(_time: number, _delta: number) {
+        // Continuous UI Updates (State polling)
+        if (this.playerStatusSystem) {
+            this.playerStatusSystem.update(this.engine);
+        }
+
         // Force initial render on first update to avoid black screen
         if (!this.hasRenderedOnce) {
-
-            // Determine initial layout if not already done? resize calls it.
-            // But if create happened before resize event fired? 
-            // resize calls drawMap. 
-            // If we need another force:
+            // this.drawMap(); // resize() calls it? 
             this.drawMap();
+            // this.updateUI(); // Removed to avoid potential log spam/duplication if logic is moved
+            // Actually updateUI logic regarding logs might be useful?
+            // Let's keep updateUI() call specific to events if possible, or leave it here for initial check.
             this.updateUI();
             this.hasRenderedOnce = true;
         }
@@ -1026,11 +1041,15 @@ export class MainScene extends Phaser.Scene {
     }
 
     private drawDisconnectedPattern(graphics: Phaser.GameObjects.Graphics, x: number, y: number, size: number, color: number) {
-        graphics.lineStyle(4, color, 0.6); // Semi-transparent player color
+        // Dynamic Line Width based on size (min 2px)
+        const lineWidth = Math.max(2, size / 8);
+        graphics.lineStyle(lineWidth, color, 0.6); // Semi-transparent player color
 
         // Draw Diagonal Stripes (Top-Left to Bottom-Right)
         // Equation: x_rel + y_rel = k
-        const step = 10; // Density
+        // Dynamic Step based on size (e.g., 4 stripes per tile)
+        const step = size / 4;
+
         // k ranges from 0 to 2*size
         for (let k = 0; k <= 2 * size; k += step) {
             // Intersection with square [0, size] x [0, size]

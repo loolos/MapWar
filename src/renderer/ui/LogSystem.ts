@@ -133,10 +133,18 @@ export class LogSystem {
         this.background.lineStyle(1, 0x444444);
         this.background.strokeRoundedRect(0, 0, width, height, 4);
 
-        // Update Text Wrapping Width
+        // Dynamic Font
+        // 14px at 300px width ~ 4.6%
+        const fontSizeVal = Math.max(10, Math.floor(width * 0.045));
+        const fontStr = `${fontSizeVal}px`;
+
+        // Update Text Wrapping Width and Font
         for (let i = 0; i < this.logLines.length; i++) {
             const lineObj = this.logLines[i];
-            lineObj.setStyle({ wordWrap: { width: width - 10 } });
+            lineObj.setStyle({
+                fontSize: fontStr,
+                wordWrap: { width: width - 10 }
+            });
         }
 
         this.refresh();

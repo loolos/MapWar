@@ -5,8 +5,23 @@ import { GameEngine } from '../../core/GameEngine';
 export class InteractionMenu extends Phaser.GameObjects.Container {
     private bg: Phaser.GameObjects.Graphics;
     private buttonGroup: Phaser.GameObjects.Container;
-
     private engine: GameEngine;
+
+    // State
+    private currentOptions: any[] = [];
+    private pageOffset: number = 0;
+    private currentR: number | null = null;
+    private currentC: number | null = null;
+
+    // Config
+    private layoutWidth: number = 200;
+    private maxHeight: number = 500;
+    private isHorizontal: boolean = false;
+
+    // Style
+    private readonly btnHeight = 40;
+    private readonly padding = 5;
+    private readonly arrowHeight = 24;
 
     constructor(scene: Phaser.Scene, engine: GameEngine) {
         super(scene, 0, 0);
@@ -22,200 +37,247 @@ export class InteractionMenu extends Phaser.GameObjects.Container {
         scene.add.existing(this);
     }
 
-    private layoutWidth: number = 200;
-    private isHorizontal: boolean = false;
+    /* Public API */
 
-    show(r: number | null, c: number | null) {
-        // Clear previous buttons
+    public show(r: number | null, c: number | null) {
+        this.currentR = r;
+        this.currentC = c;
+        this.pageOffset = 0;
+
+        // Get Options
+        if (r !== null && c !== null && this.engine.isValidCell(r, c)) {
+            this.currentOptions = this.engine.interactionRegistry.getAvailableActions(this.engine, r, c);
+        } else {
+            this.currentOptions = [];
+        }
+
+        // Always show (even if empty, to reserve space or show disabled state? 
+        // User request: "Fixed non-overlapping". If we hide, space is empty.
+        // Actually, if we hide, it's fine. 
+        // But let's show to be consistent if it's "the menu area".
+        this.setVisible(true);
+        this.render();
+    }
+
+    public resize(width: number, maxHeight: number, isHorizontal: boolean) {
+        this.layoutWidth = width;
+        this.maxHeight = maxHeight;
+        this.isHorizontal = isHorizontal;
+
+        if (this.visible) {
+            this.render();
+        }
+    }
+
+    public hide() {
+        // We act like show(null, null) which clears options
+        this.show(null, null);
+    }
+
+    /* Internals */
+
+    private render() {
         this.buttonGroup.removeAll(true);
         this.bg.clear();
 
-        // Always Show (Persistent)
-        this.setVisible(true);
+        const btnW = this.isHorizontal ? 140 : this.layoutWidth - 10;
 
-        const btnHeight = 40;
-        const btnWidth = this.isHorizontal ? 140 : this.layoutWidth - 10;
-        const padding = 5;
-
-        // 1. Check if Valid Context
-        let options: any[] = [];
-        if (r !== null && c !== null && this.engine.isValidCell(r, c)) {
-            options = this.engine.interactionRegistry.getAvailableActions(this.engine, r, c);
-        }
-
-        // 2. Render Options OR Disabled State
-        if (options.length === 0) {
-            this.renderDisabledState(btnWidth, btnHeight, padding);
+        // 0. Check Empty
+        if (this.currentOptions.length === 0) {
+            this.renderDisabledState();
             return;
         }
 
-        let x = padding;
-        let y = padding;
-        let totalW = 0;
-        let totalH = 0;
+        // 1. Calculate Page Size
+        // Available Height
+        // If horizontal, we scroll horizontally? 
+        // User asked for "Up/Down arrows", implying Vertical list is primary concern.
+        // Even in "Horizontal" mode (Portrait originally), if it doesn't fit, arrows?
+        // Let's assume Vertical List for "Scroll" logic as it's the standard menu.
+        // If isHorizontal (side-by-side buttons), paging is standard Left/Right?
+        // Given User said "Up/Down", I will force Vertical Layout behavior for scroll if height is constrained.
 
-        options.forEach((opt) => {
-            const btnContainer = this.scene.add.container(x, y);
+        // Let's stick to Vertical List logic for simplicity and robustness on mobile.
+        // Even in Portrait, a vertical list is easier to read than a horizontal strip usually.
+        // IsHorizontal was for "Button Area" alignment.
 
-            // Interaction Definition
-            const def = this.engine.interactionRegistry.get(opt.id)!;
+        let availableH = this.maxHeight;
+        let usePagination = false;
+        let pageSize = this.currentOptions.length;
 
-            // Resolve Dynamic Properties
-            const costVal = typeof def.cost === 'function' ? def.cost(this.engine, r!, c!) : def.cost;
-            const labelVal = typeof def.label === 'function' ? def.label(this.engine, r!, c!) : def.label;
+        // Calculate total needed height
+        const totalNeeded = this.currentOptions.length * (this.btnHeight + this.padding) + this.padding;
 
-            const canAfford = this.engine.state.getCurrentPlayer().gold >= costVal;
+        if (totalNeeded > availableH) {
+            usePagination = true;
+            // Reserve space for arrows
+            const contentH = availableH - (this.arrowHeight * 2) - (this.padding * 2);
+            pageSize = Math.floor(contentH / (this.btnHeight + this.padding));
+            if (pageSize < 1) pageSize = 1; // Min 1 item
+        }
 
-            // Background
-            const btnBg = this.scene.add.graphics();
-            const color = canAfford ? 0x222222 : 0x110000;
-            const hoverColor = canAfford ? 0x444444 : 0x221111;
+        // Clamp Page Offset
+        if (this.pageOffset < 0) this.pageOffset = 0;
+        if (this.pageOffset > this.currentOptions.length - pageSize) {
+            this.pageOffset = Math.max(0, this.currentOptions.length - pageSize);
+        }
 
-            // Highlight if Selected/Planned
-            const isPlanned = this.engine.pendingInteractions.some(i => i.r === r && i.c === c && i.actionId === opt.id);
-            // Move is special: check pendingMoves
-            const isMove = opt.id === 'MOVE' && this.engine.pendingMoves.some(m => m.r === r && m.c === c);
-            const isActive = isPlanned || isMove;
+        // Slice
+        const visibleItems = usePagination
+            ? this.currentOptions.slice(this.pageOffset, this.pageOffset + pageSize)
+            : this.currentOptions;
 
-            if (isActive) {
-                btnBg.lineStyle(2, 0x00FF00); // Green Border for Active
-            } else if (!canAfford) {
-                btnBg.lineStyle(1, 0xFF0000); // Red Border for Unaffordable
-            }
+        // Render Background Panel
+        // Actual height used
+        const renderedH = usePagination
+            ? (pageSize * (this.btnHeight + this.padding) + this.padding + (this.arrowHeight * 2))
+            : totalNeeded;
 
-            btnBg.fillStyle(color, 1);
-            btnBg.fillRoundedRect(0, 0, btnWidth, btnHeight, 4);
+        const finalW = this.layoutWidth; // Fixed width container
 
-            if (isActive || !canAfford) {
-                btnBg.strokeRoundedRect(0, 0, btnWidth, btnHeight, 4);
-            }
+        this.bg.fillStyle(0x1a1a1a, 0.95);
+        this.bg.lineStyle(1, 0x666666);
+        this.bg.fillRoundedRect(0, 0, finalW, renderedH, 5);
+        this.bg.strokeRoundedRect(0, 0, finalW, renderedH, 5);
 
-            // Text
-            const label = this.scene.add.text(10, 10, labelVal, {
-                fontSize: '14px',
-                color: canAfford ? '#ffffff' : '#ff8888', // Red tint if unaffordable
-                fontStyle: 'bold'
-            });
+        let currentY = this.padding;
 
-            const cost = this.scene.add.text(btnWidth - 10, 10, `${costVal}G`, {
-                fontSize: '14px',
-                color: canAfford ? '#ffff00' : '#ff0000' // Red if unaffordable
-            }).setOrigin(1, 0);
+        // Up Arrow
+        if (usePagination) {
+            this.renderArrow(finalW / 2, currentY + this.arrowHeight / 2, true, this.pageOffset > 0);
+            currentY += this.arrowHeight;
+        }
 
-            // Click Area
-            const zone = this.scene.add.zone(btnWidth / 2, btnHeight / 2, btnWidth, btnHeight)
-                .setInteractive({ useHandCursor: canAfford }); // Only interact if afford? 
-            // User said "不可选选项为红色". This usually means disabled.
-            // If I click it, maybe it should show error? Or just do nothing.
-            // useHandCursor: canAfford ensures it's not clickable pointer.
+        // Items
+        visibleItems.forEach((opt) => {
+            this.renderButton(opt, this.padding, currentY, btnW, this.btnHeight);
+            currentY += this.btnHeight + this.padding;
+        });
 
-            zone.on('pointerover', () => {
-                if (!canAfford) return; // No hover effect if disabled
-                btnBg.clear();
-                btnBg.fillStyle(hoverColor, 1);
-                btnBg.fillRoundedRect(0, 0, btnWidth, btnHeight, 4);
-                if (isActive) btnBg.strokeRoundedRect(0, 0, btnWidth, btnHeight, 4);
-            });
+        // Down Arrow
+        if (usePagination) {
+            const canGoDown = (this.pageOffset + pageSize) < this.currentOptions.length;
+            this.renderArrow(finalW / 2, currentY + this.arrowHeight / 2, false, canGoDown);
+        }
+    }
 
-            zone.on('pointerout', () => {
-                btnBg.clear();
-                btnBg.fillStyle(color, 1);
-                btnBg.fillRoundedRect(0, 0, btnWidth, btnHeight, 4);
-                if (isActive || !canAfford) btnBg.strokeRoundedRect(0, 0, btnWidth, btnHeight, 4);
-            });
+    private renderButton(opt: any, x: number, y: number, w: number, h: number) {
+        const btnContainer = this.scene.add.container(x, y);
 
-            zone.on('pointerdown', () => {
-                if (canAfford && r !== null && c !== null) {
-                    this.engine.planInteraction(r, c, opt.id);
-                }
-            });
+        const def = this.engine.interactionRegistry.get(opt.id)!;
+        const costVal = typeof def.cost === 'function' ? def.cost(this.engine, this.currentR!, this.currentC!) : def.cost;
+        const labelVal = typeof def.label === 'function' ? def.label(this.engine, this.currentR!, this.currentC!) : def.label;
+        const canAfford = this.engine.state.getCurrentPlayer().gold >= costVal;
 
-            btnContainer.add([btnBg, label, cost, zone]);
-            this.buttonGroup.add(btnContainer);
+        // Planning State
+        const isPlanned = this.engine.pendingInteractions.some(i => i.r === this.currentR && i.c === this.currentC && i.actionId === opt.id);
+        const isMove = opt.id === 'MOVE' && this.engine.pendingMoves.some(m => m.r === this.currentR && m.c === this.currentC);
+        const isActive = isPlanned || isMove;
 
-            // Flow Logic
-            if (this.isHorizontal) {
-                x += btnWidth + padding;
-                totalW = x;
-                totalH = Math.max(totalH, btnHeight + padding * 2);
-            } else {
-                y += btnHeight + padding;
-                totalH = y;
-                totalW = Math.max(totalW, btnWidth + padding * 2);
+        // Graphics
+        const btnBg = this.scene.add.graphics();
+        const color = canAfford ? 0x222222 : 0x110000;
+        const hoverColor = canAfford ? 0x444444 : 0x221111;
+
+        if (isActive) btnBg.lineStyle(2, 0x00FF00);
+        else if (!canAfford) btnBg.lineStyle(1, 0xFF0000);
+
+        btnBg.fillStyle(color, 1);
+        btnBg.fillRoundedRect(0, 0, w, h, 4);
+        if (isActive || !canAfford) btnBg.strokeRoundedRect(0, 0, w, h, 4);
+
+        // Text
+        const fontSizeVal = Math.floor(Math.max(8, h * 0.32));
+        const label = this.scene.add.text(10, (h - fontSizeVal) / 2, labelVal, {
+            fontSize: `${fontSizeVal}px`,
+            color: canAfford ? '#ffffff' : '#ff8888',
+            fontStyle: 'bold'
+        }).setOrigin(0, 0);
+
+        const cost = this.scene.add.text(w - 10, (h - fontSizeVal) / 2, `${costVal}G`, {
+            fontSize: `${fontSizeVal}px`,
+            color: canAfford ? '#ffff00' : '#ff0000'
+        }).setOrigin(1, 0);
+
+        // Interaction
+        const zone = this.scene.add.zone(w / 2, h / 2, w, h).setInteractive({ useHandCursor: canAfford });
+
+        zone.on('pointerdown', () => {
+            if (canAfford) {
+                this.engine.planInteraction(this.currentR!, this.currentC!, opt.id);
+                // Re-render to update active state
+                this.render();
             }
         });
 
-        // Draw Panel Background
-        // this.bg.fillStyle(0x000000, 0.9);
-        // this.bg.lineStyle(2, 0x444444);
-        // this.bg.fillRoundedRect(0, 0, Math.max(totalW, this.layoutWidth), totalH, 5);
-        // this.bg.strokeRoundedRect(0, 0, Math.max(totalW, this.layoutWidth), totalH, 5);
-        // User wants it integrated. Let's make it transparent or subtle?
-        // Let's keep the bg for visibility but fit it.
-        const finalW = this.isHorizontal ? totalW : this.layoutWidth;
-        const finalH = this.isHorizontal ? btnHeight + padding * 2 : totalH;
-
-        this.bg.fillStyle(0x1a1a1a, 0.95); // Slightly lighter than pure black
-        this.bg.lineStyle(1, 0x666666);
-        this.bg.fillRoundedRect(0, 0, finalW, finalH, 5);
-        this.bg.strokeRoundedRect(0, 0, finalW, finalH, 5);
-    }
-
-    resize(width: number, isHorizontal: boolean) {
-        this.layoutWidth = width;
-        this.isHorizontal = isHorizontal;
-        // If visible, Re-render immediate?
-        // We lack r, c here to re-render. 
-        // We will wait for next show() call, or MainScene calls show() on resize if selected?
-        // Actually MainScene.resize doesn't call show.
-        // It should hide() on resize usually?
-        // Let's update `hide()` to just setVisible(false).
-    }
-
-    renderDisabledState(btnWidth: number, btnHeight: number, padding: number) {
-        // Render 2 empty slots to signify "this is the action menu"
-        let x = padding;
-        let y = padding;
-
-        const count = 2; // Show 2 empty slots
-        let totalW = 0;
-        let totalH = 0;
-
-        for (let i = 0; i < count; i++) {
-            const gfx = this.scene.add.graphics();
-            gfx.fillStyle(0x111111, 0.5); // Very dark gray
-            gfx.fillRoundedRect(x, y, btnWidth, btnHeight, 4);
-            // gfx.lineStyle(1, 0x333333); // Subtle outline
-            // gfx.strokeRoundedRect(x, y, btnWidth, btnHeight, 4);
-
-            this.buttonGroup.add(gfx);
-
-            if (this.isHorizontal) {
-                x += btnWidth + padding;
-                totalW = x;
-                totalH = Math.max(totalH, btnHeight + padding * 2);
-            } else {
-                y += btnHeight + padding;
-                totalH = y;
-                totalW = Math.max(totalW, btnWidth + padding * 2);
+        // Hover
+        zone.on('pointerover', () => {
+            if (canAfford) {
+                btnBg.clear();
+                btnBg.fillStyle(hoverColor, 1);
+                btnBg.lineStyle(isActive ? 2 : 0, 0x00FF00);
+                btnBg.fillRoundedRect(0, 0, w, h, 4);
+                if (isActive) btnBg.strokeRoundedRect(0, 0, w, h, 4);
             }
+        });
+        zone.on('pointerout', () => {
+            btnBg.clear();
+            btnBg.fillStyle(color, 1);
+            if (isActive) btnBg.lineStyle(2, 0x00FF00);
+            else if (!canAfford) btnBg.lineStyle(1, 0xFF0000);
+            btnBg.fillRoundedRect(0, 0, w, h, 4);
+            if (isActive || !canAfford) btnBg.strokeRoundedRect(0, 0, w, h, 4);
+        });
+
+        btnContainer.add([btnBg, label, cost, zone]);
+        this.buttonGroup.add(btnContainer);
+    }
+
+    private renderArrow(x: number, y: number, isUp: boolean, enabled: boolean) {
+        const arrow = this.scene.add.container(x, y);
+
+        const g = this.scene.add.graphics();
+        const color = enabled ? 0xffffff : 0x444444;
+
+        g.fillStyle(color);
+        g.beginPath();
+        if (isUp) {
+            g.moveTo(0, -6);
+            g.lineTo(8, 6);
+            g.lineTo(-8, 6);
+        } else {
+            g.moveTo(0, 6);
+            g.lineTo(8, -6);
+            g.lineTo(-8, -6);
+        }
+        g.closePath();
+        g.fillPath();
+
+        // Hit Area
+        if (enabled) {
+            const zone = this.scene.add.zone(0, 0, 40, 20).setInteractive({ useHandCursor: true });
+            zone.on('pointerdown', () => {
+                this.pageOffset += isUp ? -1 : 1;
+                this.render();
+            });
+            arrow.add(zone);
         }
 
-        // Draw Panel Background
-        const finalW = this.isHorizontal ? totalW : this.layoutWidth;
-        const finalH = this.isHorizontal ? btnHeight + padding * 2 : totalH;
-
-        this.bg.fillStyle(0x0a0a0a, 0.8);
-        this.bg.lineStyle(1, 0x333333);
-        this.bg.fillRoundedRect(0, 0, finalW, finalH, 5);
-        this.bg.strokeRoundedRect(0, 0, finalW, finalH, 5);
+        arrow.add(g);
+        this.buttonGroup.add(arrow);
     }
 
-    hide() {
-        // Persistent: Do NOT hide. 
-        // Just render disabled state? Or keep last state?
-        // MainScene calls show(null, null) on deselect.
-        // So hide is effectively unused or should alias show(null).
-        this.show(null, null);
+    private renderDisabledState() {
+        // Just empty box or small indicator
+        const h = 50;
+        this.bg.fillStyle(0x0a0a0a, 0.5);
+        this.bg.fillRoundedRect(0, 0, this.layoutWidth, h, 5);
+        this.bg.lineStyle(1, 0x333333);
+        this.bg.strokeRoundedRect(0, 0, this.layoutWidth, h, 5);
+
+        const txt = this.scene.add.text(this.layoutWidth / 2, h / 2, '(No Options)', {
+            fontSize: '12px', color: '#666'
+        }).setOrigin(0.5);
+        this.buttonGroup.add(txt);
     }
 }

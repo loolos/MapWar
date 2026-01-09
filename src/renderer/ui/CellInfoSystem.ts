@@ -170,9 +170,7 @@ export class CellInfoSystem {
         this.container.setPosition(x, y);
     }
 
-    public resize(width: number, x: number, y: number) {
-        const height = 250;
-
+    public resize(width: number, height: number, x: number, y: number) {
         // Update Position
         this.setPosition(x, y);
 
@@ -184,8 +182,40 @@ export class CellInfoSystem {
             this.drawPanel(bg, width, height);
         }
 
-        // Update Wrap
-        this.descText.setStyle({ wordWrap: { width: width - 20 } });
+        // Dynamic Font Size Calculation
+        // Consider both width and height to ensure fit in landscape sidebars
+        const sizeDim = Math.min(width, height * 1.5); // Weight height slightly less as text flows horizontally
+        const baseSize = Math.max(8, Math.floor(sizeDim * 0.05));
+        const headerSize = Math.floor(baseSize * 1.1); // +10%
+        const descSize = Math.max(8, Math.floor(baseSize * 0.85));
+
+        // Update Text Styles
+        this.headerText.setStyle({ fontSize: `${headerSize}px` });
+
+        const style = { fontSize: `${baseSize}px`, color: '#ffffff' };
+        this.coordsText.setStyle(style);
+        this.typeText.setStyle(style);
+        this.ownerText.setStyle(style);
+        this.costText.setStyle(style);
+
+        this.planText.setStyle({ fontSize: `${baseSize}px` });
+
+        // Update Wrap and Desc
+        this.descText.setStyle({
+            fontSize: `${descSize}px`,
+            wordWrap: { width: width - 20 }
+        });
+
+        // Reposition Logic (Vertical Flow based on font size)
+        let currentY = 10 + headerSize + 10;
+        const gap = baseSize + 5;
+
+        this.coordsText.setPosition(10, currentY); currentY += gap;
+        this.typeText.setPosition(10, currentY); currentY += gap;
+        this.ownerText.setPosition(10, currentY); currentY += gap;
+        this.costText.setPosition(10, currentY); currentY += gap;
+        this.planText.setPosition(10, currentY); currentY += gap + 5;
+        this.descText.setPosition(10, currentY);
 
         // Update Mask
         this.updateMask(width, height, x, y);

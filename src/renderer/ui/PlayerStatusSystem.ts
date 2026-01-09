@@ -102,29 +102,26 @@ export class PlayerStatusSystem {
 
         if (needsRebuild) {
             this.rebuildList(engine.state.playerOrder, engine.state.players);
-        } else {
-            // Just update values
-            this.playerRows.forEach((row) => {
-                const pid = (row as any).playerId;
-                const player = state.players[pid];
-                // Child Order: 0:BG, 1:Title, 2:GoldText, 3:Coin, 4:Icon
-                const goldTxt = row.getAt(2) as Phaser.GameObjects.Text;
-                goldTxt.setText(player.gold.toString());
-
-                // Income text (Index 5 - see creation)
-                // Wait, if I append, index is row.length - 1?
-                // Let's get index by checking if I added it
-                // I will add it as child 5 in create logic.
-                const incomeTxt = row.getAt(5) as Phaser.GameObjects.Text;
-                const income = engine.state.calculateIncome(pid);
-                incomeTxt.setText(`+${income}/t`);
-
-                // Alpha Update
-                const currentId = state.currentPlayerId || '';
-                const pAlpha = currentId === pid ? 1 : 0.4;
-                row.setAlpha(pAlpha);
-            });
         }
+
+        // Update values (Always run to ensure fresh rows get data)
+        this.playerRows.forEach((row) => {
+            const pid = (row as any).playerId;
+            const player = state.players[pid];
+            // Child Order: 0:BG, 1:Title, 2:Icon, 3:Coin, 4:GoldText, 5:IncomeText
+            const goldTxt = row.getAt(4) as Phaser.GameObjects.Text;
+            goldTxt.setText(player.gold.toString());
+
+            // Income text (Index 5)
+            const incomeTxt = row.getAt(5) as Phaser.GameObjects.Text;
+            const income = engine.state.calculateIncome(pid);
+            incomeTxt.setText(`+${income}/t`);
+
+            // Alpha Update
+            const currentId = state.currentPlayerId || '';
+            const pAlpha = currentId === pid ? 1 : 0.4;
+            row.setAlpha(pAlpha);
+        });
     }
 
     private rebuildList(order: string[], players: any) {
@@ -158,61 +155,80 @@ export class PlayerStatusSystem {
 
     private createPlayerRow(player: any, y: number, h: number): Phaser.GameObjects.Container {
         const scene = this.container.scene;
+        // Use currentWidth for layout
+        const W = this.currentWidth - 20; // Margin 10 each side
+
         const row = scene.add.container(10, y);
 
         // BG
         const bg = scene.add.graphics();
-        this.drawCardPanel(bg, 240, h, player.color);
+        this.drawCardPanel(bg, W, h, player.color);
         row.add(bg);
 
         // Compact Layout
         const isCompact = h < 30;
 
+        // Dynamic Font
+        const baseSize = Math.max(10, Math.floor(W * 0.06)); // ~15px at 260
+        const idSize = baseSize;
+        const goldSize = Math.max(10, Math.floor(W * 0.055));
+
         // Title
-        const titleY = isCompact ? h / 2 : h / 2; // Center
-        const title = scene.add.text(20, titleY, player.id, {
-            fontFamily: 'Georgia, serif', fontSize: '13px', // Reduced 16 -> 13
+        const titleY = h / 2;
+        const title = scene.add.text(10, titleY, player.id, {
+            fontFamily: 'Georgia, serif', fontSize: `${idSize}px`,
             color: '#' + player.color.toString(16).padStart(6, '0'),
             fontStyle: 'bold',
             shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 2, fill: true }
         });
-        title.setOrigin(0, 0.5); // Center vertically
+        title.setOrigin(0, 0.5);
         row.add(title);
 
-        // Gold
-        const goldY = h / 2;
-        const goldText = scene.add.text(140, goldY, player.gold.toString(), {
-            fontFamily: 'Arial', fontSize: '13px', color: '#ffd700', fontStyle: 'bold', // Reduced 16 -> 13
-            shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 2, fill: true }
-        });
-        goldText.setOrigin(1, 0.5); // Right align
-        row.add(goldText);
+        // Layout: [Title] ... [Income] [Gold] [Coin] [Icon]
+        // Right Aligned elements
+        // Icon at right edge - 20
+        // Coin left of Icon
+        // Gold left of Coin
+        // Income below/above?
 
-        // Coin Icon (Next to gold)
-        const coin = scene.add.image(155, goldY, 'icon_gold_3d').setDisplaySize(14, 14); // Reduced 18 -> 14
-        row.add(coin);
+        const iconSize = isCompact ? Math.min(24, h - 4) : Math.min(28, h - 8);
+        const iconX = W - (iconSize / 2) - 5;
 
-        // Type Icon (Cartoon)
-        // Use new texture keys
+        // Type Icon
         const iconKey = player.isAI ? 'icon_robot_cartoon' : 'icon_human_cartoon';
-        const icon = scene.add.image(210, h / 2, iconKey)
-            .setDisplaySize(28, 28); // Standard size for icon, keep it visible
+        const icon = scene.add.image(iconX, h / 2, iconKey)
+            .setDisplaySize(iconSize, iconSize);
         row.add(icon);
 
-        // Income (Bottom Right / Below Gold)
-        // Or Top Right?
-        // Let's put it top right in compact
-        // Let's put it top right in compact
-        const incomeText = scene.add.text(140, isCompact ? h / 2 : h - 10, '+0/t', {
-            fontFamily: 'Arial', fontSize: '10px', color: '#88ff88'
+        // Coin
+        const coinSize = Math.floor(goldSize * 0.9);
+        const coinX = iconX - (iconSize / 2) - 5 - (coinSize / 2);
+        const coin = scene.add.image(coinX, h / 2, 'icon_gold_3d').setDisplaySize(coinSize, coinSize);
+        row.add(coin);
+
+        // Gold Value
+        const goldX = coinX - (coinSize / 2) - 5;
+        const goldText = scene.add.text(goldX, h / 2, player.gold.toString(), {
+            fontFamily: 'Arial', fontSize: `${goldSize}px`, color: '#ffd700', fontStyle: 'bold',
+            shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 2, fill: true }
         });
-        incomeText.setOrigin(1, isCompact ? -0.5 : 0.5); // Push below gold or tweak
-        // Actually, let's put it aligned with Gold but smaller
-        // Gold 140. Coin 155. Icon 210.
-        // Let's put Income at 100? Or replace "Turn" text somewhere?
-        // Let's put it next to Coin? 170?
-        incomeText.setPosition(175, goldY);
-        incomeText.setOrigin(0, 0.5);
+        goldText.setOrigin(1, 0.5);
+        row.add(goldText);
+
+        // Income
+        // If compact, maybe skip or tiny?
+        // Put it left of Gold? 
+        // const incomeX = goldX - 40; // Unused 
+        // Or if space allows?
+        // Let's put positions relative to GoldText.
+        // We will update Income position in `update` loop? constant x?
+        // Let's set it left of goldText but we don't know width of goldText dynamic.
+        // We can place it at fixed offset or ...
+        // Let's place it at (goldX - 50) for now.
+        const incomeText = scene.add.text(goldX - ((goldText.width || 30) + 10), h / 2, '+0/t', {
+            fontFamily: 'Arial', fontSize: `${Math.max(8, baseSize - 2)}px`, color: '#88ff88'
+        });
+        incomeText.setOrigin(1, 0.5);
         row.add(incomeText);
 
         return row;
@@ -222,7 +238,11 @@ export class PlayerStatusSystem {
         this.container.setPosition(x, y);
     }
 
+    private currentWidth: number = 260;
+
     public resize(width: number, height: number, x: number, y: number) {
+        this.currentWidth = width;
+
         // Update Background
         const bg = this.container.getAt(0) as Phaser.GameObjects.Graphics;
         if (bg) {
@@ -235,10 +255,12 @@ export class PlayerStatusSystem {
         // Update Interactive Hit Area
         const hitArea = new Phaser.Geom.Rectangle(0, 80, width, this.viewHeight);
 
-        // Re-set interactive to update hit area safely
-        // Or re-set interactive
         this.container.removeInteractive();
         this.container.setInteractive(hitArea, Phaser.Geom.Rectangle.Contains);
+
+        // Force Rebuild of List on next update to apply new width/fonts
+        this.listContainer.removeAll(true);
+        this.playerRows = []; // This triggers rebuild in update()
 
         // Update Mask
         this.updateMask(width, height, x, y);

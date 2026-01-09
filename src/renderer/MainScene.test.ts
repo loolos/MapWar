@@ -230,6 +230,7 @@ vi.mock('./ui/ActionButtonSystem', () => ({
         return {
             addButton: vi.fn(),
             clearButtons: vi.fn(),
+            setGrid: vi.fn(),
             resize: vi.fn(),
             setScale: vi.fn(),
             setPosition: vi.fn()
@@ -397,8 +398,7 @@ describe('MainScene', () => {
         // Expectation 1: Owned Tile [0,1] should draw with Alpha 0.5
         // Check if fillStyle was called with (Color, 0.5)
         // Note: precise call order might vary, but we look for *a* call.
-        // GameConfig.COLORS.P1 is 0x880000
-        expect(fillStyleSpy).toHaveBeenCalledWith(GameConfig.COLORS.P1, 0.5);
+        expect(fillStyleSpy).toHaveBeenCalledWith(GameConfig.COLORS.P1, 0.7);
 
         // Expectation 2: Neutral Tile [0,0] should NOT draw an overlay
         // How to ensure it didn't draw for neutral? 
@@ -420,14 +420,14 @@ describe('MainScene', () => {
 
         // Should add End Turn and Mute
         expect(addButtonSpy).toHaveBeenCalledTimes(2);
-        // Mock is 800x600 (Landscape) -> Expect (1, 0)
-        expect(addButtonSpy).toHaveBeenCalledWith(1, 0, "MUTE 🔊", expect.any(Function));
+        // Expect (0, 1) Always (Horizontal)
+        expect(addButtonSpy).toHaveBeenCalledWith(0, 1, "MUTE 🔊", expect.any(Function));
 
         // simulate click logic manually since we can't easily trigger the anonymous callback from here without capturing it
         // But we can verify label logic
 
         scene.soundManager.isMuted = true;
         scene.setupButtons();
-        expect(addButtonSpy).toHaveBeenCalledWith(1, 0, "UNMUTE 🔇", expect.any(Function));
+        expect(addButtonSpy).toHaveBeenCalledWith(0, 1, "UNMUTE 🔇", expect.any(Function));
     });
 });
