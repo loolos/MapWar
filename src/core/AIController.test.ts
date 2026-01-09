@@ -81,7 +81,12 @@ describe('AIController Logic', () => {
         const plainLoc = neighbors[1];
 
         engine.state.setBuilding(townLoc.r, townLoc.c, 'town');
+        engine.state.grid[townLoc.r][townLoc.c].type = 'plain'; // Ensure valid terrain
+        engine.state.grid[townLoc.r][townLoc.c].owner = null;
+
         engine.state.setBuilding(plainLoc.r, plainLoc.c, 'none');
+        engine.state.grid[plainLoc.r][plainLoc.c].type = 'plain';
+        engine.state.grid[plainLoc.r][plainLoc.c].owner = null;
 
         // Reset moves
         engine.lastAiMoves = [];

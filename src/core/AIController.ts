@@ -22,6 +22,16 @@ export class AIController {
                 const moves: { r: number, c: number, score: number, cell: any, cost: number }[] = [];
                 const grid = this.engine.state.grid;
 
+                // Pre-calc: Find MY bases to defend
+                const myBases: { r: number, c: number }[] = [];
+                for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+                    for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+                        if (grid[r][c].owner === aiPlayer.id && grid[r][c].building === 'base') {
+                            myBases.push({ r, c });
+                        }
+                    }
+                }
+
                 for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
                     for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
                         const validation = this.engine.validateMove(r, c);
@@ -40,6 +50,14 @@ export class AIController {
                             else if (cell.owner && cell.owner !== aiPlayer.id) {
                                 score += 100; // Capture Enemy Land
                                 if (!cell.isConnected) score += 50; // Cut off enemy (Mock logic: if we could detect it)
+
+                                // Check threat to Base
+                                for (const base of myBases) {
+                                    const dist = Math.abs(r - base.r) + Math.abs(c - base.c);
+                                    if (dist <= 2) {
+                                        score += 2000; // DEFENSE PRIORITY: Remove threat near base
+                                    }
+                                }
                             }
 
                             // 3. Defense / tactical
@@ -80,7 +98,8 @@ export class AIController {
                         }
                     }
                 }
-                return moves.sort((a, b) => b.score - a.score);
+                moves.sort((a, b) => b.score - a.score);
+                return moves;
             };
 
             // PASS 1: EXECUTION LOOP

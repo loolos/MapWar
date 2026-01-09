@@ -70,6 +70,9 @@ describe('GameEngine - Town Mechanics', () => {
         // Ensure adjacency check works
         // const isAdj = engine.state.isAdjacentToOwned(0, 1, 'P1');
 
+        // Ensure adjacency check works
+        // const isAdj = engine.state.isAdjacentToOwned(0, 1, 'P1');
+
         const cost = engine.getMoveCost(0, 1);
         const expected = Math.floor(GameConfig.COST_ATTACK * GameConfig.COST_MULTIPLIER_ATTACK);
         expect(cost).toBe(expected);
