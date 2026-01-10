@@ -485,78 +485,87 @@ export class GameEngine {
     }
 
     // Helper to get cost of a specific move
+    // Helper to get cost of a specific move
     getMoveCost(row: number, col: number): number {
+        return this.getCostDetails(row, col).cost;
+    }
+
+    getCostDetails(row: number, col: number): { cost: number, breakdown: string } {
         const cell = this.state.getCell(row, col);
-        if (!cell) return 0;
+        if (!cell) return { cost: 0, breakdown: '' };
 
-        // Base Cost (Terrain)
+        let breakdownParts: string[] = [];
         let baseCost = GameConfig.COST_CAPTURE;
-        if (cell.building === 'town' && (cell.owner === null || cell.owner === 'neutral')) { // Neutral Town
-            baseCost = GameConfig.COST_CAPTURE_TOWN;
-        }
-        else {
-            // Standard Terrain
-            if (cell.type === 'hill') baseCost = GameConfig.COST_CAPTURE * 2;
-            if (cell.type === 'water') baseCost = GameConfig.COST_BUILD_BRIDGE; // Bridge Cost
+
+        // 1. Base Cost Determination
+        if (cell.building === 'town' && (cell.owner === null || cell.owner === 'neutral')) {
+            baseCost = GameConfig.COST_CAPTURE_TOWN; // 30
+            breakdownParts.push(`Capture Town(${baseCost})`);
+        } else {
+            if (cell.type === 'hill') {
+                baseCost = GameConfig.COST_CAPTURE * 2;
+                breakdownParts.push(`Capture Hill(${baseCost})`);
+            } else if (cell.type === 'water') {
+                baseCost = GameConfig.COST_BUILD_BRIDGE;
+                breakdownParts.push(`Build Bridge(${baseCost})`);
+            } else {
+                breakdownParts.push(`Capture Plain(${baseCost})`);
+            }
         }
 
-        // For Attack, use Attack Cost Base
+        // 2. Attack Logic
         let isAttack = false;
         const curr = this.state.currentPlayerId;
         if (cell.owner !== null && cell.owner !== curr) {
             isAttack = true;
-            baseCost = GameConfig.COST_ATTACK;
-            if (cell.building === 'town') {
-                // Attack Enemy Town: Standard Attack Rules
-                // Basic Attack: 20
-                // Hill Town? 40.
+            // Overwrite base with Attack Base
+            baseCost = GameConfig.COST_ATTACK; // 20
+
+            // Adjust for Terrain in Attack
+            if (cell.type === 'hill' || cell.type === 'bridge') {
+                baseCost = GameConfig.COST_ATTACK * 2;
+                breakdownParts = [`Attack Hill/Bridge(${baseCost})`];
+            } else {
+                breakdownParts = [`Attack(${baseCost})`];
             }
-            if (cell.type === 'hill') baseCost = GameConfig.COST_ATTACK * 2;
-            if (cell.type === 'bridge') baseCost = GameConfig.COST_ATTACK * 2;
 
-            // Wait, normal attack is COST_ATTACK (20). Hill is 40.
-            // User said "invade ... like others expense double". If bridge is flat, it's 20. If hill is 40.
-            // Let's assume bridge is flat terrain difficulty for attack, so 20. But user said "double".
-            // "invade bridge... same double cost". Standard attack IS expensive (20 vs 10 capture).
-            // Maybe they mean if disconnected? No, likely just standard attack rules apply.
-
-            // Check for Base Defense Upgrade
-            if (cell.building === 'base') {
-                const level = cell.defenseLevel;
-                if (level > 0) {
-                    baseCost += level * GameConfig.UPGRADE_DEFENSE_BONUS;
-                }
+            // Defenses
+            if (cell.building === 'base' && cell.defenseLevel > 0) {
+                const bonus = cell.defenseLevel * GameConfig.UPGRADE_DEFENSE_BONUS;
+                baseCost += bonus;
+                breakdownParts.push(`Base Def Lv${cell.defenseLevel}(+${bonus})`);
             } else if (cell.building === 'wall') {
-                const level = cell.defenseLevel;
-                if (level > 0) {
-                    baseCost += level * GameConfig.WALL_DEFENSE_BONUS;
+                if (cell.isConnected) {
+                    const bonus = cell.defenseLevel * GameConfig.WALL_DEFENSE_BONUS;
+                    baseCost += bonus;
+                    breakdownParts.push(`Wall Lv${cell.defenseLevel}(+${bonus})`);
+                } else {
+                    breakdownParts.push(`Wall Disconnected(+0)`);
                 }
             }
         }
 
-        // Apply Global Multipliers
-        // isAttack is true if target is owned by Enemy
-        // if !isAttack, it is Neutral capture (since we can't move to own cell)
+        // 3. Multipliers
         const multiplier = isAttack ? GameConfig.COST_MULTIPLIER_ATTACK : GameConfig.COST_MULTIPLIER_NEUTRAL;
+        // Apply multiplier to current Sum
         baseCost = Math.floor(baseCost * multiplier);
+        if (multiplier !== 1) breakdownParts.push(`x${multiplier}`);
 
-        // Distance Penalty Logic (Double if chained)
+        // 4. Distance / Disconnect Penalties (Attack Only)
         if (isAttack) {
-            // Vulnerability Rule: Disconnected enemy land is CHEAPER (30% off)
             if (cell.owner && !cell.isConnected) {
                 baseCost = Math.floor(baseCost * 0.7);
+                breakdownParts.push(`Disconnected(x0.7)`);
             }
 
-            // Distance Rule: If adjacent to OWNED land, normal cost.
-            // If only adjacent to PENDING land (chained), double cost.
-            if (curr && this.state.isAdjacentToOwned(row, col, curr)) { // Use state method
-                return baseCost;
-            } else {
-                return baseCost * 2;
+            // Distance Penalty
+            if (curr && !this.state.isAdjacentToOwned(row, col, curr)) {
+                baseCost = baseCost * 2;
+                breakdownParts.push(`Distance(x2)`);
             }
         }
 
-        return baseCost;
+        return { cost: baseCost, breakdown: breakdownParts.join(' ') };
     }
 
     validateMove(row: number, col: number): { valid: boolean, reason?: string } {

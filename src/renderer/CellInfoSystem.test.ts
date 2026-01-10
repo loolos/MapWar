@@ -22,7 +22,9 @@ import { GameEngine } from '../core/GameEngine';
 const mockText = {
     setText: vi.fn(),
     setColor: vi.fn(),
-    setStyle: vi.fn()
+    setStyle: vi.fn(),
+    setPosition: vi.fn(),
+    height: 20 // Mock height for layout calcs
 };
 
 const mockGraphics = {

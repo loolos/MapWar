@@ -14,6 +14,7 @@ export class CellInfoSystem {
     costText: Phaser.GameObjects.Text;
     planText: Phaser.GameObjects.Text;
     descText: Phaser.GameObjects.Text;
+    planDetailsText: Phaser.GameObjects.Text;
     maskShape: Phaser.GameObjects.Graphics;
 
     constructor(scene: Phaser.Scene, x: number, y: number, width: number) {
@@ -63,6 +64,15 @@ export class CellInfoSystem {
 
         this.descText = scene.add.text(10, 170, '', descStyle);
         this.container.add(this.descText);
+
+        // Plan Details Text (Yellow, at bottom)
+        this.planDetailsText = scene.add.text(10, 200, '', {
+            fontSize: '14px',
+            color: '#ffff00', // Yellow as requested
+            fontStyle: 'bold',
+            wordWrap: { width: width - 20 }
+        });
+        this.container.add(this.planDetailsText);
     }
 
     update(engine: GameEngine, selectedRow: number | null, selectedCol: number | null) {
@@ -121,10 +131,15 @@ export class CellInfoSystem {
         else if (cell.owner === 'P2') this.ownerText.setColor('#4444ff');
         else this.ownerText.setColor('#ffffff');
 
-        // Cost
-        const cost = engine.getMoveCost(selectedRow, selectedCol);
-        let costStr = `${cost}G`;
-        if (cost === Infinity) costStr = 'X';
+        // Cost Breakdown
+        const costDetails = engine.getCostDetails(selectedRow, selectedCol);
+        let costStr = `${costDetails.cost}G`;
+        if (costDetails.cost === Infinity) costStr = 'X';
+
+        // Add breakdown if complex (more than just basic capture)
+        if (costDetails.breakdown) {
+            costStr += `\n(${costDetails.breakdown})`;
+        }
         this.costText.setText(`Cost: ${costStr}`);
 
         // Description & Revenue
@@ -166,6 +181,7 @@ export class CellInfoSystem {
                 const actual = cell.isConnected ? baseRev : baseRev * 0.5;
                 revenueMsg = `\nRevenue: +${actual} G`;
             }
+
         } else if (cell.type !== 'bridge') {
             // Land Revenue
             const baseRev = GameConfig.GOLD_PER_LAND;
@@ -177,7 +193,27 @@ export class CellInfoSystem {
             }
         }
 
+        // Check for PENDING Interactions (Plan)
+        // If a plan exists for this tile, show its specific description AT BOTTOM in YELLOW
+        const pending = engine.pendingInteractions.find(i => i.r === selectedRow && i.c === selectedCol);
+        let planStr = "";
+
+        if (pending) {
+            const action = engine.interactionRegistry.get(pending.actionId);
+            if (action) {
+                let actionDesc = typeof action.description === 'function'
+                    ? action.description(engine, selectedRow, selectedCol)
+                    : action.description;
+
+                planStr = `PLAN: ${actionDesc}`;
+            }
+        }
+
+        this.planDetailsText.setText(planStr);
+
         this.descText.setText((desc || '') + revenueMsg);
+
+        this.refreshLayout();
     }
 
     public setPosition(x: number, y: number) {
@@ -220,19 +256,49 @@ export class CellInfoSystem {
             wordWrap: { width: width - 20 }
         });
 
-        // Reposition Logic (Vertical Flow based on font size)
-        let currentY = 10 + headerSize + 10;
-        const gap = baseSize + 5;
+        this.planDetailsText.setStyle({
+            fontSize: `${Math.max(10, Math.floor(baseSize * 0.9))}px`,
+            wordWrap: { width: width - 20 }
+        });
 
-        this.coordsText.setPosition(10, currentY); currentY += gap;
-        this.typeText.setPosition(10, currentY); currentY += gap;
-        this.ownerText.setPosition(10, currentY); currentY += gap;
-        this.costText.setPosition(10, currentY); currentY += gap;
-        this.planText.setPosition(10, currentY); currentY += gap + 5;
-        this.descText.setPosition(10, currentY);
+        // Refresh Layout
+        this.refreshLayout();
 
         // Update Mask
         this.updateMask(width, height, x, y);
+    }
+
+    private refreshLayout() {
+        // Dynamic Layout Calculation based on current text heights
+        let currentY = 10 + (this.headerText.height || 20) + 10;
+        const gap = 5;
+
+        // Coords
+        this.coordsText.setPosition(10, currentY);
+        currentY += this.coordsText.height + gap;
+
+        // Type
+        this.typeText.setPosition(10, currentY);
+        currentY += this.typeText.height + gap;
+
+        // Owner
+        this.ownerText.setPosition(10, currentY);
+        currentY += this.ownerText.height + gap;
+
+        // Cost
+        this.costText.setPosition(10, currentY);
+        currentY += this.costText.height + gap;
+
+        // Total Plan Cost
+        this.planText.setPosition(10, currentY);
+        currentY += this.planText.height + gap + 5;
+
+        // Description
+        this.descText.setPosition(10, currentY);
+        currentY += this.descText.height + 10;
+
+        // Plan Details (Yellow)
+        this.planDetailsText.setPosition(10, currentY);
     }
 
     private updateMask(w: number, h: number, x: number, y: number) {

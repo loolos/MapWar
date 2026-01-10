@@ -138,4 +138,29 @@ describe('Wall Mechanics', () => {
         expect(cell.building).toBe('wall'); // Kept
         expect(cell.defenseLevel).toBe(1); // Degraded
     });
+
+    it('disconnected wall provides no defense bonus', () => {
+        // Setup P1 Wall Lv 1 at (0,0)
+        engine.state.setOwner(0, 0, 'P1');
+        const cell = engine.state.getCell(0, 0)!;
+        cell.building = 'wall';
+        cell.defenseLevel = 1;
+        cell.isConnected = false; // Manually set disconnected
+
+        // Setup P2 Attacker
+        engine.state.setOwner(0, 1, 'P2');
+        engine.state.setBuilding(0, 1, 'base');
+        engine.state.updateConnectivity('P2');
+        engine.state.currentPlayerId = 'P2';
+
+        const cost = engine.getMoveCost(0, 0);
+
+        // Calculation:
+        // Base Attack: 20
+        // Wall Bonus: 0 (Disconnected)
+        // Subtotal: 20
+        // Attack Multiplier: 20 * 1.2 = 24
+        // Disconnect Penalty: 24 * 0.7 = 16.8 -> 16
+        expect(cost).toBe(16);
+    });
 });
