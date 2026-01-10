@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GameEngine } from '../../core/GameEngine'; // For Move type if needed? Or just pass primitives
+import type { GameEngine } from '../../core/GameEngine'; // For Move type if needed? Or just pass primitives
 
 export class PlayerStatusSystem {
     private container!: Phaser.GameObjects.Container;
@@ -16,6 +16,11 @@ export class PlayerStatusSystem {
 
     public readonly BASE_WIDTH = 260;
 
+    // Scroll Buttons
+    private upButton!: Phaser.GameObjects.Container;
+    private downButton!: Phaser.GameObjects.Container;
+    private isScrollable: boolean = false;
+
     constructor(scene: Phaser.Scene, x: number, y: number, height: number) {
         this.container = scene.add.container(x, y);
 
@@ -27,7 +32,7 @@ export class PlayerStatusSystem {
         // Header
         const header = scene.add.text(130, 20, 'GAME STATUS', {
             fontFamily: 'Georgia, "Times New Roman", serif',
-            fontSize: '14px', // Reduced 18 -> 14
+            fontSize: '14px',
             color: '#ffffff',
             fontStyle: 'bold',
             shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 2, fill: true }
@@ -36,12 +41,20 @@ export class PlayerStatusSystem {
 
         // Turn Info
         this.uiText = scene.add.text(130, 35, 'Turn 1', {
-            fontFamily: 'Georgia, serif', fontSize: '12px', color: '#dddddd' // Reduced 14 -> 12
+            fontFamily: 'Georgia, serif', fontSize: '12px', color: '#dddddd'
         }).setOrigin(0.5);
         this.container.add(this.uiText);
 
+        // Scroll Buttons
+        this.upButton = this.createScrollButton(scene, 'up');
+        this.downButton = this.createScrollButton(scene, 'down');
+        this.container.add(this.upButton);
+        this.container.add(this.downButton);
+        this.upButton.setVisible(false);
+        this.downButton.setVisible(false);
+
         // Scrollable List Container
-        this.listContainer = scene.add.container(0, 50); // Moved up 70 -> 50
+        this.listContainer = scene.add.container(0, 50);
         this.container.add(this.listContainer);
 
         // Setup Mask
@@ -49,9 +62,9 @@ export class PlayerStatusSystem {
         this.listMask = new Phaser.Display.Masks.GeometryMask(scene, this.maskShape);
         this.listContainer.setMask(this.listMask);
 
-        this.viewHeight = height - 60; // Adjusted for padding
+        this.viewHeight = height - 60;
 
-        // Enhance Interaction for Scroll
+        // Enhance Interaction for Scroll (Main Panel)
         const hitArea = new Phaser.Geom.Rectangle(0, 50, 260, this.viewHeight);
         this.container.setInteractive(hitArea, Phaser.Geom.Rectangle.Contains);
 
@@ -63,7 +76,6 @@ export class PlayerStatusSystem {
         });
 
         // Wheel support
-        // ... (omitted unchanged wheel code)
         scene.input.on('wheel', (pointer: any, _gameObjects: any, _deltaX: number, deltaY: number, _deltaZ: number) => {
             const localPoint = this.container.pointToContainer(pointer);
             const hit = localPoint.x >= 0 && localPoint.x <= 260 && localPoint.y >= 0 && localPoint.y <= height;
@@ -76,24 +88,47 @@ export class PlayerStatusSystem {
         this.updateMask(260, height, x, y);
     }
 
-    // ... scroll method ...
+    private createScrollButton(scene: Phaser.Scene, dir: 'up' | 'down'): Phaser.GameObjects.Container {
+        const btn = scene.add.container(0, 0);
+        const bg = scene.add.graphics();
+        bg.fillStyle(0x444444, 0.8);
+        bg.fillRoundedRect(0, 0, 24, 24, 4);
+        bg.lineStyle(1, 0x888888, 0.5);
+        bg.strokeRoundedRect(0, 0, 24, 24, 4);
+        btn.add(bg);
+
+        const text = scene.add.text(12, 12, dir === 'up' ? '▲' : '▼', {
+            fontSize: '14px', color: '#ffffff'
+        }).setOrigin(0.5);
+        btn.add(text);
+
+        btn.setSize(24, 24);
+        btn.setInteractive({ useHandCursor: true });
+
+        btn.on('pointerdown', () => {
+            const step = dir === 'up' ? 40 : -40;
+            this.scroll(step); // Snap
+        });
+
+        // Continuous scroll on hold could be added here similar to pan
+        return btn;
+    }
+
     private scroll(dy: number) {
         if (this.contentHeight <= this.viewHeight) return;
 
         this.scrollY += dy;
         const minScroll = this.viewHeight - this.contentHeight;
+
+        // Clamping
         if (this.scrollY > 0) this.scrollY = 0;
         if (this.scrollY < minScroll) this.scrollY = minScroll;
 
-        this.listContainer.y = 50 + this.scrollY; // Match header offset
-
-        // Update mask position if it tracks scroll? No, mask stays fixed.
+        this.listContainer.y = 50 + this.scrollY;
     }
 
     public update(engine: GameEngine) {
         const state = engine.state;
-
-        // Update Turn
         this.uiText.setText(`TURN ${state.turnCount}`);
 
         const currentIds = state.playerOrder;
@@ -104,20 +139,17 @@ export class PlayerStatusSystem {
             this.rebuildList(engine.state.playerOrder, engine.state.players);
         }
 
-        // Update values (Always run to ensure fresh rows get data)
+        // Update values and Highlighting
         this.playerRows.forEach((row) => {
             const pid = (row as any).playerId;
             const player = state.players[pid];
-            // Child Order: 0:BG, 1:Title, 2:Icon, 3:Coin, 4:GoldText, 5:IncomeText
             const goldTxt = row.getAt(4) as Phaser.GameObjects.Text;
             goldTxt.setText(player.gold.toString());
 
-            // Income text (Index 5)
             const incomeTxt = row.getAt(5) as Phaser.GameObjects.Text;
             const income = engine.state.calculateIncome(pid);
             incomeTxt.setText(`+${income}/t`);
 
-            // Alpha Update
             const currentId = state.currentPlayerId || '';
             const pAlpha = currentId === pid ? 1 : 0.4;
             row.setAlpha(pAlpha);
@@ -125,58 +157,99 @@ export class PlayerStatusSystem {
     }
 
     private rebuildList(order: string[], players: any) {
-        // Clear old
         this.listContainer.removeAll(true);
         this.playerRows = [];
 
         let currentY = 0;
-        const gap = 3; // Reduced 5 -> 3
-        const useCompact = order.length > 5;
-        const actualCardH = useCompact ? 28 : 36; // Reduced 40/60 -> 28/36
+        const gap = 3;
+
+        // Calculate dynamic row height based on viewHeight and count
+        // Try to fit all if possible, within reason.
+        const availableH = Math.max(100, this.viewHeight);
+        // Ideal height ~36px. Min ~24px.
+        const idealH = 36;
+        const neededH = order.length * (idealH + gap);
+
+        let rowH = idealH;
+        if (neededH > availableH && order.length > 5) {
+            // Compress slightly
+            rowH = Math.max(28, availableH / order.length - gap);
+        }
 
         order.forEach(pid => {
             const player = players[pid];
-            const row = this.createPlayerRow(player, currentY, actualCardH);
+            const row = this.createPlayerRow(player, currentY, rowH);
             (row as any).playerId = pid;
             this.listContainer.add(row);
             this.playerRows.push(row);
 
-            currentY += actualCardH + gap;
+            currentY += rowH + gap;
         });
 
         this.contentHeight = currentY;
 
-        // Reset scroll
-        if (this.scrollY < this.viewHeight - this.contentHeight) {
-            this.scrollY = Math.min(0, this.viewHeight - this.contentHeight);
+        // Reset scroll if fits
+        if (this.contentHeight <= this.viewHeight) {
+            this.scrollY = 0;
+            this.listContainer.y = 50;
+            this.isScrollable = false;
+            this.upButton.setVisible(false);
+            this.downButton.setVisible(false);
+        } else {
+            // Constrain existing scroll
+            const minScroll = this.viewHeight - this.contentHeight;
+            this.scrollY = Phaser.Math.Clamp(this.scrollY, minScroll, 0);
             this.listContainer.y = 50 + this.scrollY;
+
+            this.isScrollable = true;
+            this.upButton.setVisible(true);
+            this.downButton.setVisible(true);
+
+            // Verify Button Positions
+            this.updateButtonPositions();
         }
+    }
+
+    private updateButtonPositions() {
+        // Strictly align to Left Border (x=0) and Top/Bottom of View area
+        const topY = 50;
+        const bottomY = 50 + this.viewHeight - 24; // Button height is 24
+
+        this.upButton.setPosition(0, topY);
+        this.downButton.setPosition(0, bottomY);
+
+        // Ensure they are on top
+        this.container.bringToTop(this.upButton);
+        this.container.bringToTop(this.downButton);
     }
 
     private createPlayerRow(player: any, y: number, h: number): Phaser.GameObjects.Container {
         const scene = this.container.scene;
-        // Use currentWidth for layout
-        const W = this.currentWidth - 20; // Margin 10 each side
 
-        const row = scene.add.container(10, y);
+        // Adjust width to allow for scroll bar/buttons on Left?
+        // If buttons are on left, we should shift content right?
+        const leftPad = this.isScrollable ? 35 : 10;
+        const rightPad = 10;
+        const W = this.currentWidth - leftPad - rightPad;
+
+        const row = scene.add.container(leftPad, y);
 
         // BG
         const bg = scene.add.graphics();
         this.drawCardPanel(bg, W, h, player.color);
         row.add(bg);
 
-        // Compact Layout
-        const isCompact = h < 30;
+        // Dynamic Font Sizing
+        // Scale factor: Base off width
+        // Reference Width: 240px. 
+        const s = Math.min(1, W / 240);
 
-        // Dynamic Font
-        const baseSize = Math.max(10, Math.floor(W * 0.06)); // ~15px at 260
-        const idSize = baseSize;
-        const goldSize = Math.max(10, Math.floor(W * 0.055));
+        const baseSize = Math.max(10, Math.floor(14 * s));
+        const goldSize = Math.max(12, Math.floor(16 * s));
 
         // Title
-        const titleY = h / 2;
-        const title = scene.add.text(10, titleY, player.id, {
-            fontFamily: 'Georgia, serif', fontSize: `${idSize}px`,
+        const title = scene.add.text(8, h / 2, player.id, {
+            fontFamily: 'Georgia, serif', fontSize: `${baseSize}px`,
             color: '#' + player.color.toString(16).padStart(6, '0'),
             fontStyle: 'bold',
             shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 2, fill: true }
@@ -184,14 +257,7 @@ export class PlayerStatusSystem {
         title.setOrigin(0, 0.5);
         row.add(title);
 
-        // Layout: [Title] ... [Income] [Gold] [Coin] [Icon]
-        // Right Aligned elements
-        // Icon at right edge - 20
-        // Coin left of Icon
-        // Gold left of Coin
-        // Income below/above?
-
-        const iconSize = isCompact ? Math.min(24, h - 4) : Math.min(28, h - 8);
+        const iconSize = Math.min(h - 4, 28 * s);
         const iconX = W - (iconSize / 2) - 5;
 
         // Type Icon
@@ -216,16 +282,7 @@ export class PlayerStatusSystem {
         row.add(goldText);
 
         // Income
-        // If compact, maybe skip or tiny?
-        // Put it left of Gold? 
-        // const incomeX = goldX - 40; // Unused 
-        // Or if space allows?
-        // Let's put positions relative to GoldText.
-        // We will update Income position in `update` loop? constant x?
-        // Let's set it left of goldText but we don't know width of goldText dynamic.
-        // We can place it at fixed offset or ...
-        // Let's place it at (goldX - 50) for now.
-        const incomeText = scene.add.text(goldX - ((goldText.width || 30) + 10), h / 2, '+0/t', {
+        const incomeText = scene.add.text(goldX - ((goldText.width || 30) * s + 10), h / 2, '+0/t', {
             fontFamily: 'Arial', fontSize: `${Math.max(8, baseSize - 2)}px`, color: '#88ff88'
         });
         incomeText.setOrigin(1, 0.5);
@@ -242,6 +299,7 @@ export class PlayerStatusSystem {
 
     public resize(width: number, height: number, x: number, y: number) {
         this.currentWidth = width;
+        this.viewHeight = height - 60; // Keep consistent with constructor
 
         // Update Background
         const bg = this.container.getAt(0) as Phaser.GameObjects.Graphics;
@@ -250,17 +308,23 @@ export class PlayerStatusSystem {
             this.drawPanel(bg, width, height);
         }
 
-        this.viewHeight = height - 90;
+        // Update Header Position
+        const header = this.container.getAt(1) as Phaser.GameObjects.Text;
+        const uiText = this.container.getAt(2) as Phaser.GameObjects.Text;
+        if (header && uiText) {
+            header.setX(width / 2);
+            uiText.setX(width / 2);
+        }
 
         // Update Interactive Hit Area
-        const hitArea = new Phaser.Geom.Rectangle(0, 80, width, this.viewHeight);
-
+        const hitArea = new Phaser.Geom.Rectangle(0, 50, width, this.viewHeight);
         this.container.removeInteractive();
         this.container.setInteractive(hitArea, Phaser.Geom.Rectangle.Contains);
 
-        // Force Rebuild of List on next update to apply new width/fonts
+        // Trigger Rebuild to adapt to new width/height
+        // We need to clear valid flag? just clear list.
         this.listContainer.removeAll(true);
-        this.playerRows = []; // This triggers rebuild in update()
+        this.playerRows = []; // Will rebuild in update()
 
         // Update Mask
         this.updateMask(width, height, x, y);
@@ -270,12 +334,7 @@ export class PlayerStatusSystem {
         if (this.maskShape) {
             this.maskShape.clear();
             this.maskShape.fillStyle(0xffffff);
-
-            // Mask must cover the list area logic
-            // The list starts at container Y+50
             const absoluteY = y + 50;
-
-            // Draw rect
             this.maskShape.fillRect(x, absoluteY, w, this.viewHeight);
         }
     }
@@ -285,50 +344,23 @@ export class PlayerStatusSystem {
     }
 
     private drawPanel(graphics: Phaser.GameObjects.Graphics, width: number, height: number) {
-        // Glassmorphism Style
         const radius = 16;
         const color = 0x1a1a1a;
         const alpha = 0.85;
-        const strokeColor = 0xffffff;
-        const strokeAlpha = 0.1;
-
         graphics.fillStyle(color, alpha);
         graphics.fillRoundedRect(0, 0, width, height, radius);
-
-        graphics.lineStyle(2, strokeColor, strokeAlpha);
+        graphics.lineStyle(2, 0xffffff, 0.1);
         graphics.strokeRoundedRect(0, 0, width, height, radius);
-
-        // Inner Highlight (top border)
-        graphics.lineStyle(1, 0xffffff, 0.15);
-        graphics.beginPath();
-        graphics.moveTo(radius, 0);
-        graphics.lineTo(width - radius, 0);
-        graphics.strokePath();
     }
 
     private drawCardPanel(graphics: Phaser.GameObjects.Graphics, width: number, height: number, accentColor?: number) {
-        // Tactical Card: Dark embossed metal look
-        // Background
         graphics.fillStyle(0x2a2a2a, 1);
         graphics.fillRoundedRect(0, 0, width, height, 8);
-
-        // Accent Bar
         if (accentColor !== undefined) {
             graphics.fillStyle(accentColor, 1);
             graphics.fillRect(0, 8, 4, height - 16);
         }
-
-        // Emboss Border
-        graphics.lineStyle(2, 0x000000, 0.5); // Shadow bottom-right
+        graphics.lineStyle(2, 0x000000, 0.5);
         graphics.strokeRoundedRect(0, 0, width, height, 8);
-
-        // Top-Left Light
-        graphics.lineStyle(1, 0x555555, 0.5);
-        graphics.beginPath();
-        graphics.moveTo(0, height - 8);
-        graphics.lineTo(0, 8);
-        graphics.arc(8, 8, 8, Phaser.Math.DegToRad(180), Phaser.Math.DegToRad(270));
-        graphics.lineTo(width - 8, 0);
-        graphics.strokePath();
     }
 }
