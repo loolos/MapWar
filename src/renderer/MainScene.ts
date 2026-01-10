@@ -655,16 +655,13 @@ export class MainScene extends Phaser.Scene {
                     // Auto-Plan
                     this.engine.planInteraction(row, col, opt.id);
                 }
-            } else if (options.length > 0 && !isPlanned) {
-                // Multiple options: Show Menu.
+                // ALWAYS Show Menu to reflect state (Green Highlight if planned, Red if not affordable)
                 this.interactionMenu.show(row, col);
-            }
-
-            // Should we hide menu if we just selected something else?
-            // If we didn't show it above, we should hide it.
-            // Actually, the cancellation check returns early.
-            // If we select a generic tile with no options, hide menu.
-            if (options.length === 0 || isPlanned) {
+            } else if (options.length > 0) {
+                // Multiple options or already planned: Show Menu to see status
+                this.interactionMenu.show(row, col);
+            } else {
+                // No options
                 this.interactionMenu.hide();
             }
 
@@ -764,10 +761,40 @@ export class MainScene extends Phaser.Scene {
                     }
                     const townText = this.add.text(x + this.tileSize / 2, y + this.tileSize / 2, icon, { fontSize: size }).setOrigin(0.5);
                     this.mapContainer.add(townText);
+                } else if (cell.building === 'wall') {
+                    // Wall Visuals: Pseudo-3D Height
+                    const level = cell.defenseLevel || 1;
+                    // const maxLevel = GameConfig.UPGRADE_WALL_MAX; // Unused
+
+                    // Height Calculation (Pixels from bottom)
+                    // Level 1: 15px, Level 2: 25px, Level 3: 35px
+                    const baseHeight = 15;
+                    const heightStep = 10;
+                    const wallHeight = baseHeight + (level - 1) * heightStep;
+
+                    const pad = 6;
+                    const w = this.tileSize - (pad * 2);
+
+                    const bottomY = y + this.tileSize - pad;
+                    const topY = bottomY - wallHeight;
+                    const leftX = x + pad;
+
+                    // Draw 3D Block
+                    // Side Face (Darker)
+                    this.gridGraphics.fillStyle(0x666666);
+                    this.gridGraphics.fillRect(leftX, topY, w, wallHeight);
+
+                    // Top Face (Lighter)
+                    this.gridGraphics.fillStyle(0x999999);
+                    this.gridGraphics.fillRect(leftX, topY - 10, w, 10); // Pseudo depth top
+
+                    // Border
+                    this.gridGraphics.lineStyle(1, 0x333333);
+                    this.gridGraphics.strokeRect(leftX, topY - 10, w, wallHeight + 10);
+
                 }
                 // Gold Mine removed from here
 
-                // 3. SELECTION / HIGHLIGHTS
                 // 3. SELECTION / HIGHLIGHTS
                 // Pending Moves OR Interactions (Unified "Planned")
                 const isPendingMove = this.engine.pendingMoves.some(m => m.r === r && m.c === c);
@@ -777,17 +804,9 @@ export class MainScene extends Phaser.Scene {
                     this.selectionGraphics.lineStyle(4, 0x00FF00, 1.0); // Green for Confirmed Plan
                     this.selectionGraphics.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
                 } else if (this.selectedRow === r && this.selectedCol === c) {
-                    // Selected but NOT planned (e.g. Menu Open with Multiple Options)
-                    // Check if options exist
-                    const opts = this.engine.interactionRegistry.getAvailableActions(this.engine, r, c);
-                    if (opts.length > 1) {
-                        this.selectionGraphics.lineStyle(4, 0xFFFF00, 1.0); // Yellow for "Decision Pending"
-                        this.selectionGraphics.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
-                    } else {
-                        // Default Selection Color (Blue or White)
-                        this.selectionGraphics.lineStyle(4, 0xFFFFFF, 0.8);
-                        this.selectionGraphics.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
-                    }
+                    // Selected Highlight
+                    this.selectionGraphics.lineStyle(4, 0xFFFFFF, 0.8);
+                    this.selectionGraphics.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
                 }
 
                 // AI Moves History (Keep as is)

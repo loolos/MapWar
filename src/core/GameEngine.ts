@@ -526,6 +526,11 @@ export class GameEngine {
                 if (level > 0) {
                     baseCost += level * GameConfig.UPGRADE_DEFENSE_BONUS;
                 }
+            } else if (cell.building === 'wall') {
+                const level = cell.defenseLevel;
+                if (level > 0) {
+                    baseCost += level * GameConfig.WALL_DEFENSE_BONUS;
+                }
             }
         }
 
@@ -679,6 +684,19 @@ export class GameEngine {
             // Transformation: Water -> Bridge
             if (cell && cell.type === 'water') {
                 cell.type = 'bridge';
+            }
+
+            // Degradation Logic for Wall Capture
+            if (cell.building === 'wall' && cell.owner && cell.owner !== pid) {
+                if (cell.defenseLevel > 0) {
+                    cell.defenseLevel--;
+                    if (cell.defenseLevel === 0) {
+                        cell.building = 'none';
+                        this.emit('logMessage', `Wall destroyed at (${move.r}, ${move.c})!`);
+                    } else {
+                        this.emit('logMessage', `Wall breached! Degraded to Lv ${cell.defenseLevel}.`);
+                    }
+                }
             }
 
             this.state.setOwner(move.r, move.c, pid);

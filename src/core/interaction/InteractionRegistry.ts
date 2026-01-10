@@ -39,6 +39,7 @@ export class InteractionRegistry {
             id: 'BUILD_OUTPOST',
             label: 'Build Outpost',
             description: 'Construct a defensive outpost (Mock)',
+            isExperimental: true, // Not implemented yet
             cost: 50,
             isAvailable: (engine, r, c) => {
                 const cell = engine.state.getCell(r, c);
@@ -77,23 +78,67 @@ export class InteractionRegistry {
             }
         });
 
-        // 3. Upgrade Defense
+        // 3. Build Wall
         this.register({
-            id: 'UPGRADE_DEFENSE',
-            label: 'Fortify Base', // "Enhance Defense"
-            description: `Protect base. +${GameConfig.UPGRADE_DEFENSE_BONUS}G Capture Cost.`,
-            cost: GameConfig.UPGRADE_DEFENSE_COST,
+            id: 'BUILD_WALL',
+            label: 'Build Wall',
+            description: `Fortify land. +${GameConfig.WALL_DEFENSE_BONUS} Capture Cost.`,
+            cost: GameConfig.COST_BUILD_WALL, // 10
             isAvailable: (engine, r, c) => {
                 const cell = engine.state.getCell(r, c);
                 const pid = engine.state.currentPlayerId;
-                // Owned Base, Not Max Level
-                return !!(cell && pid && cell.owner === pid && cell.building === 'base' && cell.defenseLevel < GameConfig.UPGRADE_DEFENSE_MAX);
+                // Owned, Plain, Connected, No Building
+                if (cell && pid && cell.owner === pid && cell.type === 'plain' && cell.building === 'none') {
+                    // Must be connected to build walls? User said "connected occupied plain area"
+                    return cell.isConnected;
+                }
+                return false;
+            },
+            execute: (engine, r, c) => {
+                engine.state.setBuilding(r, c, 'wall'); // Sets building type
+                const cell = engine.state.getCell(r, c);
+                if (cell) {
+                    cell.defenseLevel = 1; // Starts at Lv 1
+                    engine.emit('logMessage', `Wall built at (${r},${c})`);
+                }
+            }
+        });
+
+        // 4. Upgrade Defense (Base & Wall)
+        this.register({
+            id: 'UPGRADE_DEFENSE',
+            label: (engine, r, c) => {
+                const cell = engine.state.getCell(r, c);
+                if (cell?.building === 'wall') return 'Reinforce Wall';
+                return 'Fortify Base';
+            },
+            description: (engine, r, c) => {
+                const cell = engine.state.getCell(r, c);
+                if (cell?.building === 'wall') return `Add +${GameConfig.WALL_DEFENSE_BONUS} Cost`;
+                return `Add +${GameConfig.UPGRADE_DEFENSE_BONUS} Cost`;
+            },
+            cost: (engine, r, c) => {
+                const cell = engine.state.getCell(r, c);
+                if (cell?.building === 'wall') return GameConfig.UPGRADE_WALL_COST;
+                return GameConfig.UPGRADE_DEFENSE_COST;
+            },
+            isAvailable: (engine, r, c) => {
+                const cell = engine.state.getCell(r, c);
+                const pid = engine.state.currentPlayerId;
+                if (!cell || !pid || cell.owner !== pid) return false;
+
+                if (cell.building === 'base') {
+                    return cell.defenseLevel < GameConfig.UPGRADE_DEFENSE_MAX;
+                } else if (cell.building === 'wall') {
+                    return cell.defenseLevel < GameConfig.UPGRADE_WALL_MAX;
+                }
+                return false;
             },
             execute: (engine, r, c) => {
                 const cell = engine.state.getCell(r, c);
                 if (cell) {
                     cell.defenseLevel++;
-                    engine.emit('logMessage', `Base at (${r},${c}) fortified to Lv ${cell.defenseLevel}`);
+                    engine.emit('logMessage', `${cell.building === 'wall' ? 'Wall' : 'Base'} at (${r},${c}) fortified to Lv ${cell.defenseLevel}`);
                 }
             }
         });

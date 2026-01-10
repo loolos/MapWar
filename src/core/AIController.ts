@@ -119,11 +119,6 @@ export class AIController {
                 this.engine.togglePlan(bestMove.r, bestMove.c);
 
                 if (this.engine.lastError) {
-                    // Check if error is 'Not enough gold'
-                    // If so, we are done (since we sorted by score, maybe a cheaper move is lower? 
-                    // But getValidMoves checks validateMove which checks gold)
-                    // So this error shouldn't theoretically happen if validateMove is accurate.
-                    // But if it does, break to avoid infinite loop of trying same failing move.
                     console.warn(`AI Failed to execute valid move at ${bestMove.r},${bestMove.c}: ${this.engine.lastError}`);
                     break;
                 } else {
@@ -135,55 +130,91 @@ export class AIController {
                 safetyCounter++;
             }
 
-            if (safetyCounter === 0) {
-                // If we did nothing, log why (Debugging)
-                // console.log(`AI (${aiPlayer.id}) passed turn (No valid moves). Gold: ${aiPlayer.gold}`);
-            }
-
             // Post-Move Interactions (Spend excess gold on Upgrades)
             // Re-fetch player state as gold has changed
             const playerAfterMoves = this.engine.state.getCurrentPlayer();
 
             if (playerAfterMoves.gold > 0) {
                 let simulatedGold = playerAfterMoves.gold;
-                // console.log("[AI] Checking for upgrades. Gold:", playerAfterMoves.gold);
-                // Check My Bases
-                const myBases = [];
+
+                // 1. Identify Key Assets
+                const myBases: { r: number, c: number, cell: any }[] = [];
+                const myFrontLines: { r: number, c: number, cell: any, threat: number }[] = [];
+
                 for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
                     for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
                         const cell = this.engine.state.getCell(r, c);
-                        if (cell && cell.building === 'base' && cell.owner === aiPlayer.id) {
+                        if (!cell || cell.owner !== aiPlayer.id) continue;
+
+                        if (cell.building === 'base') {
                             myBases.push({ r, c, cell });
+                        }
+
+                        // Check for Front Line (Adjacent to Enemy)
+                        const neighbors = [
+                            { r: r + 1, c: c }, { r: r - 1, c: c },
+                            { r: r, c: c + 1 }, { r: r, c: c - 1 }
+                        ];
+                        let threat = 0;
+                        for (let i = 0; i < neighbors.length; i++) {
+                            const n = neighbors[i];
+                            // Try-catch block removed for clean code, trusting getCell safety
+                            const nCell = this.engine.state.getCell(n.r, n.c);
+                            if (nCell && nCell.owner && nCell.owner !== aiPlayer.id) {
+                                threat++;
+                            }
+                        }
+
+                        if (threat > 0) {
+                            myFrontLines.push({ r, c, cell, threat });
                         }
                     }
                 }
-                // console.log("[AI] Found Bases:", myBases.length);
 
+                // Priority 1: Base Income (Early/Mid Game)
                 for (const base of myBases) {
                     const { r, c, cell } = base;
-
-                    // Priority 1: Income (Early Game or Low Level)
-                    // If income level < max, and cost is affordable
                     const incomeCost = GameConfig.UPGRADE_INCOME_COST;
                     if (cell.incomeLevel < GameConfig.UPGRADE_INCOME_MAX && simulatedGold >= incomeCost) {
-                        // console.log("[AI] Planning Income Upgrade at", r, c);
-
-                        // Use Interaction
                         this.engine.planInteraction(r, c, 'UPGRADE_INCOME');
-                        // Deduct specific to this local reasoning (Engine handles real deduction on commit)
                         simulatedGold -= incomeCost;
-                        continue; // Done with this base for now (one upgrade per turn?)
                     }
+                }
 
-                    // Priority 2: Defense (If threatened)
-                    // Heuristic: If enemy within 3 tiles
-                    // Scan nearby? Expensive.
-                    // Simple check: Random or if gold is high?
-                    // Let's maintain "If Gold > 50", buy defense.
+                // Priority 2: Base Defense (Critical)
+                for (const base of myBases) {
+                    const { r, c, cell } = base;
                     const defenseCost = GameConfig.UPGRADE_DEFENSE_COST;
-                    if (cell.defenseLevel < GameConfig.UPGRADE_DEFENSE_MAX && simulatedGold >= defenseCost + 20) {
-                        this.engine.planInteraction(r, c, 'UPGRADE_DEFENSE');
-                        simulatedGold -= defenseCost;
+                    if (cell.defenseLevel < GameConfig.UPGRADE_DEFENSE_MAX && simulatedGold >= defenseCost) {
+                        const isThreatened = myFrontLines.some(f => f.r === r && f.c === c);
+                        if (isThreatened || simulatedGold > 50) {
+                            this.engine.planInteraction(r, c, 'UPGRADE_DEFENSE');
+                            simulatedGold -= defenseCost;
+                        }
+                    }
+                }
+
+                // Priority 3: Wall Construction / Upgrades (Front Lines)
+                myFrontLines.sort((a, b) => b.threat - a.threat);
+
+                for (const spot of myFrontLines) {
+                    const { r, c, cell } = spot;
+
+                    // A. Build New Wall
+                    if (cell.building === 'none' && cell.type === 'plain') {
+                        const buildCost = GameConfig.COST_BUILD_WALL;
+                        if (simulatedGold >= buildCost + 10) {
+                            this.engine.planInteraction(r, c, 'BUILD_WALL');
+                            simulatedGold -= buildCost;
+                        }
+                    }
+                    // B. Upgrade Existing Wall
+                    else if (cell.building === 'wall') {
+                        const upgCost = GameConfig.UPGRADE_WALL_COST;
+                        if (cell.defenseLevel < GameConfig.UPGRADE_WALL_MAX && simulatedGold >= upgCost + 10) {
+                            this.engine.planInteraction(r, c, 'UPGRADE_DEFENSE');
+                            simulatedGold -= upgCost;
+                        }
                     }
                 }
             }

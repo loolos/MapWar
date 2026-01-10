@@ -21,6 +21,11 @@ export const GameConfig = {
     UPGRADE_INCOME_COST: 20,
     UPGRADE_INCOME_BONUS: [1, 2, 3, 4, 5], // Cumulative income bonus per level
     UPGRADE_INCOME_MAX: 5,
+    // Wall Configs
+    COST_BUILD_WALL: 10,
+    WALL_DEFENSE_BONUS: 20,
+    UPGRADE_WALL_COST: 10,
+    UPGRADE_WALL_MAX: 3,
     // Global Cost Multipliers (System Parameters)
     COST_MULTIPLIER_NEUTRAL: 1.0,
     COST_MULTIPLIER_ATTACK: 1.2,

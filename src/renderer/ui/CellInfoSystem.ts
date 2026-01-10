@@ -155,6 +155,17 @@ export class CellInfoSystem {
             if (cell.defenseLevel > 0) {
                 desc += `\nDefense Lvl ${cell.defenseLevel}: Enemy Cost +${cell.defenseLevel * GameConfig.UPGRADE_DEFENSE_BONUS}`;
             }
+        } else if (cell.building === 'wall') {
+            desc = `Defensive Wall (Lv ${cell.defenseLevel})`;
+            desc += `\nEnemy Capture Cost +${cell.defenseLevel * GameConfig.WALL_DEFENSE_BONUS}`;
+            // Wall has standard land revenue (or maybe none? User didn't specify, implies standard plain revenue stays)
+            // But usually buildings might replace revenue or keep it.
+            // "build on ... plain area". Plain has revenue. Wall likely keeps it.
+            const baseRev = GameConfig.GOLD_PER_LAND;
+            if (cell.owner) {
+                const actual = cell.isConnected ? baseRev : baseRev * 0.5;
+                revenueMsg = `\nRevenue: +${actual} G`;
+            }
         } else if (cell.type !== 'bridge') {
             // Land Revenue
             const baseRev = GameConfig.GOLD_PER_LAND;

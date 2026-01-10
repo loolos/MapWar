@@ -20,6 +20,8 @@ describe('Interaction System', () => {
     });
 
     it('returns BUILD_OUTPOST for owned plain tile', () => {
+        GameConfig.ENABLE_EXPERIMENTAL = true; // Enable for this test
+
         const spy = vi.fn();
         engine.on('tileSelected', spy);
 
@@ -33,6 +35,8 @@ describe('Interaction System', () => {
         const options = eventData.options;
         expect(options.some((o: any) => o.id === 'BUILD_OUTPOST')).toBe(true);
         expect(options.some((o: any) => o.id === 'REMOTE_STRIKE')).toBe(false);
+
+        GameConfig.ENABLE_EXPERIMENTAL = false; // Restore
     });
 
     it('returns REMOTE_STRIKE for enemy tile only if experimental enabled', () => {

@@ -197,7 +197,7 @@ export class GameState {
         if (cell) cell.owner = owner;
     }
 
-    setBuilding(row: number, col: number, type: 'base' | 'town' | 'gold_mine' | 'none') {
+    setBuilding(row: number, col: number, type: 'base' | 'town' | 'gold_mine' | 'wall' | 'none') {
         const cell = this.getCell(row, col);
         if (cell) cell.building = type;
     }
