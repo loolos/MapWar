@@ -48,9 +48,8 @@ export class MainScene extends Phaser.Scene {
     mapOffsetY: number = 0;
 
     // Camera Controls
-    minTileSize: number = 12;
+    minTileSize: number = 25; // Minimum playable tile size (0.5x scale)
     isMapScrollable: boolean = false;
-    mapScrollSpeed: number = 10;
     scrollKeys!: {
         up: Phaser.Input.Keyboard.Key,
         down: Phaser.Input.Keyboard.Key,
@@ -59,6 +58,18 @@ export class MainScene extends Phaser.Scene {
     };
     cameraControlsContainer!: Phaser.GameObjects.Container;
     cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
+
+    // Map area for UI positioning
+    private arrowPositions: { up: { x: number, y: number }, down: { x: number, y: number }, left: { x: number, y: number }, right: { x: number, y: number } } | null = null;
+    private terrainSprites: Phaser.GameObjects.Image[][] = [];
+
+
+    // Viewport State
+    viewRow: number = 0;
+    viewCol: number = 0;
+    visibleRows: number = 10;
+    visibleCols: number = 10;
+    isViewportMode: boolean = false;
 
     constructor() {
         super('MainScene');
@@ -495,63 +506,100 @@ export class MainScene extends Phaser.Scene {
             const mapPixelW = gridW * this.tileSize;
             const mapPixelH = gridH * this.tileSize;
 
-            const scaleX = (mapAreaW - 40) / mapPixelW;
-            const scaleY = (mapAreaH - 40) / mapPixelH;
-            let scale = Math.min(scaleX, scaleY);
-            scale = Math.min(scale, 1.2);
+            // Target Size for comfortable touch (e.g. 50px rendered)
+            // If map fits with > 0.6 scale (approx 38px), let it fit.
+            // If it needs to be tinier, switch to Viewport.
+            const fitScaleX = (mapAreaW - 40) / mapPixelW;
+            const fitScaleY = (mapAreaH - 40) / mapPixelH;
+            let fitScale = Math.min(fitScaleX, fitScaleY);
+
+            // Dynamic Shrink vs Viewport Logic
+            // Shrink as much as possible until minTileSize.
+            // If it still doesn't fit, use minTileSize scale and enable scrolling.
             const minScale = this.minTileSize / this.tileSize;
-            if (scale < minScale) scale = minScale;
 
-            this.mapContainer.setScale(scale);
+            if (fitScale < minScale) {
+                // ENABLE VIEWPORT MODE
+                this.isViewportMode = true;
 
-            const scaledMapW = mapPixelW * scale;
-            const scaledMapH = mapPixelH * scale;
+                // Use the minimum allowed scale
+                const viewportScale = minScale;
+                this.mapContainer.setScale(viewportScale);
 
-            this.isMapScrollable = (scaledMapW > mapAreaW || scaledMapH > mapAreaH);
+                // Calculate Visible Area
+                const renderedTileSize = this.tileSize * viewportScale;
+                this.visibleCols = Math.floor((mapAreaW - 60) / renderedTileSize); // Extra buffer for arrows
+                this.visibleRows = Math.floor((mapAreaH - 60) / renderedTileSize);
 
-            let targetX = mapX + (mapAreaW - scaledMapW) / 2;
-            let targetY = mapY + (mapAreaH - scaledMapH) / 2;
+                // Clamp to Grid Size
+                this.visibleCols = Math.min(this.visibleCols, gridW);
+                this.visibleRows = Math.min(this.visibleRows, gridH);
 
-            if (this.isMapScrollable) {
-                if (scaledMapW > mapAreaW) targetX = mapX + 20;
-                if (scaledMapH > mapAreaH) targetY = mapY + 20;
+                // Center the rendered viewport within the mapArea
+                const viewportPixelW = this.visibleCols * renderedTileSize;
+                const viewportPixelH = this.visibleRows * renderedTileSize;
 
+                this.mapOffsetX = mapX + (mapAreaW - viewportPixelW) / 2;
+                this.mapOffsetY = mapY + (mapAreaH - viewportPixelH) / 2;
+
+                // Adjust Camera Controls Container
                 this.cameraControlsContainer.setVisible(true);
-                // Adjust controls position
-                // LANDSCAPE: Center Right (in Sidebar?) - No, Sidebar has buttons.
-                // PORTRAIT: Bottom Right (above Bottom Bar)
 
-                if (width > height) {
-                    // Landscape: Place above buttons in Right Sidebar?
-                    // Buttons are at bottom. Log is at top. Middle is free-ish.
-                    // SidebarW is calculated above but not available in this scope easily?
-                    // Re-calculate or use 'width - 60' which is inside the 280px sidebar.
-                    this.cameraControlsContainer.setPosition(width - 60, height / 2);
-                } else {
-                    // Portrait: Place above Bottom Bar
-                    // barHeight is stored? No. Re-calc: max(160, h*0.25).
-                    const barH = Math.max(160, height * 0.25);
-                    this.cameraControlsContainer.setPosition(width - 60, height - barH - 60);
-                }
+                // Calculate arrow positions around the actual map edges
+                const arrowOffset = 35; // Positioned outside the map border
+                const cx = this.mapOffsetX + viewportPixelW / 2;
+                const cy = this.mapOffsetY + viewportPixelH / 2;
 
-                // Clamp map position if scrollable
-                const minX = mapX + mapAreaW - scaledMapW - 20;
-                const maxX = mapX + 20;
-                const minY = mapY + mapAreaH - scaledMapH - 20;
-                const maxY = mapY + 20;
+                this.arrowPositions = {
+                    up: { x: cx, y: this.mapOffsetY - arrowOffset },
+                    down: { x: cx, y: this.mapOffsetY + viewportPixelH + arrowOffset },
+                    left: { x: this.mapOffsetX - arrowOffset, y: cy },
+                    right: { x: this.mapOffsetX + viewportPixelW + arrowOffset, y: cy }
+                };
 
-                this.mapOffsetX = Phaser.Math.Clamp(this.mapOffsetX, minX, maxX);
-                this.mapOffsetY = Phaser.Math.Clamp(this.mapOffsetY, minY, maxY);
+                // Re-create buttons at these positions
+                this.createCameraControls();
+
+                // Initial Clamp for panning
+                const maxRow = Math.max(0, gridH - this.visibleRows);
+                const maxCol = Math.max(0, gridW - this.visibleCols);
+                this.viewRow = Phaser.Math.Clamp(this.viewRow, 0, maxRow);
+                this.viewCol = Phaser.Math.Clamp(this.viewCol, 0, maxCol);
+
+                // Add Clipping Mask to prevent tile bleed into UI bars
+                if (this.mapContainer.mask) this.mapContainer.clearMask();
+                const maskShape = this.make.graphics({ x: 0, y: 0 });
+                maskShape.fillStyle(0xffffff);
+                maskShape.fillRect(mapX, mapY, mapAreaW, mapAreaH);
+                this.mapContainer.setMask(maskShape.createGeometryMask());
+
             } else {
+                // FIT MODE
+                this.isViewportMode = false;
+                this.mapContainer.setScale(fitScale);
+                this.visibleRows = gridH;
+                this.visibleCols = gridW;
+                this.viewRow = 0;
+                this.viewCol = 0;
+
+                const scaledMapW = mapPixelW * fitScale;
+                const scaledMapH = mapPixelH * fitScale;
+
+                this.mapOffsetX = mapX + (mapAreaW - scaledMapW) / 2;
+                this.mapOffsetY = mapY + (mapAreaH - scaledMapH) / 2;
+
                 this.cameraControlsContainer.setVisible(false);
-                this.mapOffsetX = targetX; // Center if not scrollable
-                this.mapOffsetY = targetY;
+                if (this.mapContainer.mask) this.mapContainer.clearMask();
             }
-            this.mapContainer.setPosition(this.mapOffsetX, this.mapOffsetY);
+
+            // Apply Position (ACCOUNT FOR SCROLL)
+            const renderedTileSize = this.tileSize * this.mapContainer.scaleX;
+            this.mapContainer.setPosition(
+                this.mapOffsetX - (this.viewCol * renderedTileSize),
+                this.mapOffsetY - (this.viewRow * renderedTileSize)
+            );
 
             this.drawMap();
-
-            // Refresh buttons based on layout
             this.setupButtons();
 
         } catch (err) {
@@ -683,34 +731,53 @@ export class MainScene extends Phaser.Scene {
         this.highlightGraphics.clear();
         this.gridGraphics.clear();
 
-        // Remove old logic objects logic if heavy? 
-        // Phaser graphics clear is cheap.
-        // We reuse Text objects for Bases? We probably should pool them.
-        // For now, let's clear texts.
-        // Clean up transient objects (Base Labels, Gold Mines)
+        // 1. Hide all terrain tiles (they will be shown and positioned in the viewport loop)
+        const allTerrain = this.terrainGroup.getChildren() as Phaser.GameObjects.Image[];
+        allTerrain.forEach(img => img.setVisible(false));
+
+        // 2. Cleanup dynamic map elements (Text, special images)
         const children = this.mapContainer.list;
         for (let i = children.length - 1; i >= 0; i--) {
             const child = children[i] as any;
             if (child.type === 'Text') {
                 child.destroy();
             }
-            // Explicitly remove dynamic Gold Mine sprites (Images)
-            // But verify it's not a terrain tile (which are also Images)
             else if (child.type === 'Image' && child.texture && child.texture.key === 'gold_mine') {
                 child.destroy();
             }
         }
 
-        // --- RENDER LOOP ---
+        // --- RENDER LOOP (VIEWPORT OPTIMIZED) ---
         const grid = this.engine.state.grid;
-        const height = grid.length;
-        const width = height > 0 ? grid[0].length : 0;
+        const totalHeight = grid.length;
+        const totalWidth = totalHeight > 0 ? grid[0].length : 0;
 
-        for (let r = 0; r < height; r++) {
-            for (let c = 0; c < width; c++) {
+        // Determine Loop Bounds
+        let startRow = 0;
+        let startCol = 0;
+        let endRow = totalHeight;
+        let endCol = totalWidth;
+
+        if (this.isViewportMode) {
+            startRow = this.viewRow;
+            startCol = this.viewCol;
+            endRow = Math.min(totalHeight, this.viewRow + this.visibleRows + 1); // +1 buffer
+            endCol = Math.min(totalWidth, this.viewCol + this.visibleCols + 1);
+        }
+
+        for (let r = startRow; r < endRow; r++) {
+            for (let c = startCol; c < endCol; c++) {
                 const cell = grid[r][c];
+
                 const x = c * this.tileSize;
                 const y = r * this.tileSize;
+
+                // 0. Position Background Terrain (Absolute position in container)
+                if (this.terrainSprites[r] && this.terrainSprites[r][c]) {
+                    const terrainImg = this.terrainSprites[r][c];
+                    terrainImg.setPosition(x + this.tileSize / 2, y + this.tileSize / 2);
+                    terrainImg.setVisible(true);
+                }
 
                 // 0. SPECIAL TERRAIN REPLACEMENT (Gold Mine)
                 if (cell.building === 'gold_mine') {
@@ -828,8 +895,6 @@ export class MainScene extends Phaser.Scene {
     }
 
     initializeTerrainVisuals() {
-        // Then create new images and add to terrainGroup AND mapContainer.
-
         const grid = this.engine.state.grid;
         if (!grid || grid.length === 0) {
             console.error("initializeTerrainVisuals: GRID IS EMPTY OR NULL");
@@ -840,16 +905,17 @@ export class MainScene extends Phaser.Scene {
         if (this.terrainGroup) {
             this.terrainGroup.clear(true, true);
         }
+        this.terrainSprites = [];
 
-        let count = 0;
         try {
             const height = grid.length;
             const width = height > 0 ? grid[0].length : 0;
 
             for (let r = 0; r < height; r++) {
+                this.terrainSprites[r] = [];
                 for (let c = 0; c < width; c++) {
                     const cell = grid[r][c];
-                    const x = c * this.tileSize + this.tileSize / 2; // Center origin
+                    const x = c * this.tileSize + this.tileSize / 2;
                     const y = r * this.tileSize + this.tileSize / 2;
 
                     let texture = 'tile_plain';
@@ -859,17 +925,17 @@ export class MainScene extends Phaser.Scene {
 
                     const img = this.add.image(x, y, texture);
                     img.setDisplaySize(this.tileSize, this.tileSize);
+                    img.setVisible(false); // Managed by drawMap
 
                     this.terrainGroup.add(img);
-                    this.mapContainer.add(img); // Now validly placed in container
-                    this.mapContainer.sendToBack(img); // Ensure behind grid
-                    count++;
+                    this.mapContainer.add(img);
+                    this.mapContainer.sendToBack(img);
+                    this.terrainSprites[r][c] = img;
                 }
             }
         } catch (err) {
             console.error("initializeTerrainVisuals: ERROR in loop", err);
         }
-
     }
 
     updateUI() {
@@ -893,6 +959,57 @@ export class MainScene extends Phaser.Scene {
         } else {
             // Default
         }
+    }
+
+    private lastScrollTime: number = 0;
+
+    panView(dRow: number, dCol: number) {
+        if (!this.engine) return;
+
+        const grid = this.engine.state.grid;
+        const totalHeight = grid.length;
+        const totalWidth = totalHeight > 0 ? grid[0].length : 0;
+
+        const maxRow = Math.max(0, totalHeight - this.visibleRows);
+        const maxCol = Math.max(0, totalWidth - this.visibleCols);
+
+        this.viewRow = Phaser.Math.Clamp(this.viewRow + dRow, 0, maxRow);
+        this.viewCol = Phaser.Math.Clamp(this.viewCol + dCol, 0, maxCol);
+
+        // Update Container Position
+        const renderedTileSize = this.tileSize * this.mapContainer.scaleX;
+        this.mapContainer.x = this.mapOffsetX - (this.viewCol * renderedTileSize);
+        this.mapContainer.y = this.mapOffsetY - (this.viewRow * renderedTileSize);
+
+        this.drawMap();
+    }
+
+    createCameraControls() {
+        this.cameraControlsContainer.removeAll(true);
+        if (!this.arrowPositions) return;
+
+        // Style
+        const size = 35; // Smaller dots for edges
+        const color = 0x444444;
+        const alpha = 0.9; // Higher contrast
+
+        // Helper
+        const createArrow = (pos: { x: number, y: number }, label: string, dr: number, dc: number) => {
+            const bg = this.add.circle(pos.x, pos.y, size / 2, color, alpha)
+                .setInteractive()
+                .on('pointerdown', () => this.panView(dr, dc));
+
+            const text = this.add.text(pos.x, pos.y, label, { fontSize: '20px', color: '#ffffff' }).setOrigin(0.5);
+            this.cameraControlsContainer.add([bg, text]);
+
+            bg.on('pointerover', () => bg.setFillStyle(0x666666, 1));
+            bg.on('pointerout', () => bg.setFillStyle(color, alpha));
+        };
+
+        createArrow(this.arrowPositions.up, '▲', -1, 0);
+        createArrow(this.arrowPositions.down, '▼', 1, 0);
+        createArrow(this.arrowPositions.left, '◀', 0, -1);
+        createArrow(this.arrowPositions.right, '▶', 0, 1);
     }
 
     private hasRenderedOnce: boolean = false;
@@ -921,65 +1038,33 @@ export class MainScene extends Phaser.Scene {
         }
 
         // Handle Map Scrolling
-        if (this.isMapScrollable && this.scrollKeys) {
-            let dx = 0;
-            let dy = 0;
-            const speed = this.mapScrollSpeed;
+        // Handle Map Scrolling (Discrete Viewport Panning)
+        if (this.isViewportMode && this.scrollKeys) {
+            // Rate limit scrolling (e.g. every 100ms) - simplistic approach: check JustDown
+            // Better: Timer based?
+            const now = this.time.now;
+            const scrollDelay = 100;
+            if (now > this.lastScrollTime + scrollDelay) {
+                let dr = 0;
+                let dc = 0;
 
-            if (this.scrollKeys.up.isDown || (this.cursors && this.cursors.up.isDown)) dy += speed;
-            if (this.scrollKeys.down.isDown || (this.cursors && this.cursors.down.isDown)) dy -= speed;
-            if (this.scrollKeys.left.isDown || (this.cursors && this.cursors.left.isDown)) dx += speed;
-            if (this.scrollKeys.right.isDown || (this.cursors && this.cursors.right.isDown)) dx -= speed;
+                if (this.scrollKeys.up.isDown || (this.cursors && this.cursors.up.isDown)) dr = -1;
+                else if (this.scrollKeys.down.isDown || (this.cursors && this.cursors.down.isDown)) dr = 1;
 
-            if (dx !== 0 || dy !== 0) {
-                this.mapContainer.x += dx;
-                this.mapContainer.y += dy;
-                // Update offset vars so input handling works
-                this.mapOffsetX = this.mapContainer.x;
-                this.mapOffsetY = this.mapContainer.y;
+                if (this.scrollKeys.left.isDown || (this.cursors && this.cursors.left.isDown)) dc = -1;
+                else if (this.scrollKeys.right.isDown || (this.cursors && this.cursors.right.isDown)) dc = 1;
+
+                if (dr !== 0 || dc !== 0) {
+                    this.panView(dr, dc);
+                    this.lastScrollTime = now;
+                }
             }
         }
+
     }
 
-    createCameraControls() {
-        // Create 4 arrow buttons
-        const size = 50;
-        // const pad = 10; // Unused
 
-        // Up
-        const up = this.add.text(0, -size, '▲', { fontSize: '32px', color: '#ffffff', backgroundColor: '#333333' })
-            .setInteractive()
-            .on('pointerdown', () => this.scrollKeys.up.isDown = true)
-            .on('pointerup', () => this.scrollKeys.up.isDown = false)
-            .on('pointerout', () => this.scrollKeys.up.isDown = false)
-            .setOrigin(0.5);
 
-        // Down
-        const down = this.add.text(0, size, '▼', { fontSize: '32px', color: '#ffffff', backgroundColor: '#333333' })
-            .setInteractive()
-            .on('pointerdown', () => this.scrollKeys.down.isDown = true)
-            .on('pointerup', () => this.scrollKeys.down.isDown = false)
-            .on('pointerout', () => this.scrollKeys.down.isDown = false)
-            .setOrigin(0.5);
-
-        // Left
-        const left = this.add.text(-size, 0, '◀', { fontSize: '32px', color: '#ffffff', backgroundColor: '#333333' })
-            .setInteractive()
-            .on('pointerdown', () => this.scrollKeys.left.isDown = true)
-            .on('pointerup', () => this.scrollKeys.left.isDown = false)
-            .on('pointerout', () => this.scrollKeys.left.isDown = false)
-            .setOrigin(0.5);
-
-        // Right
-        const right = this.add.text(size, 0, '▶', { fontSize: '32px', color: '#ffffff', backgroundColor: '#333333' })
-            .setInteractive()
-            .on('pointerdown', () => this.scrollKeys.right.isDown = true)
-            .on('pointerup', () => this.scrollKeys.right.isDown = false)
-            .on('pointerout', () => this.scrollKeys.right.isDown = false)
-            .setOrigin(0.5);
-
-        this.cameraControlsContainer.add([up, down, left, right]);
-    }
 
     // Overlay for Game Over
     overlayContainer!: Phaser.GameObjects.Container;

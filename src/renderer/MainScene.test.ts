@@ -75,13 +75,17 @@ vi.mock('phaser', () => {
                 group: vi.fn(() => ({
                     clear: vi.fn(),
                     add: vi.fn(),
-                    getLength: vi.fn(() => 0)
+                    getLength: vi.fn(() => 0),
+                    getChildren: vi.fn(() => [])
                 })),
                 image: vi.fn(() => ({
                     setDisplaySize: vi.fn(),
                     setOrigin: vi.fn(),
                     setInteractive: vi.fn(),
-                    on: vi.fn()
+                    on: vi.fn(),
+                    setVisible: vi.fn(),
+                    setPosition: vi.fn(),
+                    destroy: vi.fn()
                 })),
                 graphics: vi.fn(() => {
                     const g = {
