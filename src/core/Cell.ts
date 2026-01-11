@@ -19,6 +19,9 @@ export class Cell {
     defenseLevel: number;
     incomeLevel: number;
 
+    // Watchtower State
+    watchtowerLevel: number; // 0 = none
+
     constructor(row: number, col: number) {
         this.row = row;
         this.col = col;
@@ -33,6 +36,7 @@ export class Cell {
 
         this.defenseLevel = 0;
         this.incomeLevel = 0;
+        this.watchtowerLevel = 0;
     }
 
     isOwnedBy(playerId: PlayerID): boolean {
@@ -50,7 +54,8 @@ export class Cell {
             townIncome: this.townIncome,
             townTurnCount: this.townTurnCount,
             defenseLevel: this.defenseLevel,
-            incomeLevel: this.incomeLevel
+            incomeLevel: this.incomeLevel,
+            watchtowerLevel: this.watchtowerLevel
         };
     }
 
@@ -64,6 +69,7 @@ export class Cell {
         cell.townTurnCount = data.townTurnCount || 0;
         cell.defenseLevel = data.defenseLevel || 0;
         cell.incomeLevel = data.incomeLevel || 0;
+        cell.watchtowerLevel = data.watchtowerLevel || 0;
         return cell;
     }
 }

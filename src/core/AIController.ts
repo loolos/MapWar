@@ -1,5 +1,6 @@
 import { GameEngine } from './GameEngine';
 import { GameConfig } from './GameConfig';
+import { AuraSystem } from './AuraSystem';
 
 export class AIController {
     engine: GameEngine;
@@ -69,8 +70,15 @@ export class AIController {
                                 score += 20;
                             }
 
-                            // 5. Look-Ahead Bonus (Proximity to targets)
-                            // Check neighbors of this candidate cell
+                            // 5. Aura Support Bonus
+                            if (cell.owner !== aiPlayer.id) {
+                                const { discount } = AuraSystem.getSupportDiscount(this.engine.state, r, c, aiPlayer.id);
+                                if (discount > 0) {
+                                    score += (discount * 200);
+                                }
+                            }
+
+                            // 5. Look-Ahead Bonus
                             const neighbors = [
                                 { r: r + 1, c: c }, { r: r - 1, c: c },
                                 { r: r, c: c + 1 }, { r: r, c: c - 1 }
@@ -79,19 +87,17 @@ export class AIController {
                             for (const n of neighbors) {
                                 if (n.r >= 0 && n.r < GameConfig.GRID_HEIGHT && n.c >= 0 && n.c < GameConfig.GRID_WIDTH) {
                                     const nCell = grid[n.r][n.c];
-                                    // If moving here puts us next to a Town/Base we don't own, that's good!
                                     if (nCell.owner !== aiPlayer.id) {
-                                        if (nCell.building === 'town') score += 100; // Path to Town
-                                        if (nCell.building === 'base') score += 200; // Path to Base
+                                        if (nCell.building === 'town') score += 100;
+                                        if (nCell.building === 'base') score += 200;
                                     }
                                 }
                             }
 
-                            // 6. Cost Penalty (Optimize spending)
-                            // Ideally we want high value for low cost
+                            // 6. Cost Penalty
                             score -= (cost * 0.5);
 
-                            // Random noise to prevent identical loops
+                            // Random noise
                             score += Math.random() * 10;
 
                             moves.push({ r, c, score, cell, cost });
@@ -103,15 +109,17 @@ export class AIController {
             };
 
             // PASS 1: EXECUTION LOOP
-            // We loop until we can't afford any more moves or no valid moves exist
             let safetyCounter = 0;
-            const MAX_MOVES = 50; // Prevent infinite loops
+            const MAX_MOVES = 50;
+            const skippedMoves = new Set<string>();
 
             while (safetyCounter < MAX_MOVES) {
-                // Re-evaluate moves every step because state changes (gold, connectivity)
-                const potentialMoves = getValidMoves();
+                let potentialMoves = getValidMoves();
 
-                if (potentialMoves.length === 0) break; // No moves possible
+                // Filter out moves that previously failed in this turn
+                potentialMoves = potentialMoves.filter(m => !skippedMoves.has(`${m.r},${m.c}`));
+
+                if (potentialMoves.length === 0) break;
 
                 const bestMove = potentialMoves[0];
 
@@ -119,8 +127,9 @@ export class AIController {
                 this.engine.togglePlan(bestMove.r, bestMove.c);
 
                 if (this.engine.lastError) {
-                    console.warn(`AI Failed to execute valid move at ${bestMove.r},${bestMove.c}: ${this.engine.lastError}`);
-                    break;
+                    // Mark as skipped and continue to next best
+                    skippedMoves.add(`${bestMove.r},${bestMove.c}`);
+                    continue;
                 } else {
                     // Success - Commit immediately
                     this.engine.lastAiMoves.push({ r: bestMove.r, c: bestMove.c });
@@ -131,7 +140,6 @@ export class AIController {
             }
 
             // Post-Move Interactions (Spend excess gold on Upgrades)
-            // Re-fetch player state as gold has changed
             const playerAfterMoves = this.engine.state.getCurrentPlayer();
 
             if (playerAfterMoves.gold > 0) {
@@ -158,7 +166,6 @@ export class AIController {
                         let threat = 0;
                         for (let i = 0; i < neighbors.length; i++) {
                             const n = neighbors[i];
-                            // Try-catch block removed for clean code, trusting getCell safety
                             const nCell = this.engine.state.getCell(n.r, n.c);
                             if (nCell && nCell.owner && nCell.owner !== aiPlayer.id) {
                                 threat++;
@@ -171,7 +178,7 @@ export class AIController {
                     }
                 }
 
-                // Priority 1: Base Income (Early/Mid Game)
+                // Priority 1: Base Income
                 for (const base of myBases) {
                     const { r, c, cell } = base;
                     const incomeCost = GameConfig.UPGRADE_INCOME_COST;
@@ -181,7 +188,7 @@ export class AIController {
                     }
                 }
 
-                // Priority 2: Base Defense (Critical)
+                // Priority 2: Base Defense
                 for (const base of myBases) {
                     const { r, c, cell } = base;
                     const defenseCost = GameConfig.UPGRADE_DEFENSE_COST;
@@ -194,7 +201,7 @@ export class AIController {
                     }
                 }
 
-                // Priority 3: Wall Construction / Upgrades (Front Lines)
+                // Priority 3: Wall Construction / Upgrades / Watchtowers
                 myFrontLines.sort((a, b) => b.threat - a.threat);
 
                 for (const spot of myFrontLines) {
@@ -208,21 +215,38 @@ export class AIController {
                             simulatedGold -= buildCost;
                         }
                     }
-                    // B. Upgrade Existing Wall
+                    // B. Existing Wall Assets
                     else if (cell.building === 'wall') {
                         const upgCost = GameConfig.UPGRADE_WALL_COST;
-                        if (cell.defenseLevel < GameConfig.UPGRADE_WALL_MAX && simulatedGold >= upgCost + 10) {
+                        const wtCost = GameConfig.COST_BUILD_WATCHTOWER;
+
+                        // 1. Build Watchtower if missing
+                        if (cell.watchtowerLevel === 0 && simulatedGold >= wtCost + 20) {
+                            this.engine.planInteraction(r, c, 'BUILD_WATCHTOWER');
+                            simulatedGold -= wtCost;
+                        }
+                        // 2. Upgrade Watchtower if exists
+                        else if (cell.watchtowerLevel > 0 && cell.watchtowerLevel < GameConfig.WATCHTOWER_MAX_LEVEL && simulatedGold >= GameConfig.COST_UPGRADE_WATCHTOWER + 30) {
+                            this.engine.planInteraction(r, c, 'UPGRADE_WATCHTOWER');
+                            simulatedGold -= GameConfig.COST_UPGRADE_WATCHTOWER;
+                        }
+                        // 3. Upgrade Wall Defense
+                        else if (cell.defenseLevel < GameConfig.UPGRADE_WALL_MAX && simulatedGold >= upgCost + 10) {
                             this.engine.planInteraction(r, c, 'UPGRADE_DEFENSE');
                             simulatedGold -= upgCost;
                         }
                     }
+                }
+
+                // Commit Post-Move Upgrades
+                if (this.engine.pendingInteractions.length > 0) {
+                    this.engine.commitMoves();
                 }
             }
 
         } catch (err) {
             console.error("AI Logic Exception:", err);
         } finally {
-            // End Turn ALWAYS to prevent hang
             this.engine.endTurn();
         }
     }

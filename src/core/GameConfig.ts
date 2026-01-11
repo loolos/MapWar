@@ -21,11 +21,23 @@ export const GameConfig = {
     UPGRADE_INCOME_COST: 20,
     UPGRADE_INCOME_BONUS: [1, 2, 3, 4, 5], // Cumulative income bonus per level
     UPGRADE_INCOME_MAX: 5,
+    // Base Support Configs (New)
+    BASE_SUPPORT_RANGE_BASE: 2,
+    BASE_SUPPORT_DISCOUNT_BASE: 0.20,
+    BASE_SUPPORT_RANGE_PER_LEVEL: 1,
+    BASE_SUPPORT_DISCOUNT_PER_LEVEL: 0.05,
     // Wall Configs
     COST_BUILD_WALL: 10,
     WALL_DEFENSE_BONUS: 20,
     UPGRADE_WALL_COST: 10,
     UPGRADE_WALL_MAX: 3,
+    // Watchtower Configs
+    COST_BUILD_WATCHTOWER: 20,
+    COST_UPGRADE_WATCHTOWER: 20,
+    WATCHTOWER_MAX_LEVEL: 3,
+    WATCHTOWER_RANGES: [0, 2, 3, 4], // Index 1 = 2 tiles, 2 = 3 tiles...
+    WATCHTOWER_DISCOUNT_BASE: 0.20,
+    WATCHTOWER_DISCOUNT_PER_WALL: 0.05,
     // Global Cost Multipliers (System Parameters)
     COST_MULTIPLIER_NEUTRAL: 1.0,
     COST_MULTIPLIER_ATTACK: 1.2,

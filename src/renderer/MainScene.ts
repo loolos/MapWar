@@ -12,6 +12,7 @@ import { SoundManager } from '../core/audio/SoundManager'; // NEW
 
 import { LogSystem } from './ui/LogSystem';
 import { InteractionMenu } from './ui/InteractionMenu';
+import { AuraSystem } from '../core/AuraSystem';
 
 // ... imports
 
@@ -814,6 +815,28 @@ export class MainScene extends Phaser.Scene {
 
                 // 3. BUILDINGS (Towns, Bases) - Gold Mine already drawn
                 if (cell.building === 'base') {
+                    // Base Defense Upgrade: Square Wall Border
+                    if (cell.defenseLevel > 0) {
+                        const lw = cell.defenseLevel * 2; // Lv 1..3 -> 2, 4, 6px
+                        const padding = 6 + (cell.defenseLevel);
+                        this.gridGraphics.lineStyle(lw, 0x444444, 1.0); // Dark Grey "Wall"
+                        this.gridGraphics.strokeRect(x + padding, y + padding, this.tileSize - padding * 2, this.tileSize - padding * 2);
+                    }
+
+                    // Base Income Upgrade: Internal Buildings (Gold squares)
+                    if (cell.incomeLevel > 0) {
+                        this.gridGraphics.fillStyle(0xFFD700, 1.0); // Gold
+                        const size = 6;
+                        const gap = 3;
+                        const startX = x + 10;
+                        const startY = y + this.tileSize - 14;
+
+                        // Draw distinct little "buildings" based on level (Max 5)
+                        for (let i = 0; i < cell.incomeLevel; i++) {
+                            this.gridGraphics.fillRect(startX + (i * (size + gap)), startY, size, size);
+                        }
+                    }
+
                     const baseText = this.add.text(x + this.tileSize / 2, y + this.tileSize / 2, '🏰', { fontSize: '32px' }).setOrigin(0.5);
                     this.mapContainer.add(baseText);
                 } else if (cell.building === 'town') {
@@ -859,6 +882,12 @@ export class MainScene extends Phaser.Scene {
                     this.gridGraphics.lineStyle(1, 0x333333);
                     this.gridGraphics.strokeRect(leftX, topY - 10, w, wallHeight + 10);
 
+                    // Watchtower Visual
+                    if (cell.watchtowerLevel > 0) {
+                        const towerText = this.add.text(leftX + w / 2, topY - 15, '🗼', { fontSize: '20px' }).setOrigin(0.5);
+                        this.mapContainer.add(towerText);
+                    }
+
                 }
                 // Gold Mine removed from here
 
@@ -881,6 +910,37 @@ export class MainScene extends Phaser.Scene {
                 if (isAiMove) {
                     this.highlightGraphics.lineStyle(4, GameConfig.COLORS.HIGHLIGHT_AI, 1.0);
                     this.highlightGraphics.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
+                }
+            }
+        }
+
+        // 4. AURA RANGE INDICATOR (Base & Watchtower)
+        if (this.selectedRow !== null && this.selectedCol !== null) {
+            const selectedCell = grid[this.selectedRow][this.selectedCol];
+            const auraRange = AuraSystem.getAuraRange(selectedCell);
+
+            if (auraRange > 0) {
+                // Determine Color based on Source
+                let color = 0x00FFFF; // Cyan (Watchtower default)
+                if (selectedCell.building === 'base') {
+                    color = 0xFF8800; // Orange for Base
+                }
+
+                this.highlightGraphics.lineStyle(4, color, 0.8);
+                this.highlightGraphics.fillStyle(color, 0.3);
+
+                // Iterate grid to find in-range tiles
+                for (let r = 0; r < totalHeight; r++) {
+                    for (let c = 0; c < totalWidth; c++) {
+                        // Manhattan Distance (Rhombus)
+                        const dist = Math.abs(r - this.selectedRow) + Math.abs(c - this.selectedCol);
+                        if (dist <= auraRange && dist > 0) {
+                            const tx = c * this.tileSize;
+                            const ty = r * this.tileSize;
+                            this.highlightGraphics.strokeRect(tx, ty, this.tileSize, this.tileSize);
+                            this.highlightGraphics.fillRect(tx, ty, this.tileSize, this.tileSize);
+                        }
+                    }
                 }
             }
         }

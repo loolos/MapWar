@@ -173,6 +173,13 @@ export class CellInfoSystem {
         } else if (cell.building === 'wall') {
             desc = `Defensive Wall (Lv ${cell.defenseLevel})`;
             desc += `\nEnemy Capture Cost +${cell.defenseLevel * GameConfig.WALL_DEFENSE_BONUS}`;
+
+            // Watchtower Info
+            if (cell.watchtowerLevel > 0) {
+                desc += `\nWatchtower (Lv ${cell.watchtowerLevel})`;
+                desc += `\nRange: ${GameConfig.WATCHTOWER_RANGES[cell.watchtowerLevel]} (Support Fire)`;
+            }
+
             // Wall has standard land revenue (or maybe none? User didn't specify, implies standard plain revenue stays)
             // But usually buildings might replace revenue or keep it.
             // "build on ... plain area". Plain has revenue. Wall likely keeps it.

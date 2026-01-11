@@ -20,6 +20,7 @@ describe('Base Upgrades', () => {
         engine.state.players['P1'].gold = 100;
         engine.state.setOwner(0, 0, 'P1');
         engine.state.setBuilding(0, 0, 'base');
+        engine.state.grid[0][0].type = 'plain'; // Force plain to ensure deterministic costs
         engine.state.updateConnectivity('P1');
     });
 

@@ -2,6 +2,7 @@ import { GameState } from './GameState';
 import { GameConfig } from './GameConfig';
 import { AIController } from './AIController';
 import { InteractionRegistry } from './interaction/InteractionRegistry';
+import { AuraSystem } from './AuraSystem';
 
 import type { Action, EndTurnAction } from './Actions';
 import type { MapType } from './map/MapGenerator';
@@ -272,7 +273,6 @@ export class GameEngine {
 
         // IMMEDIATE EXECUTION (e.g. Move)
         if (action.immediate) {
-            console.log(`[PlanInteraction] Immediate execution for ${action.id}`);
             action.execute(this, row, col);
             // Do NOT add to pendingInteractions list
             // Note: execute for Move calls togglePlan, which calls revalidatePendingPlan.
@@ -565,7 +565,21 @@ export class GameEngine {
             }
         }
 
-        return { cost: baseCost, breakdown: breakdownParts.join(' ') };
+
+
+        // 5. Aura Support (Watchtower + Base)
+        if (isAttack) {
+            const attackerId = this.state.currentPlayerId;
+            const { discount } = AuraSystem.getSupportDiscount(this.state, row, col, attackerId);
+
+            if (discount > 0) {
+                const discountAmount = Math.floor(baseCost * discount);
+                baseCost -= discountAmount;
+                breakdownParts.push(`Support(-${Math.floor(discount * 100)}%)`);
+            }
+        }
+
+        return { cost: Math.max(1, baseCost), breakdown: breakdownParts.join(' ') };
     }
 
     validateMove(row: number, col: number): { valid: boolean, reason?: string } {
@@ -695,6 +709,15 @@ export class GameEngine {
                 cell.type = 'bridge';
             }
 
+
+            // Watchtower Destruction Logic
+            // console.log(`[MoveDebug] Cell(${move.r},${move.c}) B:${cell.building} O:${cell.owner} PID:${pid} WLv:${cell.watchtowerLevel} DLv:${cell.defenseLevel}`);
+
+            if (cell.watchtowerLevel > 0 && cell.owner && cell.owner !== pid) {
+                cell.watchtowerLevel = 0;
+                this.emit('logMessage', `Watchtower at (${move.r}, ${move.c}) destroyed!`);
+            }
+
             // Degradation Logic for Wall Capture
             if (cell.building === 'wall' && cell.owner && cell.owner !== pid) {
                 if (cell.defenseLevel > 0) {
@@ -737,7 +760,6 @@ export class GameEngine {
                 // Re-validate cost (Should be covered by loop check but safe to double check?)
                 // Re-validate availability
                 if (action.isAvailable(this, interaction.r, interaction.c)) {
-                    console.log(`[Commit] Executing ${interaction.actionId}`);
                     action.execute(this, interaction.r, interaction.c);
                     const c = typeof action.cost === 'function' ? action.cost(this, interaction.r, interaction.c) : action.cost;
                     totalCost += c;

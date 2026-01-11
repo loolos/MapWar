@@ -48,7 +48,6 @@ export class InteractionRegistry {
                 return !!(cell && pid && cell.owner === pid && cell.type === 'plain' && cell.building === 'none');
             },
             execute: (engine, r, c) => {
-                console.log(`[Interaction] Building Outpost at ${r},${c}`);
                 // Mock effect: Set building to a new type 'outpost' (Scanning... GameState needs update if we use real types)
                 // For now, use 'none' but log it, or reuse 'town' as a placeholder? 
                 // Let's just log and maybe emit an effect.
@@ -70,7 +69,6 @@ export class InteractionRegistry {
                 return !!(cell && pid && cell.owner && cell.owner !== pid);
             },
             execute: (engine, r, c) => {
-                console.log(`[Interaction] Strike at ${r},${c}`);
                 engine.emit('logMessage', `Missile strike launched at (${r},${c})!`);
                 // Mock damage? 
                 // Maybe remove owner?
@@ -161,6 +159,49 @@ export class InteractionRegistry {
                     cell.incomeLevel++;
                     const bonus = GameConfig.UPGRADE_INCOME_BONUS[cell.incomeLevel - 1];
                     engine.emit('logMessage', `Base economy upgraded! Income +${bonus}`);
+                }
+            }
+        });
+
+        // 6. Build Watchtower
+        this.register({
+            id: 'BUILD_WATCHTOWER',
+            label: 'Construct Watchtower',
+            description: 'Build a Watchtower on top of the Wall to reduce enemy attack costs.',
+            cost: GameConfig.COST_BUILD_WATCHTOWER,
+            isAvailable: (engine, r, c) => {
+                const cell = engine.state.getCell(r, c);
+                const pid = engine.state.currentPlayerId;
+                // Owned, Wall, Connected, No Watchtower yet
+                return !!(cell && pid && cell.owner === pid && cell.building === 'wall' && cell.isConnected && cell.watchtowerLevel === 0);
+            },
+            execute: (engine, r, c) => {
+                const cell = engine.state.getCell(r, c);
+                if (cell) {
+                    cell.watchtowerLevel = 1;
+                    engine.emit('logMessage', `Watchtower built at (${r},${c})`);
+                }
+            }
+        });
+
+        // 7. Upgrade Watchtower
+        this.register({
+            id: 'UPGRADE_WATCHTOWER',
+            label: 'Upgrade Watchtower',
+            description: 'Increase Watchtower range and effect.',
+            cost: GameConfig.COST_UPGRADE_WATCHTOWER,
+            isAvailable: (engine, r, c) => {
+                const cell = engine.state.getCell(r, c);
+                const pid = engine.state.currentPlayerId;
+                // Owned, Watchtower exists, Not Max
+                return !!(cell && pid && cell.owner === pid && cell.watchtowerLevel > 0 && cell.watchtowerLevel < GameConfig.WATCHTOWER_MAX_LEVEL);
+            },
+            execute: (engine, r, c) => {
+                const cell = engine.state.getCell(r, c);
+                if (cell) {
+                    cell.watchtowerLevel++;
+                    const range = GameConfig.WATCHTOWER_RANGES[cell.watchtowerLevel];
+                    engine.emit('logMessage', `Watchtower at (${r},${c}) upgraded to Lv ${cell.watchtowerLevel} (Range: ${range})`);
                 }
             }
         });

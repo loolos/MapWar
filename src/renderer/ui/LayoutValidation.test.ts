@@ -4,8 +4,13 @@ import { MainScene } from '../MainScene';
 import Phaser from 'phaser';
 
 // Mocks
-vi.mock('../utils/TextureUtils', () => ({
-    TextureUtils: { makeTransparent: vi.fn() }
+vi.mock('../../utils/TextureUtils', () => ({
+    TextureUtils: {
+        makeTransparent: vi.fn(),
+        create: vi.fn(),
+        exists: vi.fn().mockReturnValue(true),
+        get: vi.fn().mockReturnValue({ destroy: vi.fn() })
+    }
 }));
 
 // Inline Mock Factory Logic

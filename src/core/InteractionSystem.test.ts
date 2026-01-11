@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { GameEngine } from './GameEngine';
 import { GameConfig } from './GameConfig';
 
@@ -19,8 +19,12 @@ describe('Interaction System', () => {
         engine.state.setOwner(0, 1, 'P2');
     });
 
+    afterEach(() => {
+        GameConfig.ENABLE_EXPERIMENTAL = false;
+    });
+
     it('returns BUILD_OUTPOST for owned plain tile', () => {
-        GameConfig.ENABLE_EXPERIMENTAL = true; // Enable for this test
+        GameConfig.ENABLE_EXPERIMENTAL = true;
 
         const spy = vi.fn();
         engine.on('tileSelected', spy);
@@ -36,7 +40,6 @@ describe('Interaction System', () => {
         expect(options.some((o: any) => o.id === 'BUILD_OUTPOST')).toBe(true);
         expect(options.some((o: any) => o.id === 'REMOTE_STRIKE')).toBe(false);
 
-        GameConfig.ENABLE_EXPERIMENTAL = false; // Restore
     });
 
     it('returns REMOTE_STRIKE for enemy tile only if experimental enabled', () => {
@@ -55,8 +58,6 @@ describe('Interaction System', () => {
         const hasStrike = actions.some(a => a.id === 'REMOTE_STRIKE');
         expect(hasStrike).toBe(true);
 
-        // Cleanup
-        GameConfig.ENABLE_EXPERIMENTAL = false;
     });
 
     it('plans and executes interaction', () => {
@@ -134,6 +135,10 @@ describe('Interaction System', () => {
         // (0,1) is Owned P2 (from beforeEach) -> Let's reset it to Neutral for this test to be a simple Move/Capture
         engine.state.setOwner(0, 1, null);
         engine.state.setOwner(0, 2, null);
+
+        // Ensure these are plain tiles to avoid terrain-specific rules (like bridge adjacency) failing the test
+        engine.state.grid[0][1].type = 'plain';
+        engine.state.grid[0][2].type = 'plain';
 
         // CRITICAL FOR REVALIDATION: Start node must be connected!
         engine.state.getCell(0, 0)!.isConnected = true;
