@@ -49,6 +49,9 @@ export class GameEngine {
         const firstPlayer = this.state.playerOrder[0];
         if (firstPlayer) {
             this.state.accrueResources(firstPlayer);
+            if (this.state.players[firstPlayer].isAI) {
+                this.triggerAiTurn();
+            }
         }
     }
 
@@ -88,6 +91,10 @@ export class GameEngine {
         this.emit('mapUpdate'); // Redraw grid
         this.emit('turnChange'); // Update UI text
         this.emit('gameRestart');
+
+        if (this.state.getCurrentPlayer().isAI) {
+            this.triggerAiTurn();
+        }
     }
 
     loadState(json: string) {
@@ -182,19 +189,22 @@ export class GameEngine {
 
 
         if (nextPlayer.isAI) {
-
-            setTimeout(() => {
-                if (!this.isGameOver) {
-                    try {
-                        this.ai.playTurn();
-                    } catch (err) {
-                        console.error("Critical AI Error:", err);
-                        // Force end turn if AI crashes to keep game moving
-                        this.endTurn();
-                    }
-                }
-            }, 500);
+            this.triggerAiTurn();
         }
+    }
+
+    private triggerAiTurn() {
+        if (this.isGameOver) return;
+        setTimeout(() => {
+            if (!this.isGameOver && this.state.getCurrentPlayer().isAI) {
+                try {
+                    this.ai.playTurn();
+                } catch (err) {
+                    console.error("Critical AI Error:", err);
+                    this.endTurn();
+                }
+            }
+        }, 500);
     }
 
     // Interaction System
