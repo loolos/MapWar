@@ -683,6 +683,7 @@ export class MainScene extends Phaser.Scene {
             this.selectedRow = row;
             this.selectedCol = col;
             this.infoSystem.update(this.engine, row, col);
+            this.drawMap(); // Refresh aura visualization
 
             // Auto-Select Logic
             // If valid tile and NOT already selected/planned
@@ -721,6 +722,7 @@ export class MainScene extends Phaser.Scene {
             // Update Menu to empty state (Persistent)
             this.interactionMenu.show(null as any, null as any); // Will need Update in InteractionMenu to handle null
             this.interactionMenu.hide();
+            this.drawMap(); // Clear aura visualization
         }
     }
 

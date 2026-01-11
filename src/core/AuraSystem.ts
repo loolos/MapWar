@@ -70,7 +70,7 @@ export class AuraSystem {
      * returns the aura range for a specific cell if it is a valid source.
      */
     static getAuraRange(cell: Cell): number {
-        if (!cell || !cell.isConnected) return 0;
+        if (!cell) return 0;
 
         if (cell.building === 'base') {
             return GameConfig.BASE_SUPPORT_RANGE_BASE + (cell.defenseLevel * GameConfig.BASE_SUPPORT_RANGE_PER_LEVEL);
