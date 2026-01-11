@@ -195,58 +195,78 @@ export class MapGenerator {
     private static generateRivers(grid: Cell[][], width: number, height: number, playerCount: number = 2) {
         this.generateDefault(grid, width, height);
 
-        // Strategic Rivers: Barriers BETWEEN players
-        // Calculate angles between players and flow rivers there
-        const centerX = width / 2;
-        const centerY = height / 2;
+        const centerX = Math.floor(width / 2);
+        const centerY = Math.floor(height / 2);
 
+        // 1. Create a Central Lake to block easy crossing
+        // Size proportional to map
+        const lakeSize = Math.max(3, Math.floor(Math.min(width, height) / 6));
+        this.growClusterAt(grid, centerY, centerX, 'water', lakeSize * lakeSize); // Square-ish area
+
+        // 2. Strategic Rivers: Barriers BETWEEN players
         for (let i = 0; i < playerCount; i++) {
             // Angle for Player i
-            const angleI = (i / playerCount) * 2 * Math.PI - (Math.PI / 2) - (3 * Math.PI / 4);
-            // Angle for Player i+1
-            const angleNext = ((i + 1) / playerCount) * 2 * Math.PI - (Math.PI / 2) - (3 * Math.PI / 4);
+            // We use the same angle offset logic as spawns (-3PI/4) to align checking
+            const offset = -3 * Math.PI / 4;
+            const angleI = (i / playerCount) * 2 * Math.PI - (Math.PI / 2) + offset;
+            const angleNext = ((i + 1) / playerCount) * 2 * Math.PI - (Math.PI / 2) + offset;
 
-            // Mid-Angle (Barrier direction)
-            // Handle wrap-around logic roughly
-            const midAngle = (angleI + angleNext) / 2; // Simply average acts as mid vector
+            // Average Angle is the Bisector (Between players)
+            // Use vector addition to handle wrap-around correctly
+            const v1x = Math.cos(angleI);
+            const v1y = Math.sin(angleI);
+            const v2x = Math.cos(angleNext);
+            const v2y = Math.sin(angleNext);
 
-            // Start river near center but not exactly ON center (keep center passable?)
-            // Flow OUTWARDS to edge
-            let r = centerY;
-            let c = centerX;
+            let dx = v1x + v2x;
+            let dy = v1y + v2y;
 
-            const dr = Math.sin(midAngle); // y component
-            const dc = Math.cos(midAngle); // x component
+            // Normalize
+            const len = Math.sqrt(dx * dx + dy * dy);
+            if (len > 0.001) {
+                dx /= len;
+                dy /= len;
+            } else {
+                // Opposite vectors (180 deg) - Pick orthogonal
+                dx = -v1y;
+                dy = v1x;
+            }
 
-            // Trace river
-            // Wiggle variables
-            let currentR = r;
-            let currentC = c;
+            // Start from Center Lake Edge
+            // Move out in direction (dy, dx) -> Row is Y, Col is X
+            let currentR = centerY + dy * (lakeSize / 2);
+            let currentC = centerX + dx * (lakeSize / 2);
 
-            const maxLen = Math.max(width, height) * 1.5;
-            let len = 0;
+            const maxDist = Math.max(width, height) * 1.5;
+            let dist = 0;
 
-            while (this.isValid(grid, Math.floor(currentR), Math.floor(currentC)) && len < maxLen) {
+            while (this.isValid(grid, Math.floor(currentR), Math.floor(currentC)) && dist < maxDist) {
                 const cellR = Math.floor(currentR);
                 const cellC = Math.floor(currentC);
 
-                grid[cellR][cellC].type = 'water';
+                grid[cellR][cellC].type = 'water'; // River
+
+                // Widen River occasionally
+                if (dist % 3 === 0) {
+                    // Make it width 2
+                    const neighbors = [
+                        { r: cellR + 1, c: cellC }, { r: cellR - 1, c: cellC },
+                        { r: cellR, c: cellC + 1 }, { r: cellR, c: cellC - 1 }
+                    ];
+                    for (const n of neighbors) {
+                        if (this.isValid(grid, n.r, n.c)) grid[n.r][n.c].type = 'water';
+                    }
+                }
 
                 // Move outwards
-                currentR += dr;
-                currentC += dc;
+                // Reduced Meander to ensure separation
+                const noise = (Math.random() - 0.5) * 0.3;
+                currentR += dy + (dx * noise);
+                currentC += dx + (-dy * noise);
 
-                // Add "Meander" noise
-                // Perpendicular vector (-dy, dx) = (-cost, sint) or (cost, -sint)
-                const noise = (Math.random() - 0.5) * 1.0;
-                currentR += dc * noise; // Add perp component
-                currentC += -dr * noise;
-
-                len++;
+                dist++;
             }
         }
-
-
     }
 
     private static ensureAccessibility(grid: Cell[][], width: number, height: number, playerCount: number) {

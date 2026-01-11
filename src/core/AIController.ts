@@ -13,9 +13,14 @@ export class AIController {
 
     // AI Logic (Robust & Strategic)
     playTurn() {
+        console.log("AI playTurn start. Player:", this.engine.state.currentPlayerId);
         try {
             const aiPlayer = this.engine.state.getCurrentPlayer();
-            if (!aiPlayer.isAI) return;
+            if (!aiPlayer.isAI) {
+                console.log("Not AI, skipping.");
+                return;
+            }
+            console.log("AI processing...");
 
             // Clear previous stats
             this.engine.lastAiMoves = [];

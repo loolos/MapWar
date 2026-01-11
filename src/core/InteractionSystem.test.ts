@@ -78,7 +78,9 @@ describe('Interaction System', () => {
         engine.commitMoves();
 
         // Verify Execution (Log)
-        expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Outpost construction'));
+        expect(logSpy).toHaveBeenCalledWith(expect.objectContaining({
+            text: expect.stringContaining('Outpost construction')
+        }));
 
         // Verify Cost Deduction
         expect(engine.state.players['P1'].gold).toBe(initialGold - 50);

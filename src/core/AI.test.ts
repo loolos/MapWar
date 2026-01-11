@@ -3,14 +3,15 @@ import { GameEngine } from './GameEngine';
 
 describe('AI Simulation', () => {
     it('AI vs AI plays valid game', async () => {
+        // Mock setTimeout to execute immediately for speed
+        vi.useFakeTimers();
+
         // Setup Engine
         const engine = new GameEngine();
 
         // Force P1 to also be AI for this simulation
         engine.state.players['P1'].isAI = true;
-
-        // Mock setTimeout to execute immediately for speed
-        vi.useFakeTimers();
+        engine.startGame();
 
         let turns = 0;
         const maxTurns = 50;
@@ -20,8 +21,10 @@ describe('AI Simulation', () => {
         // Engine starts P1. P1 is AI. But `endTurn` triggers AI. 
         // So we need to kickstart it.
 
+
         // Kickstart AI 1
-        engine.ai.playTurn();
+        // engine.startGame() handles this now
+
 
         // Now run loop
         while (turns < maxTurns) {

@@ -158,7 +158,14 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
         const totalCost = engine.calculatePlannedCost();
 
         this.planText.setText(`Plan: ${totalCost} G`);
-        this.planText.setColor(totalCost > currentGold ? '#ff0000' : '#88ff88');
+
+        if (totalCost > currentGold) {
+            const missing = totalCost - currentGold;
+            this.planText.setText(`Plan: ${totalCost} G\n(Need ${missing} more!)`);
+            this.planText.setColor('#ff0000');
+        } else {
+            this.planText.setColor('#88ff88');
+        }
 
         if (selectedRow === null || selectedCol === null) {
             // this.coordsText.setText('Pos: --'); // Removed
@@ -195,8 +202,27 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
                 if (costDetails.cost === Infinity) costStr = 'X';
                 this.costText.setText(`Cost: ${costStr}`);
 
-                // Description
-                this.descText.setText(this.generateDescription(cell));
+                // Show Breakdown directly in cost text or description?
+                // User asked: "Show base attack cost of this cell"
+                // We can append to description or make a new line?
+                // Let's reuse description for now or append to Cost if short?
+                // Breakdown is often long "Attack(20) Distance(x2)..."
+                // Let's put it in Description if it fits, or dedicated line?
+                // "Base Cost" usually implies just the base value before modifiers?
+                // But the user said "explain how calculated".
+                // Let's add it to the Description area which mimics a tooltip.
+
+                // Show Breakdown
+                // User requirement: "Explain how cost is calculated"
+                // Ensure text wraps properly in layout
+                let desc = this.generateDescription(cell);
+
+                const breakdown = costDetails.breakdown;
+                if (breakdown) {
+                    desc += `\n\n[Cost Logic]\n${breakdown}`;
+                }
+
+                this.descText.setText(desc);
 
                 // Plan Details
                 const pending = engine.pendingInteractions.find(i => i.r === selectedRow && i.c === selectedCol);

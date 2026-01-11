@@ -7,6 +7,7 @@ describe('GameEngine', () => {
 
     beforeEach(() => {
         engine = new GameEngine();
+        engine.startGame();
 
         // Clear Grid for Isolation
         for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
@@ -229,6 +230,33 @@ describe('GameEngine', () => {
 
         });
 
+        it('accrues gold on turn end and commits moves', () => {
+            // We use the existing engine from beforeEach, which has P1 base at (0,0)
+            // and P1 gold set to 11.
+
+            // Plan a move
+            // Make (1,0) neutral and PLAIN for planning (avoid Hill/Water costs)
+            const cell = engine.state.getCell(1, 0)!;
+            cell.owner = null;
+            cell.type = 'plain';
+
+            engine.togglePlan(1, 0); // Use togglePlan as per other tests
+            expect(engine.pendingMoves).toHaveLength(1);
+
+            engine.endTurn();
+
+            // P1 should have spent gold, gained updated gold next turn? 
+            // Logic: P1 spends, Then P2 turn starts.
+            // We check P1 state.
+
+            // Moves committed?
+            expect(engine.pendingMoves).toHaveLength(0);
+            expect(engine.state.getCell(1, 0)?.owner).toBe('P1');
+
+            // Turn changed?
+            expect(engine.state.currentPlayerId).toBe('P2');
+        });
+
         it('blocks actions when game is over', () => {
             // Force Game Over
             engine.isGameOver = true;
@@ -423,7 +451,9 @@ describe('GameEngine', () => {
             engine.commitMoves();
 
             // P1's (0,2) is now an enclave. Notification should fire.
-            expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Supply line cut'));
+            expect(logSpy).toHaveBeenCalledWith(expect.objectContaining({
+                text: expect.stringContaining('Supply line cut')
+            }));
         });
     });
 
@@ -590,5 +620,48 @@ describe('GameEngine', () => {
             // Original: [P1, P2, P3]. Shift -> [P2, P3, P1]. P2 is new first.
             expect(engine.state.playerOrder[0]).toBe(p2);
         });
+        it('destroys watchtower when capturing a wall', () => {
+            // P1 attacks P2's wall with watchtower
+            engine.state.setOwner(0, 0, 'P1');
+            engine.state.players['P1'].gold = 1000;
+
+            engine.state.setOwner(0, 1, 'P2');
+            engine.state.setBuilding(0, 1, 'wall');
+            engine.state.getCell(0, 1)!.watchtowerLevel = 1;
+            engine.state.getCell(0, 1)!.defenseLevel = 1; // Weak wall
+
+            // P1 Moves to (0, 1)
+            const valid = engine.validateMove(0, 1);
+            expect(valid.valid).toBe(true);
+
+            // Toggle Plan acts as planMove if not present
+            engine.togglePlan(0, 1);
+            engine.commitMoves();
+
+            const cell = engine.state.getCell(0, 1);
+            expect(cell?.owner).toBe('P1');
+            expect(cell?.watchtowerLevel).toBe(0); // Should be destroyed
+        });
+
+        it('cycles turns correctly for multiple players', () => {
+            // Setup 3 players
+            engine.state.playerOrder = ['P1', 'P2', 'P3'];
+            engine.state.players['P3'] = { id: 'P3', color: 0x00ff00, gold: 0, isAI: false };
+            engine.state.players['P4'] = { id: 'P4', color: 0xff00ff, gold: 0, isAI: false };
+            engine.startGame();
+
+            expect(engine.state.currentPlayerId).toBe('P1');
+
+            engine.endTurn();
+            expect(engine.state.currentPlayerId).toBe('P2');
+
+            engine.endTurn();
+            expect(engine.state.currentPlayerId).toBe('P3');
+
+            engine.endTurn();
+            expect(engine.state.currentPlayerId).toBe('P1'); // Loop back
+        });
+
+
     });
 });

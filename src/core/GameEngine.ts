@@ -1,7 +1,7 @@
 import { GameConfig } from './GameConfig';
 import { AIController } from './AIController';
 import { InteractionRegistry } from './interaction/InteractionRegistry';
-import { AuraSystem } from './AuraSystem';
+import { CostSystem } from './CostSystem';
 
 import type { Action, EndTurnAction } from './Actions';
 import type { MapType } from './map/MapGenerator';
@@ -44,14 +44,22 @@ export class GameEngine {
         this.pendingMoves = [];
         this.interactionRegistry = new InteractionRegistry();
         this.ai = new AIController(this);
+    }
 
+    startGame() {
+        console.log("GameEngine.startGame called");
         // Initial Income for first player
         const firstPlayer = this.state.playerOrder[0];
         if (firstPlayer) {
             this.state.accrueResources(firstPlayer);
-            if (this.state.players[firstPlayer].isAI) {
-                this.triggerAiTurn();
-            }
+            console.log("Initial resources accrued for", firstPlayer, "Gold:", this.state.players[firstPlayer].gold);
+        }
+
+        this.emit('gameStart');
+
+        if (firstPlayer && this.state.players[firstPlayer].isAI) {
+            console.log("Triggering AI turn for P1");
+            this.triggerAiTurn();
         }
     }
 
@@ -133,21 +141,7 @@ export class GameEngine {
         }
     }
 
-    endTurn() {
-        if (this.isGameOver) return;
-        // Construct the Action
-        // In the future, this is what gets sent to the server.
-        const action: EndTurnAction = {
-            type: 'END_TURN',
-            playerId: this.state.currentPlayerId!, // Assume not null for local
-            payload: {
-                moves: [...this.pendingMoves] // Copy pending moves
-            }
-        };
-
-        // For local game, execute immediately
-        this.executeAction(action);
-    }
+    // endTurn removed (duplicate)
 
     private handleEndTurn(action: EndTurnAction) {
         // Validate Player? (Server authority would do this)
@@ -178,7 +172,7 @@ export class GameEngine {
             this.emit('incomeReport', incomeReport);
             if (incomeReport.depletedMines && incomeReport.depletedMines.length > 0) {
                 incomeReport.depletedMines.forEach(m => {
-                    this.emit('logMessage', `Gold Mine collapsed at (${m.r}, ${m.c})!`);
+                    this.emit('logMessage', { text: `Gold Mine collapsed at (${m.r}, ${m.c})!`, type: 'info' });
                 });
                 this.emit('sfx:gold_depleted');
             }
@@ -331,6 +325,15 @@ export class GameEngine {
                 this.pendingMoves.push({ r: row, c: col });
                 this.lastError = null;
                 this.emit('sfx:select');
+
+                // Optional: Log cost breakdown even on success if it's an attack?
+                // User asked: "if clicking an enemy cell to attack... also log price"
+                const cell = this.state.getCell(row, col);
+                if (cell && cell.owner && cell.owner !== this.state.currentPlayerId) {
+                    const details = this.getCostDetails(row, col);
+                    this.emit('logMessage', { text: `Attack Plan: ${details.breakdown} = ${details.cost}G` });
+                }
+
             } else {
                 this.lastError = validation.reason || "Invalid move";
             }
@@ -488,108 +491,12 @@ export class GameEngine {
     }
 
     // Helper to get cost of a specific move
-    // Helper to get cost of a specific move
     getMoveCost(row: number, col: number): number {
-        return this.getCostDetails(row, col).cost;
+        return CostSystem.getMoveCost(this.state, row, col);
     }
 
     getCostDetails(row: number, col: number): { cost: number, breakdown: string } {
-        const cell = this.state.getCell(row, col);
-        if (!cell) return { cost: 0, breakdown: '' };
-
-        let breakdownParts: string[] = [];
-        let baseCost = GameConfig.COST_CAPTURE;
-
-        // 1. Base Cost Determination
-        if (cell.building === 'town' && (cell.owner === null || cell.owner === 'neutral')) {
-            baseCost = GameConfig.COST_CAPTURE_TOWN; // 30
-            breakdownParts.push(`Capture Town(${baseCost})`);
-        } else {
-            if (cell.type === 'hill') {
-                baseCost = GameConfig.COST_CAPTURE * 2;
-                breakdownParts.push(`Capture Hill(${baseCost})`);
-            } else if (cell.type === 'water') {
-                baseCost = GameConfig.COST_BUILD_BRIDGE;
-                breakdownParts.push(`Build Bridge(${baseCost})`);
-            } else {
-                breakdownParts.push(`Capture Plain(${baseCost})`);
-            }
-        }
-
-        // 2. Attack Logic
-        let isAttack = false;
-        const curr = this.state.currentPlayerId;
-        if (cell.owner !== null && cell.owner !== curr) {
-            isAttack = true;
-            // Overwrite base with Attack Base
-            if (cell.building === 'base') {
-                baseCost = GameConfig.COST_CAPTURE_BASE;
-                breakdownParts = [`Attack Base(${baseCost})`];
-            } else {
-                baseCost = GameConfig.COST_ATTACK; // 20
-                breakdownParts = [`Attack(${baseCost})`];
-            }
-
-            // Adjust for Terrain in Attack
-            if (cell.type === 'hill' || cell.type === 'bridge') {
-                baseCost = GameConfig.COST_ATTACK * 2;
-                breakdownParts = [`Attack Hill/Bridge(${baseCost})`];
-            } else {
-                breakdownParts = [`Attack(${baseCost})`];
-            }
-
-            // Defenses
-            if (cell.building === 'base' && cell.defenseLevel > 0) {
-                const bonus = cell.defenseLevel * GameConfig.UPGRADE_DEFENSE_BONUS;
-                baseCost += bonus;
-                breakdownParts.push(`Base Def Lv${cell.defenseLevel}(+${bonus})`);
-            } else if (cell.building === 'wall') {
-                if (cell.isConnected) {
-                    const upgradeBonus = cell.defenseLevel * GameConfig.WALL_DEFENSE_BONUS;
-                    const baseWallCost = GameConfig.WALL_CAPTURE_BASE_ADDITION;
-                    baseCost += upgradeBonus + baseWallCost;
-                    breakdownParts.push(`Wall(Base+${baseWallCost}, Lv${cell.defenseLevel}+${upgradeBonus})`);
-                } else {
-                    breakdownParts.push(`Wall Disconnected(+0)`);
-                }
-            }
-        }
-
-        // 3. Multipliers
-        const multiplier = isAttack ? GameConfig.COST_MULTIPLIER_ATTACK : GameConfig.COST_MULTIPLIER_NEUTRAL;
-        // Apply multiplier to current Sum
-        baseCost = Math.floor(baseCost * multiplier);
-        if (multiplier !== 1) breakdownParts.push(`x${multiplier}`);
-
-        // 4. Distance / Disconnect Penalties (Attack Only)
-        if (isAttack) {
-            if (cell.owner && !cell.isConnected) {
-                baseCost = Math.floor(baseCost * 0.7);
-                breakdownParts.push(`Disconnected(x0.7)`);
-            }
-
-            // Distance Penalty
-            if (curr && !this.state.isAdjacentToOwned(row, col, curr)) {
-                baseCost = baseCost * 2;
-                breakdownParts.push(`Distance(x2)`);
-            }
-        }
-
-
-
-        // 5. Aura Support (Watchtower + Base)
-        if (isAttack) {
-            const attackerId = this.state.currentPlayerId;
-            const { discount } = AuraSystem.getSupportDiscount(this.state, row, col, attackerId);
-
-            if (discount > 0) {
-                const discountAmount = Math.floor(baseCost * discount);
-                baseCost -= discountAmount;
-                breakdownParts.push(`Support(-${Math.floor(discount * 100)}%)`);
-            }
-        }
-
-        return { cost: Math.max(1, baseCost), breakdown: breakdownParts.join(' ') };
+        return CostSystem.getCostDetails(this.state, row, col);
     }
 
     validateMove(row: number, col: number): { valid: boolean, reason?: string } {
@@ -630,6 +537,15 @@ export class GameEngine {
             let reason = `Not enough gold(Need ${thisMoveCost})`;
             const isLongRange = !this.state.isAdjacentToOwned(row, col, player.id);
             if (isLongRange) reason += " (Includes Distance Penalty)";
+
+            // User Request: Explain WHY costs are high and show formatted logic
+            // We already have specific logging, but let's make it very clear for the user feedback
+            const details = this.getCostDetails(row, col);
+
+            // Format for clearer reading in log
+            const logMsg = `Check Failed: Need ${plannedCost + thisMoveCost}G (Have ${player.gold}G). \nCost Logic: ${details.breakdown || 'Base Cost'}`;
+            this.emit('logMessage', { text: logMsg, type: 'error' });
+
             return { valid: false, reason };
         }
 
@@ -677,7 +593,7 @@ export class GameEngine {
                 const loserId = cell.owner;
                 this.emit('sfx:eliminate');
                 if (loserId) {
-                    this.emit('logMessage', `${loserId} has been eliminated by ${pid}!`);
+                    this.emit('logMessage', { text: `${loserId} has been eliminated by ${pid}!`, type: 'combat' });
 
                     if (cell.building === 'base') {
                         this.state.setBuilding(move.r, move.c, 'none'); // Destroy Base
@@ -722,7 +638,7 @@ export class GameEngine {
 
             if (cell.watchtowerLevel > 0 && cell.owner && cell.owner !== pid) {
                 cell.watchtowerLevel = 0;
-                this.emit('logMessage', `Watchtower at (${move.r}, ${move.c}) destroyed!`);
+                this.emit('logMessage', { text: `Watchtower at (${move.r}, ${move.c}) destroyed!`, type: 'combat' });
             }
 
             // Degradation Logic for Wall Capture
@@ -731,9 +647,9 @@ export class GameEngine {
                     cell.defenseLevel--;
                     if (cell.defenseLevel === 0) {
                         cell.building = 'none';
-                        this.emit('logMessage', `Wall destroyed at (${move.r}, ${move.c})!`);
+                        this.emit('logMessage', { text: `Wall destroyed at (${move.r}, ${move.c})!`, type: 'combat' });
                     } else {
-                        this.emit('logMessage', `Wall breached! Degraded to Lv ${cell.defenseLevel}.`);
+                        this.emit('logMessage', { text: `Wall breached! Degraded to Lv ${cell.defenseLevel}.`, type: 'combat' });
                     }
                 }
             }
@@ -744,7 +660,7 @@ export class GameEngine {
             if (cell.type === 'hill' && !hasCombat) {
                 if (Math.random() < GameConfig.GOLD_MINE_CHANCE) {
                     this.state.setBuilding(move.r, move.c, 'gold_mine');
-                    this.emit('logMessage', `Gold Mine discovered at (${move.r}, ${move.c})!`);
+                    this.emit('logMessage', { text: `Gold Mine discovered at (${move.r}, ${move.c})!`, type: 'info' });
                     this.emit('sfx:gold_found');
                 }
             }
@@ -813,6 +729,63 @@ export class GameEngine {
             this.emit('gameOver', pid); // Winner is current player
         }
     }
+
+    endTurn() {
+        if (this.isGameOver) return;
+
+        // Commit pending moves/interactions
+        this.commitMoves();
+
+        // Check if game ended in commitMoves
+        if (this.isGameOver) return;
+
+        this.state.turnCount++;
+
+        // Switch Player
+        // Switch Player
+        const currentIndex = this.state.playerOrder.indexOf(this.state.currentPlayerId as string);
+        const nextIndex = (currentIndex + 1) % this.state.playerOrder.length;
+        const nextPlayerId = this.state.playerOrder[nextIndex];
+        this.state.currentPlayerId = nextPlayerId;
+
+        // Resource Accrual for NEXT player
+        this.accrueResources(nextPlayerId);
+
+        // Notify
+        this.events.emit('turnChange');
+
+        // Check for Game Over (Enclaves/Bankruptcy - optional)
+        this.checkForEnclaves(nextPlayerId);
+
+        // Trigger AI if applicable
+        this.triggerAiTurn();
+    }
+
+    accrueResources(playerId: string) {
+        const player = this.state.players[playerId];
+        if (!player) return;
+
+        // Calculate Income
+        let income = GameConfig.GOLD_PER_TURN_BASE; // 10
+
+        // Count owned cells for income
+        // We can optimize this by maintaining a count, but iteration is fine for now
+        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+                const cell = this.state.grid[r][c];
+                if (cell.owner === playerId) {
+                    if (cell.building === 'town') {
+                        income += GameConfig.TOWN_INCOME_BASE;
+                    } else {
+                        income += GameConfig.GOLD_PER_LAND; // 1
+                    }
+                }
+            }
+        }
+
+        player.gold += income;
+        this.events.emit('turnChange'); // UI Update
+    }
     private checkForEnclaves(playerId: string): boolean {
         // Reset Pending Moves
         this.pendingMoves = [];
@@ -832,7 +805,7 @@ export class GameEngine {
         }
 
         if (enclaveFound) {
-            this.emit('logMessage', `Supply line cut! Enclaves detected for ${playerId}.`);
+            this.emit('logMessage', { text: `Supply line cut! Enclaves detected for ${playerId}.`, type: 'warning' });
         }
         return enclaveFound;
     }

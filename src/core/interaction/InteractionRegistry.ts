@@ -51,7 +51,7 @@ export class InteractionRegistry {
                 // Mock effect: Set building to a new type 'outpost' (Scanning... GameState needs update if we use real types)
                 // For now, use 'none' but log it, or reuse 'town' as a placeholder? 
                 // Let's just log and maybe emit an effect.
-                engine.emit('logMessage', `Outpost construction started at (${r},${c})`);
+                engine.emit('logMessage', { text: `Outpost construction started at (${r},${c})`, type: 'info' });
             }
         });
 
@@ -69,7 +69,7 @@ export class InteractionRegistry {
                 return !!(cell && pid && cell.owner && cell.owner !== pid);
             },
             execute: (engine, r, c) => {
-                engine.emit('logMessage', `Missile strike launched at (${r},${c})!`);
+                engine.emit('logMessage', { text: `Missile strike launched at (${r},${c})!`, type: 'combat' });
                 // Mock damage? 
                 // Maybe remove owner?
                 // engine.state.setOwner(r, c, null); // Nuclear option?
@@ -97,7 +97,7 @@ export class InteractionRegistry {
                 const cell = engine.state.getCell(r, c);
                 if (cell) {
                     cell.defenseLevel = 1; // Starts at Lv 1
-                    engine.emit('logMessage', `Wall built at (${r},${c})`);
+                    engine.emit('logMessage', { text: `Wall built at (${r},${c})`, type: 'info' });
                 }
             }
         });
@@ -136,7 +136,7 @@ export class InteractionRegistry {
                 const cell = engine.state.getCell(r, c);
                 if (cell) {
                     cell.defenseLevel++;
-                    engine.emit('logMessage', `${cell.building === 'wall' ? 'Wall' : 'Base'} at (${r},${c}) fortified to Lv ${cell.defenseLevel}`);
+                    engine.emit('logMessage', { text: `${cell.building === 'wall' ? 'Wall' : 'Base'} at (${r},${c}) fortified to Lv ${cell.defenseLevel}`, type: 'info' });
                 }
             }
         });
@@ -158,7 +158,7 @@ export class InteractionRegistry {
                 if (cell) {
                     cell.incomeLevel++;
                     const bonus = GameConfig.UPGRADE_INCOME_BONUS[cell.incomeLevel - 1];
-                    engine.emit('logMessage', `Base economy upgraded! Income +${bonus}`);
+                    engine.emit('logMessage', { text: `Base economy upgraded! Income +${bonus}`, type: 'info' });
                 }
             }
         });
@@ -179,7 +179,7 @@ export class InteractionRegistry {
                 const cell = engine.state.getCell(r, c);
                 if (cell) {
                     cell.watchtowerLevel = 1;
-                    engine.emit('logMessage', `Watchtower built at (${r},${c})`);
+                    engine.emit('logMessage', { text: `Watchtower built at (${r},${c})`, type: 'info' });
                 }
             }
         });
@@ -201,7 +201,7 @@ export class InteractionRegistry {
                 if (cell) {
                     cell.watchtowerLevel++;
                     const range = GameConfig.WATCHTOWER_RANGES[cell.watchtowerLevel];
-                    engine.emit('logMessage', `Watchtower at (${r},${c}) upgraded to Lv ${cell.watchtowerLevel} (Range: ${range})`);
+                    engine.emit('logMessage', { text: `Watchtower at (${r},${c}) upgraded to Lv ${cell.watchtowerLevel} (Range: ${range})`, type: 'info' });
                 }
             }
         });

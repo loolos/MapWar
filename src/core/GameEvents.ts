@@ -1,13 +1,13 @@
 
-
 export interface GameEventMap {
     'turnChange': void;
+    'gameStart': void;
     'mapUpdate': void;
     'gameRestart': void;
     'planUpdate': void;
     'tileSelected': { r: number, c: number, options: any[] };
     'tileDeselected': void;
-    'logMessage': string;
+    'logMessage': { text: string, type?: LogType };
     'incomeReport': { total: number, base: number, land: number, landCount: number, depletedMines: { r: number, c: number }[] };
     'gameOver': string; // winnerId
 
@@ -80,3 +80,5 @@ export class TypedEventEmitter {
         this.listeners = {};
     }
 }
+
+export type LogType = 'info' | 'combat' | 'warning' | 'error';
