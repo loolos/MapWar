@@ -7,6 +7,7 @@ export const GameConfig = {
     COST_MOVE: 5,
     COST_ATTACK: 20,
     COST_CAPTURE: 10,
+    COST_CAPTURE_BASE: 40, // Double normal attack cost
     COST_BUILD_BRIDGE: 30,
     // Town Configs
     COST_CAPTURE_TOWN: 30,

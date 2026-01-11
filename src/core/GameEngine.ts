@@ -519,7 +519,13 @@ export class GameEngine {
         if (cell.owner !== null && cell.owner !== curr) {
             isAttack = true;
             // Overwrite base with Attack Base
-            baseCost = GameConfig.COST_ATTACK; // 20
+            if (cell.building === 'base') {
+                baseCost = GameConfig.COST_CAPTURE_BASE;
+                breakdownParts = [`Attack Base(${baseCost})`];
+            } else {
+                baseCost = GameConfig.COST_ATTACK; // 20
+                breakdownParts = [`Attack(${baseCost})`];
+            }
 
             // Adjust for Terrain in Attack
             if (cell.type === 'hill' || cell.type === 'bridge') {

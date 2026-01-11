@@ -134,6 +134,28 @@ describe('GameEngine', () => {
             // (0,2) is adjacent to (0,1) [Pending], but NOT (0,0) [Owned].
             const cost = engine.getMoveCost(0, 2);
             // Expect 39 (Cost 48 discounted by Aura 20% -> 38.4 -> 39 ceil?)
+            // Expect 39 (Cost 48 discounted by Aura 20% -> 38.4 -> 39 ceil?)
+            expect(cost).toBe(39);
+        });
+
+        it('charges 48G for base attack', () => {
+            // Setup: P2 owns (0,1) and it is a BASE
+            engine.state.setOwner(0, 1, 'P2');
+            engine.state.setBuilding(0, 1, 'base');
+            engine.state.updateConnectivity('P2');
+
+            engine.state.players['P1'].gold = 100;
+
+            // P1 (0,0) attacks P2 Base (0,1)
+            const cost = engine.getMoveCost(0, 1);
+
+            // Calculation:
+            // Base Cost: 40 (COST_CAPTURE_BASE)
+            // Multiplier: 1.2 (COST_MULTIPLIER_ATTACK)
+            // Initial: 48
+            // Aura Discount: P1 Base at (0,0) provides 20% support.
+            // 48 * 0.2 = 9.6 -> 9
+            // Final: 48 - 9 = 39
             expect(cost).toBe(39);
         });
     });

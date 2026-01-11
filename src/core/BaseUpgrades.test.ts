@@ -175,11 +175,12 @@ describe('Base Upgrades', () => {
 
         // Expected: Base(24) + (Level 2 * Bonus 30) * Multiplier?
         // Logic check in GameEngine:
+        // Logic check in GameEngine:
         // baseCost += level * UPGRADE_DEFENSE_BONUS;
         // Then Multiplier applied.
-        // So: (20 + 2 * 30) * 1.2 = (20 + 60) * 1.2 = 80 * 1.2 = 96.
-        // Difference: 96 - 24 = 72?
-        expect(costLv2).toBeCloseTo(96, -1);
+        // So: (40 + 2 * 30) * 1.2 = (40 + 60) * 1.2 = 100 * 1.2 = 120.
+        // Difference: 120 - 48 = 72.
+        expect(costLv2).toBeCloseTo(120, -1);
     });
 
     it('Income and Defense upgrades coexist', () => {
@@ -211,8 +212,8 @@ describe('Base Upgrades', () => {
         engine.state.currentPlayerId = 'P2';
 
         const cost = engine.getMoveCost(0, 0);
-        // Base(20) + Bonus(30) = 50. * 1.2 = 60.
-        // Normal Base: 20 * 1.2 = 24.
-        expect(cost).toBe(60);
+        // Base(40) + Bonus(30) = 70. * 1.2 = 84.
+        // Normal Base: 40 * 1.2 = 48.
+        expect(cost).toBe(84);
     });
 });
