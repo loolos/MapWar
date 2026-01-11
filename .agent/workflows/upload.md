@@ -1,6 +1,8 @@
 ---
 description: Verify code correctness, fix errors, and push to repository.
 ---
+// turbo-all
+
 1.  **Verification**:
     -   Run `npm run check` (runs TypeScript check and Vitest).
     -   Run `npm run build` to ensure the production build works.

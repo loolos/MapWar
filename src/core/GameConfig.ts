@@ -29,7 +29,8 @@ export const GameConfig = {
     BASE_SUPPORT_DISCOUNT_PER_LEVEL: 0.05,
     // Wall Configs
     COST_BUILD_WALL: 10,
-    WALL_DEFENSE_BONUS: 20,
+    WALL_DEFENSE_BONUS: 30, // Increased from 20
+    WALL_CAPTURE_BASE_ADDITION: 10,
     UPGRADE_WALL_COST: 10,
     UPGRADE_WALL_MAX: 3,
     // Watchtower Configs

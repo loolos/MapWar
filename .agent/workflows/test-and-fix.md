@@ -1,13 +1,12 @@
 ---
 description: Run type checks and tests, analyze failures, and apply fixes.
 ---
+// turbo-all
 
 1. Run type checking to catch compilation errors.
-// turbo
 2. Run `npm run check`
 
 3. Run unit tests to identify logic failures.
-// turbo
 4. Run `npm test`
 
 5. Analyze the output. If there are failures:
@@ -27,5 +26,4 @@ description: Run type checks and tests, analyze failures, and apply fixes.
     - If found, enable them one by one and fix the underlying issues.
 
 8. Re-run tests to verify the fix.
-// turbo
 9. Run `npm test`

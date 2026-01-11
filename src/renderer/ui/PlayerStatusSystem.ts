@@ -353,6 +353,10 @@ export class PlayerStatusSystem {
         this.container.setScale(scale);
     }
 
+    public setVisible(visible: boolean) {
+        this.container.setVisible(visible);
+    }
+
     private drawPanel(graphics: Phaser.GameObjects.Graphics, width: number, height: number) {
         const radius = 16;
         const color = 0x1a1a1a;

@@ -535,9 +535,10 @@ export class GameEngine {
                 breakdownParts.push(`Base Def Lv${cell.defenseLevel}(+${bonus})`);
             } else if (cell.building === 'wall') {
                 if (cell.isConnected) {
-                    const bonus = cell.defenseLevel * GameConfig.WALL_DEFENSE_BONUS;
-                    baseCost += bonus;
-                    breakdownParts.push(`Wall Lv${cell.defenseLevel}(+${bonus})`);
+                    const upgradeBonus = cell.defenseLevel * GameConfig.WALL_DEFENSE_BONUS;
+                    const baseWallCost = GameConfig.WALL_CAPTURE_BASE_ADDITION;
+                    baseCost += upgradeBonus + baseWallCost;
+                    breakdownParts.push(`Wall(Base+${baseWallCost}, Lv${cell.defenseLevel}+${upgradeBonus})`);
                 } else {
                     breakdownParts.push(`Wall Disconnected(+0)`);
                 }

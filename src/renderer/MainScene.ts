@@ -213,6 +213,9 @@ export class MainScene extends Phaser.Scene {
         // Initialize Procedural Textures
         this.createProceduralTextures();
 
+        // Initial Resize to set layout
+        this.resize(this.scale.gameSize);
+
         // Event Listeners
         this.engine.on('mapUpdate', () => {
             this.initializeTerrainVisuals();
@@ -432,6 +435,7 @@ export class MainScene extends Phaser.Scene {
             const height = gameSize.height;
 
             if (width === 0 || height === 0) return;
+            console.log(`DEBUG: MainScene.resize ${width}x${height}`);
 
             this.cameras.main.setViewport(0, 0, width, height);
 
@@ -496,7 +500,7 @@ export class MainScene extends Phaser.Scene {
 
                 this.infoSystem.setScale(1);
                 this.infoSystem.resize(infoW, barHeight - 10, midX + 5, 5);
-                this.infoSystem.setPosition(midX + 5, 5);
+
 
                 // --- BOTTOM LEFT: Log System ---
                 const logW = midX - 15;
@@ -569,7 +573,7 @@ export class MainScene extends Phaser.Scene {
                 const infoY = height - infoH - 10;
                 this.infoSystem.setScale(1);
                 this.infoSystem.resize(sidebarW - 20, infoH, 10, infoY);
-                this.infoSystem.setPosition(10, infoY);
+
 
                 // --- RIGHT COLUMN ---
                 // Top Right: Log (User Req: Log TR)
@@ -595,8 +599,8 @@ export class MainScene extends Phaser.Scene {
                 this.interactionMenu.setPosition(width - sidebarW + 10, halfH + 10);
 
                 // Notifications (Overlay Removed)
-                // this.notificationSystem.resize(300, 0);
                 // this.notificationSystem.setPosition(mapX + (mapAreaW - 300) / 2, 20);
+                console.log("DEBUG: MainScene.resize Landscape Done");
             }
 
             // ... (rest of logic: refresh, map scaling)
@@ -992,6 +996,24 @@ export class MainScene extends Phaser.Scene {
                     this.gridGraphics.fillStyle(wallColor, 1.0);
                     this.gridGraphics.fillRoundedRect(x + pad, y + this.tileSize - pad - wallHeight, w, wallHeight, 2);
 
+                    // Add Texture (Bricks)
+                    this.gridGraphics.fillStyle(0x666666, 0.8);
+                    const brickH = 4;
+                    const brickW = 8;
+                    // Start drawing bricks on the face
+                    const faceTopY = y + this.tileSize - pad - wallHeight;
+                    const faceHeight = wallHeight;
+
+                    for (let by = faceTopY + 4; by < faceTopY + faceHeight - 2; by += 6) {
+                        const row = Math.floor((by - faceTopY) / 6);
+                        const offset = (row % 2) * 5;
+                        for (let bx = x + pad + 2 + offset; bx < x + pad + w - 4; bx += 12) {
+                            if (bx + brickW < x + pad + w) {
+                                this.gridGraphics.fillRect(bx, by, brickW, brickH);
+                            }
+                        }
+                    }
+
                     // Sawtooth Battlements (Crenellations)
                     const toothSize = w / 5; // 5 segments (3 merlons, 2 gaps)
                     const topY = y + this.tileSize - pad - wallHeight;
@@ -1023,11 +1045,6 @@ export class MainScene extends Phaser.Scene {
                         }
 
                         this.mapContainer.add(towerSprite);
-                    } else {
-                        // Just a generic shield/icon if no tower but maybe high level wall?
-                        // No, just the wall block is enough.
-                        const wallText = this.add.text(x + this.tileSize / 2, y + this.tileSize / 2 - (wallHeight / 2), '🛡️', { fontSize: '16px' }).setOrigin(0.5);
-                        this.mapContainer.add(wallText);
                     }
                 }
 

@@ -70,7 +70,11 @@ vi.mock('./CellInfoSystem', () => ({
         return {
             x, y, w, h, visible,
             setPosition: vi.fn((nx, ny) => { x = nx; y = ny; }),
-            resize: vi.fn((nw, nh) => { w = nw; h = nh; }),
+            resize: vi.fn((nw, nh, nx, ny) => {
+                w = nw;
+                h = nh;
+                if (nx !== undefined) { x = nx; y = ny; }
+            }),
             setVisible: vi.fn((v) => { visible = v; }),
             setScale: vi.fn(),
             update: vi.fn(),

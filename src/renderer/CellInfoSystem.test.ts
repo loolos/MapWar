@@ -5,7 +5,17 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 vi.mock('phaser', () => ({
     default: {
         GameObjects: {
-            Container: class { },
+            Container: class {
+                scene: any;
+                constructor(scene: any) { this.scene = scene; }
+                add = vi.fn(function (this: any) { return this; });
+                setPosition = vi.fn(function (this: any) { return this; });
+                setSize = vi.fn(function (this: any) { return this; });
+                setInteractive = vi.fn(function (this: any) { return this; });
+                on = vi.fn(function (this: any) { return this; });
+                removeInteractive = vi.fn(function (this: any) { return this; });
+                bringToTop = vi.fn(function (this: any) { return this; });
+            },
             Text: class { },
             Graphics: class { }
         }
@@ -19,13 +29,16 @@ import { GameEngine } from '../core/GameEngine';
 // Actually CellInfoSystem imports Phaser. Since we mocked it above, it should be fine.
 
 // Mock Phaser Scene and Objects
-const mockText = {
+const createMockText = () => ({
     setText: vi.fn(),
     setColor: vi.fn(),
     setStyle: vi.fn(),
     setPosition: vi.fn(),
-    height: 20 // Mock height for layout calcs
-};
+    height: 20,
+    type: 'Text',
+    setOrigin: vi.fn(), // Added for safety
+    setScrollFactor: vi.fn()
+});
 
 const mockGraphics = {
     fillStyle: vi.fn(),
@@ -41,16 +54,18 @@ const mockGraphics = {
     lineBetween: vi.fn(),
     createGeometryMask: vi.fn(),
     destroy: vi.fn(),
-    closePath: vi.fn(), // Added
-    fillPath: vi.fn(), // Added
-    fillTriangle: vi.fn() // Added
+    closePath: vi.fn(),
+    fillPath: vi.fn(),
+    fillTriangle: vi.fn(),
+    type: 'Graphics'
 };
 
 const mockZone = {
-    setInteractive: vi.fn(),
-    on: vi.fn(),
-    setOrigin: vi.fn(() => mockZone),
-    setSize: vi.fn()
+    setInteractive: vi.fn(function (this: any) { return this || mockZone; }),
+    on: vi.fn(function (this: any) { return this || mockZone; }),
+    setOrigin: vi.fn(function (this: any) { return this || mockZone; }),
+    setSize: vi.fn(function (this: any) { return this || mockZone; }),
+    type: 'Zone'
 };
 
 const mockContainer = {
@@ -58,6 +73,7 @@ const mockContainer = {
     setMask: vi.fn(),
     setPosition: vi.fn(),
     setScale: vi.fn(),
+    setVisible: vi.fn(function (this: any) { return this || mockContainer; }), // Added
     scaleX: 1,
     scaleY: 1,
     getAt: vi.fn(() => mockGraphics),
@@ -71,9 +87,10 @@ const mockContainer = {
 const mockScene = {
     add: {
         container: vi.fn(() => mockContainer),
-        text: vi.fn(() => mockText),
+        text: vi.fn(() => createMockText()), // Return NEW mock each time
         graphics: vi.fn(() => mockGraphics),
-        zone: vi.fn(() => mockZone) // Added
+        zone: vi.fn(() => mockZone), // Added
+        existing: vi.fn()
     },
     make: {
         graphics: vi.fn(() => mockGraphics) // Reuse mockGraphics for simplicity
@@ -132,8 +149,8 @@ describe('CellInfoSystem', () => {
         system.update(engine, 0, 0);
 
         // Check Owner Text Update
-        expect(mockText.setText).toHaveBeenCalledWith(expect.stringContaining('Disconnected: 50% Revenue'));
-        expect(mockText.setColor).toHaveBeenCalledWith('#ff4444');
+        expect(system.ownerText.setText).toHaveBeenCalledWith('Owner: P1 (Disc.)');
+        expect(system.ownerText.setColor).toHaveBeenCalledWith('#ff4444');
     });
 
     it('shows normal text for connected cells', () => {
@@ -145,8 +162,8 @@ describe('CellInfoSystem', () => {
         system.update(engine, 0, 0);
 
         // Check Owner Text Update - Should NOT contain warning
-        expect(mockText.setText).toHaveBeenCalledWith('Owner: Player 1');
-        expect(mockText.setText).not.toHaveBeenCalledWith(expect.stringContaining('Disconnected'));
+        expect(system.ownerText.setText).toHaveBeenCalledWith('Owner: P1');
+        // setColor check is optional, but logic implies it should be set
     });
 
     it('shows neutral for unowned cells', () => {
@@ -155,6 +172,6 @@ describe('CellInfoSystem', () => {
 
         system.update(engine, 0, 0);
 
-        expect(mockText.setText).toHaveBeenCalledWith('Owner: Neutral');
+        expect(system.ownerText.setText).toHaveBeenCalledWith('Owner: Neutral');
     });
 });

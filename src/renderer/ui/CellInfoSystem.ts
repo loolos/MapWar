@@ -1,107 +1,65 @@
 import Phaser from 'phaser';
-import { GameConfig } from '../../core/GameConfig';
 import { GameEngine } from '../../core/GameEngine';
 
-export class CellInfoSystem {
-    scene: Phaser.Scene;
-    container: Phaser.GameObjects.Container;
+export class CellInfoSystem extends Phaser.GameObjects.Container {
+    bgGraphics: Phaser.GameObjects.Graphics;
 
-    // UI Elements (Fixed)
-    headerText: Phaser.GameObjects.Text;
-    coordsText: Phaser.GameObjects.Text;
-    typeText: Phaser.GameObjects.Text;
-    ownerText: Phaser.GameObjects.Text;
-    costText: Phaser.GameObjects.Text;
-    planText: Phaser.GameObjects.Text;
-
-    // UI Elements (Scrollable)
-    descText: Phaser.GameObjects.Text;
-    planDetailsText: Phaser.GameObjects.Text;
-
-
-    // Scrollable Logic
+    // Scrollable Content
     contentContainer: Phaser.GameObjects.Container;
-    contentMask: Phaser.Display.Masks.GeometryMask;
     maskGraphics: Phaser.GameObjects.Graphics;
 
+    // Text Elements (Unified in contentContainer)
+    headerText!: Phaser.GameObjects.Text;
+    // coordsText!: Phaser.GameObjects.Text; // Removed
+    typeText!: Phaser.GameObjects.Text;
+    ownerText!: Phaser.GameObjects.Text;
+    costText!: Phaser.GameObjects.Text;
+    planText!: Phaser.GameObjects.Text;
+    divider!: Phaser.GameObjects.Graphics;
+    descText!: Phaser.GameObjects.Text;
+    planDetailsText!: Phaser.GameObjects.Text;
+
+    // Arrows
+    upArrow!: Phaser.GameObjects.Container;
+    downArrow!: Phaser.GameObjects.Container;
+
+    // State
+    scrollY: number = 0;
+    contentHeight: number = 0;
+    viewportHeight: number = 250;
+    viewportWidth: number = 200;
     isDragging: boolean = false;
     lastY: number = 0;
-    scrollY: number = 0;
-    maxScroll: number = 0;
-
-    // Fixed Area Height (Header + Stats)
-    readonly FIXED_HEIGHT = 175;
 
     constructor(scene: Phaser.Scene, x: number, y: number, width: number) {
-        this.scene = scene;
-        this.container = scene.add.container(x, y);
+        super(scene, x, y);
+        this.viewportWidth = width;
 
-        // Background (Glassmorphism)
-        const bg = scene.add.graphics();
-        this.container.add(bg);
-        this.drawPanel(bg, width, 250);
+        // Add this container to the scene
+        scene.add.existing(this);
 
-        // Main Mask (for the whole panel shape)
-        // Actually, we don't need a mask for the whole panel if we draw the BG correctly.
-        // But for scrolling content, we need a specific mask.
+        // Background
+        this.bgGraphics = scene.add.graphics();
+        this.add(this.bgGraphics);
 
-        // Header
-        this.headerText = scene.add.text(10, 10, 'CELL INFO', {
-            fontSize: '18px',
-            color: '#aaaaaa',
-            fontStyle: 'bold'
-        });
-        this.container.add(this.headerText);
+        // Content Container
+        this.contentContainer = scene.add.container(0, 0);
+        this.add(this.contentContainer);
 
-        // Initial Text Objects (Fixed)
-        const style = { fontSize: '16px', color: '#ffffff' };
-
-        this.coordsText = scene.add.text(10, 40, 'Pos: --', style);
-        this.container.add(this.coordsText);
-
-        this.typeText = scene.add.text(10, 65, 'Type: --', style);
-        this.container.add(this.typeText);
-
-        this.ownerText = scene.add.text(10, 90, 'Owner: --', style);
-        this.container.add(this.ownerText);
-
-        this.costText = scene.add.text(10, 115, 'Cost: --', style);
-        this.container.add(this.costText);
-
-        this.planText = scene.add.text(10, 140, 'Plan: 0 G', { fontSize: '16px', color: '#ff8888', fontStyle: 'bold' });
-        this.container.add(this.planText);
-
-        // --- DIVIDER LINE ---
-        const divider = scene.add.graphics();
-        divider.lineStyle(1, 0xffffff, 0.2);
-        divider.lineBetween(10, this.FIXED_HEIGHT - 5, width - 10, this.FIXED_HEIGHT - 5);
-        this.container.add(divider);
-
-        // --- SCROLLABLE CONTENT ---
-        this.contentContainer = scene.add.container(0, this.FIXED_HEIGHT);
-        this.container.add(this.contentContainer);
-
-        // Mask for Scrollable Area
+        // Mask
         this.maskGraphics = scene.make.graphics({});
-        this.contentMask = this.maskGraphics.createGeometryMask();
-        this.contentContainer.setMask(this.contentMask);
+        const mask = this.maskGraphics.createGeometryMask();
+        this.contentContainer.setMask(mask);
 
-        const descStyle = { fontSize: '14px', color: '#dddddd', wordWrap: { width: width - 20 } };
+        // Elements
+        this.createElements();
 
-        this.descText = scene.add.text(10, 0, '', descStyle);
-        this.contentContainer.add(this.descText);
+        // Arrows (On top of mask, but inside main container)
+        this.createArrows();
 
-        this.planDetailsText = scene.add.text(10, 50, '', {
-            fontSize: '14px',
-            color: '#ffff00',
-            fontStyle: 'bold',
-            wordWrap: { width: width - 20 }
-        });
-        this.contentContainer.add(this.planDetailsText);
-
-        // Input Handling for Scroll
+        // Input
         const zone = scene.add.zone(0, 0, width, 250).setOrigin(0);
-        this.container.add(zone);
+        this.add(zone);
         zone.setInteractive();
 
         zone.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
@@ -114,7 +72,7 @@ export class CellInfoSystem {
         });
 
         scene.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-            if (this.isDragging) {
+            if (this.isDragging && this.visible) {
                 const dy = pointer.y - this.lastY;
                 this.lastY = pointer.y;
                 this.scroll(dy);
@@ -124,225 +82,260 @@ export class CellInfoSystem {
         zone.on('wheel', (_u: any, _dx: number, deltaY: number) => {
             this.scroll(-deltaY * 0.5);
         });
+
+        // Initial Layout
+        this.layout(width, 250);
+        this.drawBackground(width, 250);
     }
 
-    private scroll(dy: number) {
-        this.scrollY += dy;
+    private createElements() {
+        // Create all text elements and add to contentContainer
+        const baseStyle = { fontSize: '16px', color: '#ffffff' };
 
-        // Clamp
-        // Content Height
-        const contentH = this.descText.height + this.planDetailsText.height + 20; // + padding
-        const visibleH = 250 - this.FIXED_HEIGHT - 10; // Approx
+        this.headerText = this.scene.add.text(0, 0, 'CELL INFO', { fontSize: '18px', color: '#aaaaaa', fontStyle: 'bold' });
+        // this.coordsText = this.scene.add.text(0, 0, 'Pos: --', baseStyle);
+        this.typeText = this.scene.add.text(0, 0, 'Type: --', baseStyle);
+        this.ownerText = this.scene.add.text(0, 0, 'Owner: --', baseStyle);
+        this.costText = this.scene.add.text(0, 0, 'Cost: --', baseStyle);
+        this.planText = this.scene.add.text(0, 0, 'Plan: 0 G', { fontSize: '16px', color: '#ff8888', fontStyle: 'bold' });
 
-        if (contentH <= visibleH) {
-            this.scrollY = 0;
+        this.divider = this.scene.add.graphics();
+
+        const descStyle = { fontSize: '14px', color: '#dddddd' };
+        this.descText = this.scene.add.text(0, 0, '', descStyle);
+
+        this.planDetailsText = this.scene.add.text(0, 0, '', { fontSize: '14px', color: '#ffff00', fontStyle: 'bold' });
+
+        this.contentContainer.add([
+            this.headerText,
+            // this.coordsText,
+            this.typeText,
+            this.ownerText,
+            this.costText,
+            this.planText,
+            this.divider,
+            this.descText,
+            this.planDetailsText
+        ]);
+    }
+
+    private createArrows() {
+        // Simple arrows visualization
+        this.upArrow = this.createArrowSprite(true);
+        this.downArrow = this.createArrowSprite(false);
+        this.add([this.upArrow, this.downArrow]);
+        this.upArrow.setVisible(false);
+        this.downArrow.setVisible(false);
+    }
+
+    private createArrowSprite(isUp: boolean): Phaser.GameObjects.Container {
+        const c = this.scene.add.container(0, 0);
+        const g = this.scene.add.graphics();
+        g.fillStyle(0xffffff, 0.5);
+        g.beginPath();
+        if (isUp) {
+            g.moveTo(0, 0); g.lineTo(10, 10); g.lineTo(-10, 10);
         } else {
-            const minScroll = -(contentH - visibleH);
-            if (this.scrollY > 0) this.scrollY = 0;
-            if (this.scrollY < minScroll) this.scrollY = minScroll;
+            g.moveTo(0, 10); g.lineTo(10, 0); g.lineTo(-10, 0);
         }
+        g.closePath();
+        g.fillPath();
+        c.add(g);
 
-        this.contentContainer.y = this.FIXED_HEIGHT + this.scrollY;
+        // Interactive zone for click scroll
+        const zone = this.scene.add.zone(0, 5, 40, 30).setInteractive();
+        zone.on('pointerdown', () => this.scroll(isUp ? 20 : -20));
+        c.add(zone);
+
+        return c;
     }
 
     update(engine: GameEngine, selectedRow: number | null, selectedCol: number | null) {
-        // ... (Update Logic - mostly same, but need to position planDetailsText relative to descText)
+        // logic similar to old update, but just sets text. Layout called at end.
 
-        // Always update Plan Cost
         const currentPlayer = engine.state.getCurrentPlayer();
         const currentGold = currentPlayer.gold;
         const totalCost = engine.calculatePlannedCost();
 
-        this.planText.setText(`Total Plan: ${totalCost} G`);
+        this.planText.setText(`Plan: ${totalCost} G`);
         this.planText.setColor(totalCost > currentGold ? '#ff0000' : '#88ff88');
 
         if (selectedRow === null || selectedCol === null) {
-            this.coordsText.setText('Pos: --');
+            // this.coordsText.setText('Pos: --'); // Removed
             this.typeText.setText('Type: --');
             this.ownerText.setText('Owner: --');
             this.costText.setText('Cost: --');
             this.descText.setText('');
             this.planDetailsText.setText('');
-            return;
-        }
+        } else {
+            const cell = engine.state.getCell(selectedRow, selectedCol);
+            if (cell) {
+                // this.coordsText.setText(`Pos: (${selectedRow}, ${selectedCol})`); // Removed
 
-        const cell = engine.state.getCell(selectedRow, selectedCol);
-        if (!cell) return;
+                // Type
+                let typeStr = cell.type.charAt(0).toUpperCase() + cell.type.slice(1);
+                if (cell.building === 'gold_mine') { typeStr = "Gold Mine"; }
+                else if (cell.building === 'town') { typeStr = "Town"; }
+                else if (cell.building === 'base') {
+                    typeStr = "Base";
+                    if (cell.defenseLevel > 0) typeStr += ` (Def Lvl ${cell.defenseLevel})`;
+                }
+                this.typeText.setText(`Type: ${typeStr}`);
 
-        // FIXED ITEMS
-        this.coordsText.setText(`Pos: (${selectedRow}, ${selectedCol})`);
+                // Owner
+                const owner = cell.owner ? (cell.owner === 'P1' ? 'P1' : 'P2') : 'Neutral';
+                let ownerDisplay = `Owner: ${owner}`;
+                if (cell.owner && !cell.isConnected) ownerDisplay += ' (Disc.)';
+                this.ownerText.setText(ownerDisplay);
+                this.ownerText.setColor(cell.owner === 'P1' ? '#ff4444' : (cell.owner === 'P2' ? '#4444ff' : '#ffffff'));
 
-        // Type Logic
-        let typeStr = cell.type.charAt(0).toUpperCase() + cell.type.slice(1);
-        if (cell.building === 'gold_mine') { typeStr = "Gold Mine"; }
-        else if (cell.building === 'town') { typeStr = "Town (Village)"; }
-        else if (cell.building === 'base') {
-            typeStr = "Base";
-            if (cell.defenseLevel > 0) typeStr += `\nDef Lvl: ${cell.defenseLevel}`;
-            if (cell.incomeLevel > 0) typeStr += `\nInc Lvl: ${cell.incomeLevel}`;
-        }
-        this.typeText.setText(`Type: ${typeStr}`);
+                // Cost
+                const costDetails = engine.getCostDetails(selectedRow, selectedCol);
+                let costStr = `${costDetails.cost}G`;
+                if (costDetails.cost === Infinity) costStr = 'X';
+                this.costText.setText(`Cost: ${costStr}`);
 
-        // Owner Logic
-        const owner = cell.owner ? (cell.owner === 'P1' ? 'Player 1' : 'Player 2') : 'Neutral';
-        let ownerDisplay = `Owner: ${owner}`;
-        if (cell.owner && !cell.isConnected) ownerDisplay += '\n(Disconnected: 50% Revenue)';
-        this.ownerText.setText(ownerDisplay);
-        this.ownerText.setColor(cell.owner === 'P1' ? '#ff4444' : (cell.owner === 'P2' ? '#4444ff' : '#ffffff'));
+                // Description
+                this.descText.setText(this.generateDescription(cell));
 
-        // Cost Logic
-        const costDetails = engine.getCostDetails(selectedRow, selectedCol);
-        let costStr = `${costDetails.cost}G`;
-        if (costDetails.cost === Infinity) costStr = 'X';
-        if (costDetails.breakdown) costStr += `\n(${costDetails.breakdown})`;
-        this.costText.setText(`Cost: ${costStr}`);
-
-
-        // SCROLLABLE ITEMS
-        // Description Logic
-        let desc = GameConfig.TERRAIN_DESCRIPTIONS[cell.type.toUpperCase() as keyof typeof GameConfig.TERRAIN_DESCRIPTIONS];
-        let revenueMsg = "";
-
-        // ... (Same Description Generation Logic as before) ...
-        // Re-implementing concisely:
-        if (cell.building === 'gold_mine') {
-            desc = "Gold Mine: Generates +5 Gold/turn. Can deplete.";
-            revenueMsg = "\nRevenue: +5 G";
-        } else if (cell.building === 'town') {
-            desc = `Town: Generates +${cell.townIncome} G/turn.\nGrows over time (Inc: +${GameConfig.TOWN_INCOME_GROWTH} every ${GameConfig.TOWN_GROWTH_INTERVAL} turns).`;
-            revenueMsg = `\nRevenue: +${cell.townIncome} G`;
-        } else if (cell.building === 'base') {
-            desc = "Main Base: Generates gold and projects power.";
-            let incomeBonus = 0;
-            if (cell.incomeLevel > 0) {
-                for (let i = 1; i <= cell.incomeLevel; i++) incomeBonus += GameConfig.UPGRADE_INCOME_BONUS[i - 1];
-            }
-            revenueMsg = `\nRevenue: +${GameConfig.GOLD_PER_TURN_BASE + incomeBonus} G`;
-            if (cell.defenseLevel > 0) desc += `\nDefense Lvl ${cell.defenseLevel}: Enemy Cost +${cell.defenseLevel * GameConfig.UPGRADE_DEFENSE_BONUS}`;
-        } else if (cell.building === 'wall') {
-            desc = `Defensive Wall (Lv ${cell.defenseLevel})`;
-            desc += `\nEnemy Capture Cost +${cell.defenseLevel * GameConfig.WALL_DEFENSE_BONUS}`;
-            if (cell.watchtowerLevel > 0) {
-                desc += `\nWatchtower (Lv ${cell.watchtowerLevel})`;
-                desc += `\nRange: ${GameConfig.WATCHTOWER_RANGES[cell.watchtowerLevel]} (Support Fire)`;
-            }
-            const baseRev = GameConfig.GOLD_PER_LAND;
-            if (cell.owner) {
-                const actual = cell.isConnected ? baseRev : baseRev * 0.5;
-                revenueMsg = `\nRevenue: +${actual} G`;
-            }
-        } else if (cell.type !== 'bridge') {
-            const baseRev = GameConfig.GOLD_PER_LAND;
-            if (cell.owner) {
-                const actual = cell.isConnected ? baseRev : baseRev * 0.5;
-                revenueMsg = `\nRevenue: +${actual} G`;
-            } else {
-                revenueMsg = `\nPotential: +${baseRev} G`;
+                // Plan Details
+                const pending = engine.pendingInteractions.find(i => i.r === selectedRow && i.c === selectedCol);
+                let planStr = "";
+                if (pending) {
+                    const action = engine.interactionRegistry.get(pending.actionId);
+                    if (action) {
+                        const d = typeof action.description === 'function' ? action.description(engine, selectedRow, selectedCol) : action.description;
+                        planStr = `PLAN: ${d}`;
+                    }
+                }
+                this.planDetailsText.setText(planStr);
             }
         }
-
-        this.descText.setText((desc || '') + revenueMsg);
-
-        // Plan Logic
-        const pending = engine.pendingInteractions.find(i => i.r === selectedRow && i.c === selectedCol);
-        let planStr = "";
-        if (pending) {
-            const action = engine.interactionRegistry.get(pending.actionId);
-            if (action) {
-                let actionDesc = typeof action.description === 'function'
-                    ? action.description(engine, selectedRow, selectedCol)
-                    : action.description;
-                planStr = `PLAN: ${actionDesc}`;
-            }
-        }
-        this.planDetailsText.setText(planStr);
-
-        this.refreshLayout();
+        // Force relayout after text updates
+        this.layout(this.viewportWidth, this.viewportHeight);
     }
 
-    public setPosition(x: number, y: number) {
-        this.container.setPosition(x, y);
-        // Update mask position logic if needed, but mask is separate graphics object
-        // Wait, mask uses world coordinates or relative?
-        // createGeometryMask uses the graphics position.
-        // We need to update maskGraphics position too.
-        // The drawPanel/resize handles mask updates.
+    private generateDescription(cell: any): string {
+        let desc = "";
+        if (cell.building === 'gold_mine') desc = "Generates +5 G.";
+        else if (cell.building === 'town') desc = `Generates +${cell.townIncome} G.`;
+        else if (cell.building === 'base') desc = "Main Base.";
+        else if (cell.building === 'wall') desc = `Wall (Lv ${cell.defenseLevel}).`;
+        else desc = cell.type; // Basic
+
+        // Add Range info
+        if (cell.watchtowerLevel > 0) desc += `\nWatchtower Lv ${cell.watchtowerLevel}.`;
+
+        if (cell.type !== 'bridge' && cell.building !== 'base') {
+            // Simplify text to avoid clutter
+        }
+        return desc;
     }
 
     public resize(width: number, height: number, x: number, y: number) {
+        // Debug Log to verify instance health
+        console.log(`CellInfoSystem.resize: ${width}x${height} at ${x},${y}`);
+        this.viewportWidth = width;
+        this.viewportHeight = height;
         this.setPosition(x, y);
-
-        // Update BG
-        this.container.each((child: any) => {
-            if (child.type === 'Graphics' && child !== this.maskGraphics) { // primitive check
-                child.clear();
-                this.drawPanel(child, width, height);
-            }
-        });
-        // Actually picking the BG is tricky blindly.
-        // Let's rely on drawPanel at index 0.
-        const bg = this.container.getAt(0) as Phaser.GameObjects.Graphics;
-        if (bg) {
-            bg.clear();
-            this.drawPanel(bg, width, height);
+        if (this.maskGraphics) {
+            this.maskGraphics.setPosition(x, y);
         }
-
 
         // Resize Input Zone
-        const zone = this.container.list.find(c => c.type === 'Zone') as Phaser.GameObjects.Zone;
+        const zone = this.list.find(c => c.type === 'Zone') as Phaser.GameObjects.Zone;
         if (zone) zone.setSize(width, height);
 
-        // Re-calculate wrap widths
-        this.descText.setStyle({ wordWrap: { width: width - 20 } });
-        this.planDetailsText.setStyle({ wordWrap: { width: width - 20 } });
-
-        this.refreshLayout();
-        this.updateMask(width, height, x, y);
+        this.drawBackground(width, height);
+        this.updateMask(width, height);
+        this.layout(width, height);
     }
 
-    private refreshLayout() {
-        // Only refreshes Scrollable Content positions
-        this.planDetailsText.setPosition(10, this.descText.height + 10);
+    private drawBackground(w: number, h: number) {
+        const g = this.bgGraphics;
+        g.clear();
 
-        // Reset scroll if needed?
-        // Maybe.
-    }
-
-    private updateMask(w: number, h: number, x: number, y: number) {
-        if (this.maskGraphics) {
-            this.maskGraphics.clear();
-            this.maskGraphics.fillStyle(0xffffff);
-            // Mask only the SCROLLABLE area
-            // Start at y + FIXED_HEIGHT
-            const visibleH = h - this.FIXED_HEIGHT - 5;
-            if (visibleH > 0) {
-                this.maskGraphics.fillRect(x, y + this.FIXED_HEIGHT, w * this.container.scaleX, visibleH * this.container.scaleY);
-            }
-        }
-    }
-
-    private drawPanel(graphics: Phaser.GameObjects.Graphics, width: number, height: number) {
         const radius = 16;
         const color = 0x1a1a1a;
         const alpha = 0.85;
-        const strokeColor = 0xffffff;
-        const strokeAlpha = 0.1;
 
-        graphics.fillStyle(color, alpha);
-        graphics.fillRoundedRect(0, 0, width, height, radius);
-
-        graphics.lineStyle(2, strokeColor, strokeAlpha);
-        graphics.strokeRoundedRect(0, 0, width, height, radius);
-
-        // Highlight
-        graphics.lineStyle(1, 0xffffff, 0.15);
-        graphics.beginPath();
-        graphics.moveTo(radius, 0);
-        graphics.lineTo(width - radius, 0);
-        graphics.strokePath();
+        g.fillStyle(color, alpha);
+        g.fillRoundedRect(0, 0, w, h, radius);
+        g.lineStyle(2, 0xffffff, 0.1);
+        g.strokeRoundedRect(0, 0, w, h, radius);
     }
 
-    public setScale(scale: number) {
-        this.container.setScale(scale);
+    private updateMask(w: number, h: number) {
+        if (this.maskGraphics) {
+            this.maskGraphics.clear();
+            this.maskGraphics.fillStyle(0xffffff);
+            // Mask entire area with small padding, RELATIVE to container (0,0)
+            this.maskGraphics.fillRoundedRect(2, 2, w - 4, h - 4, 14);
+        }
+    }
+
+    private layout(width: number, height: number) {
+        let currentY = 10;
+        const padding = 12;
+        const contentW = width - (padding * 2);
+
+        const layoutItem = (item: Phaser.GameObjects.Text | Phaser.GameObjects.Graphics, isText: boolean = true) => {
+            if (isText) {
+                const txt = item as Phaser.GameObjects.Text;
+                txt.setPosition(padding, currentY);
+                txt.setStyle({ wordWrap: { width: contentW } });
+                currentY += txt.height + 4; // Spacing
+            } else {
+                // Divider
+                const gfx = item as Phaser.GameObjects.Graphics;
+                gfx.clear();
+                gfx.lineStyle(1, 0xffffff, 0.2);
+                gfx.lineBetween(padding, currentY + 5, width - padding, currentY + 5);
+                currentY += 10;
+            }
+        };
+
+        layoutItem(this.headerText);
+        // layoutItem(this.coordsText); // Removed
+        layoutItem(this.typeText);
+        layoutItem(this.ownerText);
+        layoutItem(this.costText);
+        layoutItem(this.planText);
+
+        layoutItem(this.divider, false);
+
+        layoutItem(this.descText);
+        layoutItem(this.planDetailsText);
+
+        currentY += 30; // Extra padding for bottom arrow
+
+        this.contentHeight = currentY + padding;
+
+        // Arrows Position
+        this.upArrow.setPosition(width / 2, 10);
+        this.downArrow.setPosition(width / 2, height - 20);
+
+        this.scroll(0); // Clamp
+    }
+
+    private scroll(dy: number) {
+        this.scrollY += dy;
+        const viewH = this.viewportHeight;
+        const maxScroll = Math.min(0, -(this.contentHeight - viewH));
+
+        if (this.contentHeight <= viewH) {
+            this.scrollY = 0;
+            this.upArrow.setVisible(false);
+            this.downArrow.setVisible(false);
+        } else {
+            if (this.scrollY > 0) this.scrollY = 0;
+            if (this.scrollY < maxScroll) this.scrollY = maxScroll;
+
+            // Show arrows if there is more content in that direction
+            this.upArrow.setVisible(this.scrollY < 0);
+            this.downArrow.setVisible(this.scrollY > maxScroll);
+        }
+
+        this.contentContainer.y = this.scrollY;
     }
 }
