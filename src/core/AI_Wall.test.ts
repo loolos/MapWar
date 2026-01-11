@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { GameEngine } from './GameEngine';
 import { GameConfig } from './GameConfig';
 
-describe.skip('AI Wall Logic', () => {
+describe('AI Wall Logic', () => {
     let engine: GameEngine;
 
     beforeEach(() => {
@@ -29,16 +29,28 @@ describe.skip('AI Wall Logic', () => {
         engine.state.setOwner(0, 0, 'P2');
         engine.state.setBuilding(0, 0, 'base');
 
+
+        // Max out Base levels so AI doesn't spend on upgrades (Priority 1 & 2)
+        engine.state.grid[0][0].incomeLevel = 5; // Max Income
+        engine.state.grid[0][0].defenseLevel = 3; // Max Defense
+
         engine.state.setOwner(0, 1, 'P2');
         engine.state.grid[0][1].type = 'plain'; // Ensure buildable
 
+
+        // Surround with Water to prevent cheap expansion
+        engine.state.grid[1][0].type = 'water';
+        engine.state.grid[1][1].type = 'water';
+        engine.state.grid[0][2].type = 'plain'; // Enemy Base needs to be on plain to be valid for "Base" logic usually, or just high defense
+
         engine.state.setOwner(0, 2, 'P1'); // Enemy
-        engine.state.grid[0][2].type = 'water'; // Uncapturable threat
+        engine.state.setBuilding(0, 2, 'base'); // Hard target
+        engine.state.grid[0][2].defenseLevel = 3; // Make it too expensive to capture (~100+)
 
         engine.state.updateConnectivity('P2');
 
-        // Give AI lots of gold (enough for Income upgrade + Wall + Expansion)
-        engine.state.players['P2'].gold = 1000;
+        // Give AI just enough gold for Wall (10) + Reserve, but not Bridge (30) or Base Capture (100+)
+        engine.state.players['P2'].gold = 25;
 
         // Set Turn to P2
         engine.state.currentPlayerId = 'P2';
@@ -58,15 +70,25 @@ describe.skip('AI Wall Logic', () => {
         engine.state.setOwner(0, 0, 'P2');
         engine.state.setBuilding(0, 0, 'base');
 
+        // Max out Base levels so AI doesn't spend on upgrades (Priority 1 & 2)
+        engine.state.grid[0][0].incomeLevel = 5; // Max Income
+        engine.state.grid[0][0].defenseLevel = 3; // Max Defense
+
         engine.state.setOwner(0, 1, 'P2');
         engine.state.setBuilding(0, 1, 'wall'); // Exists
         engine.state.grid[0][1].defenseLevel = 1;
 
+        // Surround with Water
+        engine.state.grid[1][0].type = 'water';
+        engine.state.grid[1][1].type = 'water';
+
         engine.state.setOwner(0, 2, 'P1');
-        engine.state.grid[0][2].type = 'water'; // Uncapturable threat
+        engine.state.setBuilding(0, 2, 'base');
+        engine.state.grid[0][2].defenseLevel = 3;
+        engine.state.grid[0][2].type = 'plain';
 
         engine.state.updateConnectivity('P2');
-        engine.state.players['P2'].gold = 1000;
+        engine.state.players['P2'].gold = 25;
         engine.state.currentPlayerId = 'P2';
 
         engine.ai.playTurn();
