@@ -1,6 +1,8 @@
+import { Cell } from './Cell';
 import { GameEngine } from './GameEngine';
 import { GameConfig } from './GameConfig';
 import { AuraSystem } from './AuraSystem';
+import { AIConfig } from './AIConfig';
 
 export class AIController {
     engine: GameEngine;
@@ -41,61 +43,28 @@ export class AIController {
                             const cost = this.engine.getMoveCost(r, c);
 
                             // HEURISTIC SCORING
-                            let score = 10; // Base value
+                            let score = AIConfig.SCORE_BASE_VALUE;
 
                             // 1. Objectives
-                            if (cell.building === 'base' && cell.owner !== aiPlayer.id) score += 10000; // WIN CONDITION
-                            else if (cell.building === 'town' && cell.owner !== aiPlayer.id) score += 500; // HIGH VALUE
+                            score += this.scoreObjectives(cell, aiPlayer.id as string);
 
                             // 2. Aggression
-                            else if (cell.owner && cell.owner !== aiPlayer.id) {
-                                score += 100; // Capture Enemy Land
-                                if (!cell.isConnected) score += 50; // Cut off enemy (Mock logic: if we could detect it)
+                            score += this.scoreAggression(cell, r, c, aiPlayer.id as string, myBases);
 
-                                // Check threat to Base
-                                for (const base of myBases) {
-                                    const dist = Math.abs(r - base.r) + Math.abs(c - base.c);
-                                    if (dist <= 2) {
-                                        score += 2000; // DEFENSE PRIORITY: Remove threat near base
-                                    }
-                                }
-                            }
+                            // 3. Tactical
+                            score += this.scoreTactical(cell);
 
-                            // 3. Defense / tactical
-                            else if (cell.type === 'hill') score += 50; // High Ground
-                            else if (cell.type === 'bridge') score += 60; // Chokepoint
+                            // 4. Expansion
+                            score += this.scoreExpansion(cell);
 
-                            // 4. Expansion (Neutral)
-                            else if (cell.owner === null) {
-                                score += 20;
-                            }
+                            // 5. Aura Support
+                            score += this.scoreAura(r, c, aiPlayer.id as string);
 
-                            // 5. Aura Support Bonus
-                            if (cell.owner !== aiPlayer.id) {
-                                const { discount } = AuraSystem.getSupportDiscount(this.engine.state, r, c, aiPlayer.id);
-                                if (discount > 0) {
-                                    score += (discount * 200);
-                                }
-                            }
+                            // 6. Look-Ahead
+                            score += this.scoreLookAhead(r, c, aiPlayer.id as string, grid);
 
-                            // 5. Look-Ahead Bonus
-                            const neighbors = [
-                                { r: r + 1, c: c }, { r: r - 1, c: c },
-                                { r: r, c: c + 1 }, { r: r, c: c - 1 }
-                            ];
-
-                            for (const n of neighbors) {
-                                if (n.r >= 0 && n.r < GameConfig.GRID_HEIGHT && n.c >= 0 && n.c < GameConfig.GRID_WIDTH) {
-                                    const nCell = grid[n.r][n.c];
-                                    if (nCell.owner !== aiPlayer.id) {
-                                        if (nCell.building === 'town') score += 100;
-                                        if (nCell.building === 'base') score += 200;
-                                    }
-                                }
-                            }
-
-                            // 6. Cost Penalty
-                            score -= (cost * 0.5);
+                            // 7. Cost Penalty
+                            score -= (cost * AIConfig.COST_PENALTY_MULTIPLIER);
 
                             // Random noise
                             score += Math.random() * 10;
@@ -108,9 +77,11 @@ export class AIController {
                 return moves;
             };
 
+            // ... (rest of playTurn)
+
             // PASS 1: EXECUTION LOOP
             let safetyCounter = 0;
-            const MAX_MOVES = 50;
+            const MAX_MOVES = AIConfig.MAX_MOVES_PER_TURN;
             const skippedMoves = new Set<string>();
 
             while (safetyCounter < MAX_MOVES) {
@@ -249,5 +220,67 @@ export class AIController {
         } finally {
             this.engine.endTurn();
         }
+    }
+
+    private scoreObjectives(cell: Cell, aiPlayerId: string): number {
+        let score = 0;
+        if (cell.building === 'base' && cell.owner !== aiPlayerId) score += AIConfig.SCORE_WIN_CONDITION;
+        else if (cell.building === 'town' && cell.owner !== aiPlayerId) score += AIConfig.SCORE_TOWN;
+        return score;
+    }
+
+    private scoreAggression(cell: Cell, r: number, c: number, aiPlayerId: string, myBases: { r: number, c: number }[]): number {
+        let score = 0;
+        if (cell.owner && cell.owner !== aiPlayerId) {
+            score += AIConfig.SCORE_ENEMY_LAND;
+            if (!cell.isConnected) score += AIConfig.SCORE_DISCONNECT_ENEMY;
+
+            for (const base of myBases) {
+                const dist = Math.abs(r - base.r) + Math.abs(c - base.c);
+                if (dist <= 2) {
+                    score += AIConfig.SCORE_DEFEND_BASE;
+                }
+            }
+        }
+        return score;
+    }
+
+    private scoreTactical(cell: Cell): number {
+        let score = 0;
+        if (cell.type === 'hill') score += AIConfig.SCORE_HILL;
+        else if (cell.type === 'bridge') score += AIConfig.SCORE_BRIDGE;
+        return score;
+    }
+
+    private scoreExpansion(cell: Cell): number {
+        if (cell.owner === null) return AIConfig.SCORE_EXPANSION;
+        return 0;
+    }
+
+    private scoreAura(r: number, c: number, aiPlayerId: string): number {
+        const { discount } = AuraSystem.getSupportDiscount(this.engine.state, r, c, aiPlayerId);
+        if (discount > 0) {
+            return discount * AIConfig.SCORE_AURA_MULTIPLIER;
+        }
+        return 0;
+    }
+
+    private scoreLookAhead(r: number, c: number, aiPlayerId: string, grid: Cell[][]): number {
+        let score = 0;
+        const neighbors = [
+            { r: r + 1, c: c }, { r: r - 1, c: c },
+            { r: r, c: c + 1 }, { r: r, c: c - 1 }
+        ];
+
+        for (const n of neighbors) {
+            if (n.r >= 0 && n.r < GameConfig.GRID_HEIGHT && n.c >= 0 && n.c < GameConfig.GRID_WIDTH) {
+                const nCell = grid[n.r][n.c];
+                if (nCell.owner !== aiPlayerId) {
+                    if (nCell.building === 'town') score += AIConfig.SCORE_LOOKAHEAD_TOWN;
+                    if (nCell.building === 'base') score += AIConfig.SCORE_LOOKAHEAD_BASE;
+                }
+            }
+        }
+        return score;
     }
 }
