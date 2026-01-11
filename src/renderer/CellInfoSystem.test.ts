@@ -37,7 +37,20 @@ const mockGraphics = {
     beginPath: vi.fn(),
     moveTo: vi.fn(),
     lineTo: vi.fn(),
-    strokePath: vi.fn()
+    strokePath: vi.fn(),
+    lineBetween: vi.fn(),
+    createGeometryMask: vi.fn(),
+    destroy: vi.fn(),
+    closePath: vi.fn(), // Added
+    fillPath: vi.fn(), // Added
+    fillTriangle: vi.fn() // Added
+};
+
+const mockZone = {
+    setInteractive: vi.fn(),
+    on: vi.fn(),
+    setOrigin: vi.fn(() => mockZone),
+    setSize: vi.fn()
 };
 
 const mockContainer = {
@@ -47,30 +60,26 @@ const mockContainer = {
     setScale: vi.fn(),
     scaleX: 1,
     scaleY: 1,
-    getAt: vi.fn(() => mockGraphics)
+    getAt: vi.fn(() => mockGraphics),
+    list: [mockGraphics, mockZone], // Populate list for find
+    each: vi.fn((callback: any) => {
+        // Simple mock of each
+        callback(mockGraphics);
+    })
 };
 
 const mockScene = {
     add: {
         container: vi.fn(() => mockContainer),
         text: vi.fn(() => mockText),
-        graphics: vi.fn(() => mockGraphics)
+        graphics: vi.fn(() => mockGraphics),
+        zone: vi.fn(() => mockZone) // Added
     },
     make: {
-        graphics: vi.fn(() => ({
-            createGeometryMask: vi.fn(),
-            clear: vi.fn(),
-            fillStyle: vi.fn(),
-            fillRect: vi.fn(),
-            fillRoundedRect: vi.fn(),
-            strokeRoundedRect: vi.fn(),
-            lineStyle: vi.fn(),
-            beginPath: vi.fn(),
-            moveTo: vi.fn(),
-            lineTo: vi.fn(),
-            strokePath: vi.fn(),
-            arc: vi.fn()
-        }))
+        graphics: vi.fn(() => mockGraphics) // Reuse mockGraphics for simplicity
+    },
+    input: {
+        on: vi.fn() // Added
     }
 } as any;
 
@@ -89,18 +98,29 @@ describe('CellInfoSystem', () => {
             grid[r] = [];
             for (let c = 0; c < 10; c++) {
                 grid[r][c] = {
-                    r, c, type: 'plain', owner: null, isConnected: false, building: 'none'
-                };
+                    r, c, type: 'plain', owner: null, isConnected: false, building: 'none', defenseLevel: 0
+                } as any;
             }
         }
 
         // Force overwrite of state
-        engine.state = {
-            grid: grid,
-            getCell: (r: number, c: number) => grid[r] && grid[r][c],
-            getCurrentPlayer: () => ({ id: 'P1', gold: 100, isAI: false, color: 0xff0000 }),
-            players: { 'P1': { id: 'P1', gold: 100 } }
-        } as any;
+        const state = {
+            getCell: (r: number, c: number) => {
+                return grid[r] && grid[r][c];
+            },
+            players: { 'P1': { id: 'P1', color: 0xff0000, gold: 100, isAI: false } },
+            getCurrentPlayer: () => ({ id: 'P1', gold: 100, isAI: false, color: 0xff0000 })
+        };
+
+        engine = {
+            stateManager: { state },
+            get state() { return state; }, // Direct ref, bypassing this
+            calculatePlannedCost: () => 0,
+            pendingInteractions: [],
+            getCostDetails: (_r: number, _c: number) => ({ cost: 10, breakdown: 'Test Breakdown' }),
+            getMoveCost: (_r: number, _c: number) => 10,
+            interactionRegistry: { getAvailableActions: () => [] }
+        } as unknown as GameEngine;
     });
 
     it('shows disconnected warning for owned but disconnected cells', () => {

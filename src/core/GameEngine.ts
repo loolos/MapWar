@@ -1,4 +1,3 @@
-import { GameState } from './GameState';
 import { GameConfig } from './GameConfig';
 import { AIController } from './AIController';
 import { InteractionRegistry } from './interaction/InteractionRegistry';
@@ -7,11 +6,15 @@ import { AuraSystem } from './AuraSystem';
 import type { Action, EndTurnAction } from './Actions';
 import type { MapType } from './map/MapGenerator';
 
-type EventCallback = (data?: any) => void;
+import { GameStateManager } from './GameStateManager';
+import { TypedEventEmitter } from './GameEvents';
 
 export class GameEngine {
-    state: GameState;
-    listeners: Record<string, EventCallback[]>;
+    stateManager: GameStateManager;
+    events: TypedEventEmitter;
+
+    // Direct access helper for legacy compatibility / ease of use
+    get state() { return this.stateManager.state; }
 
     // State for Planning Phase
     pendingMoves: { r: number, c: number }[];
@@ -36,8 +39,8 @@ export class GameEngine {
     hasTriggeredEnclaveTutorial: boolean = false;
 
     constructor(playerConfigs: { id: string, isAI: boolean, color: number }[] = [], mapType: MapType = 'default') {
-        this.state = new GameState(playerConfigs, mapType);
-        this.listeners = {};
+        this.stateManager = new GameStateManager(playerConfigs, mapType);
+        this.events = new TypedEventEmitter();
         this.pendingMoves = [];
         this.interactionRegistry = new InteractionRegistry();
         this.ai = new AIController(this);
@@ -49,23 +52,12 @@ export class GameEngine {
         }
     }
 
-    on(event: string, callback: EventCallback) {
-        if (!this.listeners[event]) {
-            this.listeners[event] = [];
-        }
-        this.listeners[event].push(callback);
+    on<K extends keyof import('./GameEvents').GameEventMap>(event: K, callback: (data: import('./GameEvents').GameEventMap[K]) => void) {
+        this.events.on(event, callback);
     }
 
-    emit(event: string, data?: any) {
-        if (this.listeners[event]) {
-            this.listeners[event].forEach(cb => {
-                try {
-                    cb(data);
-                } catch (err) {
-                    console.error(`Error in listener for event '${event}':`, err);
-                }
-            });
-        }
+    emit<K extends keyof import('./GameEvents').GameEventMap>(event: K, data?: import('./GameEvents').GameEventMap[K]) {
+        this.events.emit(event, data as any);
     }
 
     // Actions
@@ -79,7 +71,8 @@ export class GameEngine {
 
         // Pass undefined for configs (keep existing players), and keepMap
         // Pass current mapType to ensure same generator is used if map is reset
-        this.state.reset(undefined, keepMap, this.state.currentMapType);
+        // Pass current mapType to ensure same generator is used if map is reset
+        this.stateManager.reset(undefined, keepMap, this.state.currentMapType);
         this.pendingMoves = [];
         this.pendingInteractions = [];
         this.lastAiMoves = [];
@@ -98,7 +91,7 @@ export class GameEngine {
     }
 
     loadState(json: string) {
-        this.state.deserialize(json);
+        this.stateManager.loadState(json);
         this.pendingMoves = [];
         this.pendingInteractions = [];
         this.lastAiMoves = [];
@@ -680,10 +673,7 @@ export class GameEngine {
                     }
 
                     // Remove loser from order (stops them from getting turns)
-                    this.state.playerOrder = this.state.playerOrder.filter(id => id !== loserId);
-
-                    // Force update connectivity for eliminated player to disconnect all their lands
-                    this.state.updateConnectivity(loserId);
+                    this.stateManager.eliminatePlayer(loserId);
 
 
 
@@ -790,7 +780,7 @@ export class GameEngine {
         }
 
         if (totalCost > 0) {
-            this.state.players[pid].gold -= totalCost;
+            this.stateManager.spendGold(pid, totalCost);
 
             // Update Connectivity for ALL players
             // Check for enclaves for ALL players

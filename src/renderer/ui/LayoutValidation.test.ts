@@ -152,6 +152,12 @@ vi.mock('phaser', () => {
         setOrigin = vi.fn(function (this: MockGameObject) { return this; });
         setInteractive = vi.fn(function (this: MockGameObject) { return this; });
         removeInteractive = vi.fn(function (this: MockGameObject) { return this; });
+        zone = vi.fn(() => ({
+            setInteractive: vi.fn(),
+            on: vi.fn(),
+            setSize: vi.fn(),
+            setOrigin: vi.fn()
+        }));
         on = vi.fn(function (this: MockGameObject) { return this; });
         destroy = vi.fn();
         setDepth = vi.fn(function (this: MockGameObject) { return this; });
@@ -178,6 +184,11 @@ vi.mock('phaser', () => {
         lineStyle = vi.fn(function (this: MockGraphics) { return this; });
         strokeRect = vi.fn(function (this: MockGraphics) { return this; });
         fillCircle = vi.fn(function (this: MockGraphics) { return this; });
+        fillEllipse = vi.fn(function (this: MockGraphics) { return this; });
+        fillTriangle = vi.fn(function (this: MockGraphics) { return this; });
+        closePath = vi.fn(function (this: MockGraphics) { return this; }); // Added
+        fillPath = vi.fn(function (this: MockGraphics) { return this; }); // Added
+        lineBetween = vi.fn(function (this: MockGraphics) { return this; });
         fillRoundedRect = vi.fn(function (this: MockGraphics) { return this; });
         strokeRoundedRect = vi.fn(function (this: MockGraphics) { return this; });
         beginPath = vi.fn(function (this: MockGraphics) { return this; });

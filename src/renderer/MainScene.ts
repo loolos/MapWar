@@ -241,6 +241,29 @@ export class MainScene extends Phaser.Scene {
             }
         });
 
+        this.engine.on('tileSelected', (data) => {
+            this.selectedRow = data.r;
+            this.selectedCol = data.c;
+            this.drawMap(); // Update Selection Highlight
+            this.infoSystem.update(this.engine, data.r, data.c);
+
+            // Show Interaction Menu
+            // Calculate screen position for menu (near tile but within bounds)
+            // Simplified: Use center or fixed position for now? 
+            // InteractionMenu logic handles positioning relative to UI?
+            // Actually implementation uses fixed position (bottom right) in resize().
+            // So we just call show().
+            this.interactionMenu.show(data.r, data.c);
+        });
+
+        this.engine.on('tileDeselected', () => {
+            this.selectedRow = null;
+            this.selectedCol = null;
+            this.drawMap();
+            this.infoSystem.update(this.engine, null, null);
+            this.interactionMenu.hide();
+        });
+
         // Audio Bindings
         this.engine.on('sfx:select', () => this.soundManager.playSfx('sfx_select'));
         this.engine.on('sfx:move', () => this.soundManager.playSfx('sfx_move'));
@@ -308,6 +331,98 @@ export class MainScene extends Phaser.Scene {
         for (let i = 10; i < 64; i += 15) gfx.fillRect(0, i, 64, 2);
 
         gfx.generateTexture('tile_bridge', 64, 64);
+        gfx.destroy();
+
+        // Create Watchtower/Castle Textures
+        this.createCastleTexture(1);
+        this.createCastleTexture(2);
+        this.createCastleTexture(3);
+    }
+
+    private createCastleTexture(level: number) {
+        const key = `watchtower_lv${level}`;
+        if (this.textures.exists(key)) return;
+
+        const gfx = this.make.graphics({ x: 0, y: 0 });
+
+        // Fixed Width Tower (20px)
+        // Height varies: Lv1=24, Lv2=32, Lv3=40
+        const w = 20;
+        const h = 24 + ((level - 1) * 8);
+
+        const x = (64 - w) / 2;
+        const y = (64 - h) / 2;
+
+        // Shadow
+        gfx.fillStyle(0x000000, 0.4);
+        gfx.fillEllipse(32, y + h - 3, w, 10);
+
+        // Main Stone Body
+        gfx.fillStyle(0x888888); // Stone Grey
+        gfx.fillRect(x, y, w, h);
+
+        // Bricks detailing (Subtle)
+        gfx.fillStyle(0x666666);
+        for (let by = y + 4; by < y + h; by += 8) {
+            const offset = ((by - y) / 8) % 2 === 0 ? 0 : 5;
+            for (let bx = x + offset; bx < x + w; bx += 10) {
+                if (bx + 4 < x + w) {
+                    gfx.fillRect(bx, by, 4, 2);
+                }
+            }
+        }
+
+        // Roof / Battlements based on Level
+        if (level === 1) {
+            // Simple Battlements
+            gfx.fillStyle(0x888888);
+            gfx.fillRect(x - 2, y, w + 4, 6); // Overhang
+            // Crenellations
+            gfx.fillRect(x - 2, y - 4, 6, 4);
+            gfx.fillRect(x + w + 4 - 6, y - 4, 6, 4);
+        } else if (level === 2) {
+            // Conical Roof (Canvas/Wood/Slate?) - Let's do Dark Slate
+            gfx.fillStyle(0x444444);
+            gfx.beginPath();
+            gfx.moveTo(x - 4, y);
+            gfx.lineTo(x + w + 4, y);
+            gfx.lineTo(x + w / 2, y - 12);
+            gfx.closePath();
+            gfx.fillPath();
+        } else {
+            // Level 3: Keep with Flag
+            // Battlements
+            gfx.fillStyle(0x888888);
+            gfx.fillRect(x - 4, y, w + 8, 8); // Large Overhang
+
+            // Flag (Offset to side - Right side)
+            // Color: Red (User Request)
+
+            // Pole (Horizontal arm + Vertical mount?) 
+            // Or just a vertical pole on the side? 
+            // "Tower side" -> usually sticking out or on a corner.
+            // Let's put a pole sticking up from the right corner of the battlements.
+
+            const poleBaseX = x + w - 4;
+            const poleBaseY = y;
+
+            gfx.lineStyle(2, 0x444444);
+            gfx.beginPath();
+            gfx.moveTo(poleBaseX, poleBaseY);
+            gfx.lineTo(poleBaseX, poleBaseY - 12);
+            gfx.strokePath();
+
+            // Flag (Red)
+            gfx.fillStyle(0xFF0000);
+            gfx.beginPath();
+            gfx.moveTo(poleBaseX, poleBaseY - 12);
+            gfx.lineTo(poleBaseX + 12, poleBaseY - 8);
+            gfx.lineTo(poleBaseX, poleBaseY - 4);
+            gfx.closePath();
+            gfx.fillPath();
+        }
+
+        gfx.generateTexture(key, 64, 64);
         gfx.destroy();
     }
 
@@ -867,30 +982,57 @@ export class MainScene extends Phaser.Scene {
                     const pad = 6;
                     const w = this.tileSize - (pad * 2);
 
-                    const bottomY = y + this.tileSize - pad;
-                    const topY = bottomY - wallHeight;
-                    const leftX = x + pad;
+                    // Draw Wall
+                    // Shadow
+                    // this.gridGraphics.fillStyle(0x000000, 0.3);
+                    // this.gridGraphics.fillRect(x + pad + 3, y + this.tileSize - pad - wallHeight + 3, w, wallHeight);
 
-                    // Draw 3D Block
-                    // Side Face (Darker)
-                    this.gridGraphics.fillStyle(0x666666);
-                    this.gridGraphics.fillRect(leftX, topY, w, wallHeight);
+                    // Face - Stone Grey
+                    const wallColor = 0x888888; // Neutral Stone
+                    this.gridGraphics.fillStyle(wallColor, 1.0);
+                    this.gridGraphics.fillRoundedRect(x + pad, y + this.tileSize - pad - wallHeight, w, wallHeight, 2);
 
-                    // Top Face (Lighter)
-                    this.gridGraphics.fillStyle(0x999999);
-                    this.gridGraphics.fillRect(leftX, topY - 10, w, 10); // Pseudo depth top
+                    // Sawtooth Battlements (Crenellations)
+                    const toothSize = w / 5; // 5 segments (3 merlons, 2 gaps)
+                    const topY = y + this.tileSize - pad - wallHeight;
 
-                    // Border
-                    this.gridGraphics.lineStyle(1, 0x333333);
-                    this.gridGraphics.strokeRect(leftX, topY - 10, w, wallHeight + 10);
+                    this.gridGraphics.fillStyle(wallColor, 1.0);
+                    // Draw Merlons (Teeth)
+                    // Merlon 1 (Left)
+                    this.gridGraphics.fillRect(x + pad, topY - 5, toothSize, 5);
+                    // Merlon 2 (Center)
+                    this.gridGraphics.fillRect(x + pad + (toothSize * 2), topY - 5, toothSize, 5);
+                    // Merlon 3 (Right)
+                    this.gridGraphics.fillRect(x + pad + (toothSize * 4), topY - 5, toothSize, 5);
 
-                    // Watchtower Visual
+                    // Optional: Trim line below battlements?
+                    // this.gridGraphics.fillStyle(0x777777); 
+                    // this.gridGraphics.fillRect(x + pad, topY, w, 2);
+
+                    // --- Watchtower / Castle Rendering ---
                     if (cell.watchtowerLevel > 0) {
-                        const towerText = this.add.text(leftX + w / 2, topY - 15, '🗼', { fontSize: '20px' }).setOrigin(0.5);
-                        this.mapContainer.add(towerText);
-                    }
+                        const towerKey = `watchtower_lv${cell.watchtowerLevel}`;
+                        const towerSprite = this.add.image(x + this.tileSize / 2, y + this.tileSize / 2, towerKey);
 
+                        // Tint Flag based on owner
+                        // P1 is Red Flag (Default). P2 needs Blue Flag.
+                        // Since texture is baked, tinting affects whole sprite.
+                        // Tinting grey stone to blueish is acceptable for P2.
+                        if (cell.owner === 'P2') {
+                            towerSprite.setTint(0xaaaaff);
+                        }
+
+                        this.mapContainer.add(towerSprite);
+                    } else {
+                        // Just a generic shield/icon if no tower but maybe high level wall?
+                        // No, just the wall block is enough.
+                        const wallText = this.add.text(x + this.tileSize / 2, y + this.tileSize / 2 - (wallHeight / 2), '🛡️', { fontSize: '16px' }).setOrigin(0.5);
+                        this.mapContainer.add(wallText);
+                    }
                 }
+
+
+
                 // Gold Mine removed from here
 
                 // 3. SELECTION / HIGHLIGHTS
@@ -915,6 +1057,7 @@ export class MainScene extends Phaser.Scene {
                 }
             }
         }
+
 
         // 4. AURA RANGE INDICATOR (Base & Watchtower)
         if (this.selectedRow !== null && this.selectedCol !== null) {
@@ -1057,15 +1200,29 @@ export class MainScene extends Phaser.Scene {
 
         // Helper
         const createArrow = (pos: { x: number, y: number }, label: string, dr: number, dc: number) => {
-            const bg = this.add.circle(pos.x, pos.y, size / 2, color, alpha)
-                .setInteractive()
+            const bg = this.add.graphics();
+            bg.fillStyle(color, alpha);
+            bg.fillCircle(pos.x, pos.y, size / 2);
+
+            // Hit Area
+            const zone = this.add.zone(pos.x, pos.y, size, size)
+                .setInteractive({ useHandCursor: true })
                 .on('pointerdown', () => this.panView(dr, dc));
 
-            const text = this.add.text(pos.x, pos.y, label, { fontSize: '20px', color: '#ffffff' }).setOrigin(0.5);
-            this.cameraControlsContainer.add([bg, text]);
+            // Visual feedback
+            zone.on('pointerover', () => {
+                bg.clear();
+                bg.fillStyle(0x666666, 1);
+                bg.fillCircle(pos.x, pos.y, size / 2);
+            });
+            zone.on('pointerout', () => {
+                bg.clear();
+                bg.fillStyle(color, alpha);
+                bg.fillCircle(pos.x, pos.y, size / 2);
+            });
 
-            bg.on('pointerover', () => bg.setFillStyle(0x666666, 1));
-            bg.on('pointerout', () => bg.setFillStyle(color, alpha));
+            const text = this.add.text(pos.x, pos.y, label, { fontSize: '20px', color: '#ffffff' }).setOrigin(0.5);
+            this.cameraControlsContainer.add([bg, zone, text]);
         };
 
         createArrow(this.arrowPositions.up, '▲', -1, 0);
@@ -1077,10 +1234,8 @@ export class MainScene extends Phaser.Scene {
     private hasRenderedOnce: boolean = false;
 
     update(_time: number, _delta: number) {
-        // Continuous UI Updates (State polling)
-        if (this.playerStatusSystem) {
-            this.playerStatusSystem.update(this.engine);
-        }
+        // Continuous UI Updates (State polling) - REMOVED
+        // UI is now Event-Driven (see create() listeners)
 
         // Force initial render on first update to avoid black screen
         if (!this.hasRenderedOnce) {

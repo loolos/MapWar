@@ -20,6 +20,8 @@ export class PlayerStatusSystem {
     private upButton!: Phaser.GameObjects.Container;
     private downButton!: Phaser.GameObjects.Container;
     private isScrollable: boolean = false;
+    private isDragging: boolean = false;
+    private lastY: number = 0;
 
     constructor(scene: Phaser.Scene, x: number, y: number, height: number) {
         this.container = scene.add.container(x, y);
@@ -65,23 +67,31 @@ export class PlayerStatusSystem {
         this.viewHeight = height - 60;
 
         // Enhance Interaction for Scroll (Main Panel)
-        const hitArea = new Phaser.Geom.Rectangle(0, 50, 260, this.viewHeight);
-        this.container.setInteractive(hitArea, Phaser.Geom.Rectangle.Contains);
+        // Use a Zone for precise input handling over the list area
+        const zone = scene.add.zone(0, 50, 260, this.viewHeight).setOrigin(0);
+        this.container.add(zone);
+        zone.setInteractive();
 
-        this.container.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-            if (pointer.isDown) {
-                const dy = pointer.y - pointer.prevPosition.y;
+        zone.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+            this.isDragging = true;
+            this.lastY = pointer.y;
+        });
+
+        scene.input.on('pointerup', () => {
+            this.isDragging = false;
+        });
+
+        scene.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+            if (this.isDragging) {
+                const dy = pointer.y - this.lastY;
+                this.lastY = pointer.y;
                 this.scroll(dy);
             }
         });
 
-        // Wheel support
-        scene.input.on('wheel', (pointer: any, _gameObjects: any, _deltaX: number, deltaY: number, _deltaZ: number) => {
-            const localPoint = this.container.pointToContainer(pointer);
-            const hit = localPoint.x >= 0 && localPoint.x <= 260 && localPoint.y >= 0 && localPoint.y <= height;
-            if (hit) {
-                this.scroll(-deltaY * 0.5);
-            }
+        // Wheel support on Zone
+        zone.on('wheel', (_u: any, _dx: number, deltaY: number) => {
+            this.scroll(-deltaY * 0.5);
         });
 
         // Initialize Mask

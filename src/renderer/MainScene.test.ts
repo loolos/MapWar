@@ -98,12 +98,18 @@ vi.mock('phaser', () => {
                         fillRoundedRect: vi.fn(() => g),
                         strokeRoundedRect: vi.fn(() => g),
                         beginPath: vi.fn(() => g),
-                        moveTo: vi.fn(() => g), // Add missing Graphics methods
+                        moveTo: vi.fn(() => g),
                         lineTo: vi.fn(() => g),
                         strokePath: vi.fn(() => g),
+                        lineBetween: vi.fn(() => g), // Added
                         arc: vi.fn(() => g),
                         setVisible: vi.fn(() => g),
-                        destroy: vi.fn()
+                        destroy: vi.fn(),
+                        createGeometryMask: vi.fn(), // Added (if used by add.graphics?)
+                        generateTexture: vi.fn(), // Added
+                        closePath: vi.fn(() => g), // Added
+                        fillPath: vi.fn(() => g), // Added
+                        fillTriangle: vi.fn(() => g) // Added
                     };
                     return g;
                 }),
@@ -117,12 +123,19 @@ vi.mock('phaser', () => {
                         setScrollFactor: vi.fn(() => t),
                         setDepth: vi.fn(() => t),
                         width: 100,
+                        height: 20, // Added height
                         setScale: vi.fn(() => t),
                         setPosition: vi.fn(() => t)
                     };
                     return t;
                 }),
-                existing: vi.fn()
+                existing: vi.fn(),
+                zone: vi.fn(() => ({ // Added zone
+                    setInteractive: vi.fn(),
+                    on: vi.fn(),
+                    setSize: vi.fn(),
+                    setOrigin: vi.fn()
+                }))
             };
             this.scale = {
                 width: 800,
@@ -130,7 +143,6 @@ vi.mock('phaser', () => {
                 on: vi.fn(),
                 gameSize: { width: 800, height: 600 }
             };
-            this.load = { image: vi.fn() };
             this.load = { image: vi.fn() };
             this.input = {
                 on: vi.fn(),
@@ -157,7 +169,17 @@ vi.mock('phaser', () => {
                     fillStyle: vi.fn(),
                     fillRect: vi.fn(),
                     generateTexture: vi.fn(),
-                    destroy: vi.fn()
+                    destroy: vi.fn(),
+                    createGeometryMask: vi.fn(), // Added
+                    lineStyle: vi.fn(), // Added for castle
+                    beginPath: vi.fn(),
+                    moveTo: vi.fn(),
+                    lineTo: vi.fn(),
+                    strokePath: vi.fn(),
+                    fillEllipse: vi.fn(),
+                    fillTriangle: vi.fn(),
+                    closePath: vi.fn(), // Added
+                    fillPath: vi.fn() // Added
                 }))
             };
             this.time = {
