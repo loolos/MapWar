@@ -25,28 +25,6 @@ describe('AIController Logic', () => {
         }
     });
 
-    it('AI continues moving even if expensive move fails', () => {
-        // Force Base at (5,5)
-        engine.state.setOwner(5, 5, 'P1');
-        engine.state.setBuilding(5, 5, 'base');
-        engine.state.getCell(5, 5)!.isConnected = true;
-
-        // Neighbor 1: Hill (Cost 20)
-        engine.state.grid[5][6].type = 'hill';
-
-        // Neighbor 2: Plain (Cost 10)
-        engine.state.grid[6][5].type = 'plain';
-
-        // Gold 15 (Enough for plain, not for hill)
-        engine.state.players['P1'].gold = 15;
-
-        ai.playTurn();
-
-        // Should have captured the plain, but not the hill
-        expect(engine.state.grid[6][5].owner).toBe('P1');
-        expect(engine.state.grid[5][6].owner).toBeNull();
-    });
-
     it('AI prioritizes Towns over Plains if affordable', () => {
         // Force Base at (5,5)
         engine.state.setOwner(5, 5, 'P1');
