@@ -170,6 +170,18 @@ export class GameEngine {
         this.emit('turnChange');
         if (incomeReport) {
             this.emit('incomeReport', incomeReport);
+
+            // Detailed Income Summary Log (White/Info)
+            const parts = [];
+            if (incomeReport.base > 0) parts.push(`Base: +${incomeReport.base}`);
+            if (incomeReport.town > 0) parts.push(`Towns: +${incomeReport.town}`);
+            if (incomeReport.mine > 0) parts.push(`Mines: +${incomeReport.mine}`);
+            if (incomeReport.farm > 0) parts.push(`Farms: +${incomeReport.farm}`);
+            if (incomeReport.land > 0) parts.push(`Land(${incomeReport.landCount}): +${incomeReport.land}`);
+
+            const summaryText = `Turn Start Income: +${incomeReport.total}G [ ${parts.join(', ')} ]`;
+            this.emit('logMessage', { text: summaryText, type: 'info' });
+
             if (incomeReport.depletedMines && incomeReport.depletedMines.length > 0) {
                 incomeReport.depletedMines.forEach(m => {
                     this.emit('logMessage', { text: `Gold Mine collapsed at (${m.r}, ${m.c})!`, type: 'info' });
@@ -321,6 +333,7 @@ export class GameEngine {
         } else {
             // Try to Add
             const validation = this.validateMove(row, col);
+            console.log(`TOGGLE: (${row},${col}) Valid:${validation.valid} Reason:${validation.reason}`);
             if (validation.valid) {
                 // STRICT COST CHECK (User Requirement)
                 const player = this.state.getCurrentPlayer();
@@ -330,17 +343,25 @@ export class GameEngine {
                 if (player.gold < currentPlanCost + moveCost) {
                     this.lastError = `Insufficient funds (Need ${moveCost} G)`;
                     this.emit('sfx:cancel');
+                    // Warning Log (Red)
+                    this.emit('logMessage', { text: `Cannot select: Insufficient Funds! Need ${moveCost}G, have ${player.gold - currentPlanCost}G left.`, type: 'error' });
                     // Do NOT add to pendingMoves
                 } else {
                     this.pendingMoves.push({ r: row, c: col });
                     this.lastError = null;
                     this.emit('sfx:select');
 
+                    // Reminder Log (Yellow) - Distance Multiplier
+                    const details = this.getCostDetails(row, col);
+                    if (details.breakdown.includes('Distance')) {
+                        this.emit('logMessage', { text: `Reminder: Distance Multiplier Active! Cost is higher due to distance.`, type: 'warning' });
+                    }
+
                     // Optional: Log cost breakdown even on success if it's an attack?
                     // User asked: "if clicking an enemy cell to attack... also log price"
                     const cell = this.state.getCell(row, col);
                     if (cell && cell.owner && cell.owner !== this.state.currentPlayerId) {
-                        const details = this.getCostDetails(row, col);
+                        // const details = this.getCostDetails(row, col); // Already computed above
                         this.emit('logMessage', { text: `Attack Plan: ${details.breakdown} = ${details.cost}G` });
                     }
                 }
@@ -507,7 +528,7 @@ export class GameEngine {
     }
 
     getCostDetails(row: number, col: number): { cost: number, breakdown: string } {
-        return CostSystem.getCostDetails(this.state, row, col);
+        return CostSystem.getCostDetails(this.state, row, col, this.pendingMoves);
     }
 
     getPotentialEnemyAttackCost(row: number, col: number): { cost: number, breakdown: string } {
@@ -553,16 +574,17 @@ export class GameEngine {
         const plannedCost = this.calculatePlannedCost();
         const thisMoveCost = this.getMoveCost(row, col);
 
+        console.log(`VALIDATE: (${row},${col}) Gold:${player.gold} Plan:${plannedCost} This:${thisMoveCost} AI:${player.isAI}`);
+
         if (player.gold < plannedCost + thisMoveCost) {
             let reason = `Not enough gold(Need ${thisMoveCost})`;
             const isLongRange = !this.state.isAdjacentToOwned(row, col, player.id);
             if (isLongRange) reason += " (Includes Distance Penalty)";
 
-
             // User Request: Don't log for AI
             if (!player.isAI) {
                 const details = this.getCostDetails(row, col);
-                const logMsg = `Check Failed: Need ${plannedCost + thisMoveCost}G (Have ${player.gold}G). \nCost Logic: ${details.breakdown || 'Base Cost'}`;
+                const logMsg = `Insufficient Funds: Need ${plannedCost + thisMoveCost}G (Have ${player.gold}G). \nCost Logic: ${details.breakdown || 'Base Cost'}`;
                 this.emit('logMessage', { text: logMsg, type: 'error' });
             }
 
@@ -817,7 +839,27 @@ export class GameEngine {
         const stats = this.state.accrueResources(playerId);
         if (stats) {
             this.events.emit('turnChange'); // UI Update
-            // Can verify funds here if needed
+            this.logIncomeReport(stats);
+        }
+    }
+
+    private logIncomeReport(incomeReport: any) {
+        // Detailed Income Summary Log (White/Info)
+        const parts = [];
+        if (incomeReport.base > 0) parts.push(`Base: +${incomeReport.base}`);
+        if (incomeReport.town > 0) parts.push(`Towns: +${incomeReport.town}`);
+        if (incomeReport.mine > 0) parts.push(`Mines: +${incomeReport.mine}`);
+        if (incomeReport.farm > 0) parts.push(`Farms: +${incomeReport.farm}`);
+        if (incomeReport.land > 0) parts.push(`Land(${incomeReport.landCount}): +${incomeReport.land}`);
+
+        const summaryText = `Turn Start Income: +${incomeReport.total}G [ ${parts.join(', ')} ]`;
+        this.emit('logMessage', { text: summaryText, type: 'info' });
+
+        if (incomeReport.depletedMines && incomeReport.depletedMines.length > 0) {
+            incomeReport.depletedMines.forEach((m: any) => {
+                this.emit('logMessage', { text: `Gold Mine collapsed at (${m.r}, ${m.c})!`, type: 'info' });
+            });
+            this.emit('sfx:gold_depleted');
         }
     }
     private checkForEnclaves(playerId: string): boolean {
@@ -864,4 +906,3 @@ export class GameEngine {
         return turnComponent + unitComponent;
     }
 }
-

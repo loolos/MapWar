@@ -207,7 +207,7 @@ export class GameState {
         return this.players[this.currentPlayerId!];
     }
 
-    endTurn(): { total: number, base: number, land: number, landCount: number, depletedMines: { r: number, c: number }[] } | null {
+    endTurn(): { total: number, base: number, land: number, town: number, mine: number, farm: number, landCount: number, depletedMines: { r: number, c: number }[] } | null {
         // Switch player
         const currentIndex = this.playerOrder.indexOf(this.currentPlayerId!);
         const nextIndex = (currentIndex + 1) % this.playerOrder.length;
@@ -286,9 +286,65 @@ export class GameState {
         // Ensure reported land + base = total
         // We use the calculated Base sum as the "Base" component, and the rest is "Land".
         // This handles rounding correctly (e.g. 10.5 -> 10. Land=0).
-        const reportedLand = checkTotal - calculatedBaseIncome;
+        // const reportedLand = checkTotal - calculatedBaseIncome;
 
-        return { total: checkTotal, base: calculatedBaseIncome, land: reportedLand, landCount, depletedMines, upgradeBonus: 0 };
+        // Detailed Breakdown for Logging
+        let farmIncome = 0;
+        let mineIncome = 0;
+        let townIncome = 0;
+        let landIncome = 0; // Pure land
+        let baseIncome = 0;
+
+        // Re-iterate to categorize (Optimization: could do in one pass above)
+        // Since we need to match `checkTotal`, let's trust the logic:
+        // Income = Base + Land + Town + Mine + Farm
+        // We already have `calculatedBaseIncome`.
+        baseIncome = calculatedBaseIncome;
+
+        // Let's recalculate breakdown cleanly to be safe or use what we summarized?
+        // Above loop mixed them into `calculatedLandIncome`.
+        // Let's just do a clean pass for reporting if performance allows (10x10 grid is tiny).
+        // Or refactor the loop above. Let's refactor the loop above to be cleaner.
+
+        // Reset and re-calculate breakdown
+        baseIncome = 0;
+        townIncome = 0;
+        mineIncome = 0;
+        farmIncome = 0;
+        landIncome = 0;
+
+        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+                const cell = this.grid[r][c];
+                if (cell.owner === playerId) {
+                    let inc = this.getTileIncome(r, c);
+
+                    if (cell.building === 'base') {
+                        baseIncome += inc;
+                    } else if (cell.building === 'town') {
+                        townIncome += inc;
+                    } else if (cell.building === 'gold_mine') {
+                        mineIncome += inc;
+                    } else if (cell.building === 'farm') {
+                        farmIncome += inc;
+                    } else if (cell.type !== 'bridge') {
+                        landIncome += inc;
+                    }
+                }
+            }
+        }
+
+        return {
+            total: checkTotal,
+            base: baseIncome,
+            land: landIncome,
+            town: townIncome,
+            mine: mineIncome,
+            farm: farmIncome,
+            landCount,
+            depletedMines,
+            upgradeBonus: 0
+        };
     }
 
     public calculateIncome(playerId: PlayerID): number {
