@@ -197,9 +197,19 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
                 this.ownerText.setColor(cell.owner === 'P1' ? '#ff4444' : (cell.owner === 'P2' ? '#4444ff' : '#ffffff'));
 
                 // Cost
-                const costDetails = engine.getCostDetails(selectedRow, selectedCol);
-                let costStr = `${costDetails.cost}G`;
-                if (costDetails.cost === Infinity) costStr = 'X';
+                let costStr = "";
+                let primaryBreakdown = "";
+
+                if (cell.owner === engine.state.currentPlayerId) {
+                    const enemyCost = engine.getPotentialEnemyAttackCost(selectedRow, selectedCol);
+                    costStr = enemyCost.cost > 0 ? `${enemyCost.cost}G` : "0G";
+                    primaryBreakdown = enemyCost.breakdown;
+                } else {
+                    const costDetails = engine.getCostDetails(selectedRow, selectedCol);
+                    costStr = costDetails.cost === Infinity ? 'X' : `${costDetails.cost}G`;
+                    primaryBreakdown = costDetails.breakdown;
+                }
+
                 this.costText.setText(`Cost: ${costStr}`);
 
                 // Show Breakdown directly in cost text or description?
@@ -228,19 +238,9 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
                     desc += `\nIncome: ${incomeStr} G`;
                 }
 
-                // Potential Enemy Attack Cost (New Requirement)
-                if (cell.owner === engine.state.currentPlayerId) {
-                    const enemyCost = engine.getPotentialEnemyAttackCost(selectedRow, selectedCol);
-                    if (enemyCost.cost > 0) {
-                        desc += `\n\n[Enemy Attack Base Cost]`;
-                        desc += `\nCost: ${enemyCost.cost} G`;
-                        desc += `\nLogic: ${enemyCost.breakdown}`;
-                    }
-                }
-
-                const breakdown = costDetails.breakdown;
-                if (breakdown) {
-                    desc += `\n\n[Cost Logic]\n${breakdown}`;
+                if (primaryBreakdown) {
+                    const title = (cell.owner === engine.state.currentPlayerId) ? "[Enemy Attack Base Cost]" : "[Cost Logic]";
+                    desc += `\n\n${title}\n${primaryBreakdown}`;
                 }
 
                 this.descText.setText(desc);
