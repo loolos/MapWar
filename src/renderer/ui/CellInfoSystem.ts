@@ -228,6 +228,16 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
                     desc += `\nIncome: ${incomeStr} G`;
                 }
 
+                // Potential Enemy Attack Cost (New Requirement)
+                if (cell.owner === engine.state.currentPlayerId) {
+                    const enemyCost = engine.getPotentialEnemyAttackCost(selectedRow, selectedCol);
+                    if (enemyCost.cost > 0) {
+                        desc += `\n\n[Enemy Attack Base Cost]`;
+                        desc += `\nCost: ${enemyCost.cost} G`;
+                        desc += `\nLogic: ${enemyCost.breakdown}`;
+                    }
+                }
+
                 const breakdown = costDetails.breakdown;
                 if (breakdown) {
                     desc += `\n\n[Cost Logic]\n${breakdown}`;

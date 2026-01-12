@@ -146,4 +146,51 @@ export class CostSystem {
         }
         return minDist;
     }
+
+    /**
+     * Calculates the BASE attack cost for an imaginary enemy to attack this tile.
+     * Excludes distance and aura modifiers.
+     */
+    static getPotentialEnemyAttackCost(state: GameState, row: number, col: number): { cost: number, breakdown: string } {
+        const cell = state.getCell(row, col);
+        if (!cell || !cell.owner) return { cost: 0, breakdown: '' };
+
+        let breakdownParts: string[] = [];
+        let baseCost = 0;
+
+        // Determine Base Attack Cost
+        if (cell.building === 'base') {
+            baseCost = GameConfig.COST_CAPTURE_BASE;
+            breakdownParts = [`Attack Base(${baseCost})`];
+        } else if (cell.type === 'hill' || cell.type === 'bridge') {
+            baseCost = GameConfig.COST_ATTACK * 2;
+            breakdownParts = [`Attack Hill/Bridge(${baseCost})`];
+        } else {
+            baseCost = GameConfig.COST_ATTACK;
+            breakdownParts = [`Attack(${baseCost})`];
+        }
+
+        // Defenses
+        if (cell.building === 'base' && cell.defenseLevel > 0) {
+            const bonus = cell.defenseLevel * GameConfig.UPGRADE_DEFENSE_BONUS;
+            baseCost += bonus;
+            breakdownParts.push(`Base Def Lv${cell.defenseLevel}(+${bonus})`);
+        } else if (cell.building === 'wall') {
+            if (cell.isConnected) {
+                const upgradeBonus = cell.defenseLevel * GameConfig.WALL_DEFENSE_BONUS;
+                const baseWallCost = GameConfig.WALL_CAPTURE_BASE_ADDITION;
+                baseCost += upgradeBonus + baseWallCost;
+                breakdownParts.push(`Wall(Base+${baseWallCost}, Lv${cell.defenseLevel}+${upgradeBonus})`);
+            } else {
+                breakdownParts.push(`Wall Disconnected(+0)`);
+            }
+        }
+
+        // Multiplier
+        const multiplier = GameConfig.COST_MULTIPLIER_ATTACK;
+        baseCost = Math.floor(baseCost * multiplier);
+        if (multiplier !== 1) breakdownParts.push(`x${multiplier}`);
+
+        return { cost: Math.max(1, baseCost), breakdown: breakdownParts.join(' ') };
+    }
 }

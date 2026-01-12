@@ -509,6 +509,10 @@ export class GameEngine {
         return CostSystem.getCostDetails(this.state, row, col);
     }
 
+    getPotentialEnemyAttackCost(row: number, col: number): { cost: number, breakdown: string } {
+        return CostSystem.getPotentialEnemyAttackCost(this.state, row, col);
+    }
+
     // New: Expose Tile Income
     getTileIncome(row: number, col: number): number {
         return this.state.getTileIncome(row, col);
