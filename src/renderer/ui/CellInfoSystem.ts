@@ -287,8 +287,6 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
     }
 
     public resize(width: number, height: number, x: number, y: number) {
-        // Debug Log to verify instance health
-        console.log(`CellInfoSystem.resize: ${width}x${height} at ${x},${y}`);
         this.viewportWidth = width;
         this.viewportHeight = height;
         this.setPosition(x, y);

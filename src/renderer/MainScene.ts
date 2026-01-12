@@ -97,14 +97,15 @@ export class MainScene extends Phaser.Scene {
         this.load.image('raw_icon_human', 'assets/cartoon_human.png');
         this.load.image('raw_icon_robot', 'assets/cartoon_robot.png');
 
-        // Audio Assets (Placeholder or Real)
+        // Audio Assets (Commented out as files are missing in repository. SoundManager uses synth fallbacks.)
+        /*
         this.load.audio('sfx_select', 'assets/audio/sfx_select.mp3');
         this.load.audio('sfx_move', 'assets/audio/sfx_move.mp3');
         this.load.audio('sfx_attack', 'assets/audio/sfx_attack.mp3');
         this.load.audio('sfx_capture', 'assets/audio/sfx_capture.mp3');
         this.load.audio('sfx_eliminate', 'assets/audio/sfx_eliminate.mp3');
         this.load.audio('sfx_victory', 'assets/audio/sfx_victory.mp3');
-        // this.load.audio('bgm_main', 'assets/audio/bgm_main.mp3'); // Uncomment when file exists
+        */
     }
 
     create(data?: any) {
