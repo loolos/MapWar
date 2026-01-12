@@ -515,7 +515,6 @@ export class MainScene extends Phaser.Scene {
             const height = gameSize.height;
 
             if (width === 0 || height === 0) return;
-            console.log(`DEBUG: MainScene.resize ${width}x${height}`);
 
             this.cameras.main.setViewport(0, 0, width, height);
 
@@ -680,7 +679,6 @@ export class MainScene extends Phaser.Scene {
 
                 // Notifications (Overlay Removed)
                 // this.notificationSystem.setPosition(mapX + (mapAreaW - 300) / 2, 20);
-                console.log("DEBUG: MainScene.resize Landscape Done");
             }
 
             // ... (rest of logic: refresh, map scaling)

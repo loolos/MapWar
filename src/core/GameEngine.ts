@@ -47,18 +47,15 @@ export class GameEngine {
     }
 
     startGame() {
-        console.log("GameEngine.startGame called");
         // Initial Income for first player
         const firstPlayer = this.state.playerOrder[0];
         if (firstPlayer) {
             this.state.accrueResources(firstPlayer);
-            console.log("Initial resources accrued for", firstPlayer, "Gold:", this.state.players[firstPlayer].gold);
         }
 
         this.emit('gameStart');
 
         if (firstPlayer && this.state.players[firstPlayer].isAI) {
-            console.log("Triggering AI turn for P1");
             this.triggerAiTurn();
         }
     }
