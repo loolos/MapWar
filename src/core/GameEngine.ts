@@ -327,13 +327,13 @@ export class GameEngine {
         const existingIndex = this.pendingMoves.findIndex(m => m.r === row && m.c === col);
 
         if (existingIndex >= 0) {
-            // Remove (Cancel)
-            this.pendingMoves.splice(existingIndex, 1);
-            this.lastError = null; // Clear error on successful toggle
+            // Remove (and all subsequent)
+            this.pendingMoves.splice(existingIndex);
+            this.lastError = null;
+            this.emit('sfx:cancel');
         } else {
             // Try to Add
             const validation = this.validateMove(row, col);
-            console.log(`TOGGLE: (${row},${col}) Valid:${validation.valid} Reason:${validation.reason}`);
             if (validation.valid) {
                 // STRICT COST CHECK (User Requirement)
                 const player = this.state.getCurrentPlayer();

@@ -88,7 +88,7 @@ describe('GameEngine', () => {
             expect(engine.lastError).toContain('Not enough gold');
         });
 
-        it.skip('calculates cost correctly for planning', () => {
+        it('calculates cost correctly for planning', () => {
             // 20 Gold
             engine.state.players['P1'].gold = 1000;
 
@@ -304,7 +304,7 @@ describe('GameEngine', () => {
     });
 
     // Test chaining validity
-    it.skip('allows chaining moves', () => {
+    it('allows chaining moves', () => {
         engine.state.players['P1'].gold = 1000;
         engine.togglePlan(0, 1);
         engine.togglePlan(0, 2);
