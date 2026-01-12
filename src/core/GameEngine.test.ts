@@ -387,6 +387,7 @@ describe('GameEngine', () => {
 
             // P1 owns (0,1), adjacent to P2's (0,2)
             engine.state.setOwner(0, 1, 'P1');
+            engine.state.updateConnectivity('P1'); // Ensure (0,1) is marked connected!
             engine.state.players['P1'].gold = 100;
 
             // Check P2 connectivity

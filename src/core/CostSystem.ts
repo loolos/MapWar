@@ -75,17 +75,40 @@ export class CostSystem {
         baseCost = Math.floor(baseCost * multiplier);
         if (multiplier !== 1) breakdownParts.push(`x${multiplier}`);
 
-        // 4. Distance / Disconnect Penalties (Attack Only)
-        if (isAttack) {
+        // 4. Distance-Based Cost Multiplier (Attack Only)
+        // User Request: Cost multiplied by N where N is Manhattan Distance to nearest connected own cell.
+        // "Manhattan Diamond" = Manhattan Distance.
+        if (isAttack && curr) {
+            const dist = this.getDistanceToNearestConnected(state, row, col, curr);
+
+            // If dist is 1 (Adjacent), multiplier is 1.
+            // If dist is 2, multiplier is 2.
+            // If dist is Infinity (No connected land?), treat as very high or 1? 
+            // If no connected land, you shouldn't be able to attack technically, or it's infinite.
+            // But let's cap it or just use it.
+
+            if (dist > 0 && dist < Infinity) {
+                // Should we Replace the multiplier or Append?
+                // Logic: "Cost ... flipped N times" (Fan N Bei -> Multiplied by N).
+                // So baseCost = baseCost * dist.
+
+                baseCost = Math.floor(baseCost * dist);
+                if (dist > 1) {
+                    breakdownParts.push(`Distance(x${dist})`);
+                }
+            } else if (dist === Infinity) {
+                // Fallback if no connected land found (shouldn't happen in valid state)
+                baseCost = 9999;
+                breakdownParts.push(`NoConnection(MAX)`);
+            }
+
+            if (baseCost === Infinity) {
+                breakdownParts.push(`NoConnection(MAX)`);
+            }
+
             if (cell.owner && !cell.isConnected) {
                 baseCost = Math.floor(baseCost * 0.7);
                 breakdownParts.push(`Disconnected(x0.7)`);
-            }
-
-            // Distance Penalty
-            if (curr && !state.isAdjacentToOwned(row, col, curr)) {
-                baseCost = baseCost * 2;
-                breakdownParts.push(`Distance(x2)`);
             }
         }
 
@@ -93,7 +116,7 @@ export class CostSystem {
         // 5. Aura Support (Watchtower + Base)
         if (isAttack) {
             const attackerId = state.currentPlayerId;
-            const { discount } = AuraSystem.getSupportDiscount(state, row, col, attackerId);
+            const { discount } = AuraSystem.getSupportDiscount(state, row, col, attackerId!);
 
             if (discount > 0) {
                 const discountAmount = Math.floor(baseCost * discount);
@@ -103,5 +126,24 @@ export class CostSystem {
         }
 
         return { cost: Math.max(1, baseCost), breakdown: breakdownParts.join(' ') };
+    }
+
+    static getDistanceToNearestConnected(state: GameState, targetR: number, targetC: number, playerId: string): number {
+        let minDist = Infinity;
+
+        // Iterate all cells to find owned & connected ones
+        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+                const cell = state.grid[r][c];
+                if (cell.owner === playerId && cell.isConnected) {
+                    const dist = Math.abs(r - targetR) + Math.abs(c - targetC);
+                    if (dist < minDist) {
+                        minDist = dist;
+                    }
+                    if (minDist === 1) return 1;
+                }
+            }
+        }
+        return minDist;
     }
 }

@@ -38,6 +38,7 @@ describe('GameEngine - Town Mechanics', () => {
 
     it('charges 30G to capture a neutral town', () => {
         // Setup: P1 next to a Neutral Town
+        // P1 needs a base to have connectivity for distance cost
         engine.state.setOwner(0, 0, 'P1');
         engine.state.setBuilding(0, 0, 'base');
         engine.state.updateConnectivity('P1');
@@ -54,16 +55,35 @@ describe('GameEngine - Town Mechanics', () => {
 
     it('charges standard attack cost to capture enemy town', () => {
         // Setup: P1 vs P2
+        // P1 needs a Base for connectivity, but FAR AWAY to avoid Support Aura (Discount).
+        // Target is (0,1). P1 owns (0,0).
+        // Place P1 Base at (5,0). 
+        engine.state.setOwner(5, 0, 'P1');
+        engine.state.setBuilding(5, 0, 'base');
+        engine.state.setOwner(4, 0, 'P1');
+        engine.state.setOwner(3, 0, 'P1');
+        engine.state.setOwner(2, 0, 'P1');
+        engine.state.setOwner(1, 0, 'P1');
         engine.state.setOwner(0, 0, 'P1');
+
         engine.state.updateConnectivity('P1');
 
         // Place P2 Town at (0,1)
         engine.state.setOwner(0, 1, 'P2');
         engine.state.setBuilding(0, 1, 'town');
 
-        // Ensure P2 Town is connected to a base to avoid 30% discount
+        // Ensure P2 Town is connected to a base to avoid 30% discount?
+        // Wait, "Disconnected 30% attack discount"?? The rule is "Disconnected DEFENDER takes 30% LESS value" or similar?
+        // Or "Disconnected ATTACKER pays more"?
+        // CostSystem: if owner && !connected -> baseCost * 0.7. (Easier to take disconnected land).
+        // So we want P2 Town to be Connected.
+        // Connect to Base far away to avoid Support Aura from Base.
+        engine.state.setOwner(0, 4, 'P2');
+        engine.state.setBuilding(0, 4, 'base');
+        engine.state.setOwner(0, 3, 'P2');
         engine.state.setOwner(0, 2, 'P2');
-        engine.state.setBuilding(0, 2, 'base');
+        // (0,1) is the town.
+
         engine.state.updateConnectivity('P2');
 
         engine.state.currentPlayerId = 'P1'; // Ensure P1

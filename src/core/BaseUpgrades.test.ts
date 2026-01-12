@@ -32,7 +32,16 @@ describe('Base Upgrades', () => {
         // const baseAttackCost = Math.floor(GameConfig.COST_ATTACK * GameConfig.COST_MULTIPLIER_ATTACK); // 24
 
         // Need to set P2 adjacent
-        engine.state.setOwner(0, 1, 'P2');
+        // P2 needs a base to be "Connected" for distance calculations.
+        // Place Base FAR AWAY to avoid "Support Aura" (Discount).
+        // Base at (0, 4). Range default is 2. (0,0) is dist 4. Safe.
+        // Chain: (0,1), (0,2), (0,3), (0,4)
+        engine.state.setOwner(0, 4, 'P2');
+        engine.state.setBuilding(0, 4, 'base');
+        engine.state.setOwner(0, 3, 'P2');
+        engine.state.setOwner(0, 2, 'P2');
+        engine.state.setOwner(0, 1, 'P2'); // Adjacent to target (0,0)
+
         engine.state.updateConnectivity('P2');
         engine.state.currentPlayerId = 'P2';
 
@@ -142,7 +151,14 @@ describe('Base Upgrades', () => {
     it('UPGRADE_DEFENSE stacks amounts', () => {
         // Setup P2 as attacker
         engine.state.players['P2'].gold = 1000;
+        // P2 needs connected land for distance cost to be valid (not Infinity)
+        // Avoid Support Aura by placing Base far away
+        engine.state.setOwner(0, 4, 'P2');
+        engine.state.setBuilding(0, 4, 'base');
+        engine.state.setOwner(0, 3, 'P2');
+        engine.state.setOwner(0, 2, 'P2');
         engine.state.setOwner(0, 1, 'P2');
+
         engine.state.updateConnectivity('P2');
         engine.state.currentPlayerId = 'P2';
 
@@ -207,7 +223,13 @@ describe('Base Upgrades', () => {
 
         // Verify Defense Cost (Lv 1 is +30 pre-multiplier)
         // P2 perspective
+        // P2 needs connected land, far from target (0,0)
+        engine.state.setOwner(0, 4, 'P2');
+        engine.state.setBuilding(0, 4, 'base');
+        engine.state.setOwner(0, 3, 'P2');
+        engine.state.setOwner(0, 2, 'P2');
         engine.state.setOwner(0, 1, 'P2');
+
         engine.state.updateConnectivity('P2');
         engine.state.currentPlayerId = 'P2';
 
