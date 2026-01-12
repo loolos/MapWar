@@ -14,7 +14,11 @@ description: Verify code correctness, fix errors, and push to repository.
         -   Rerun Step 1.
     -   Continue this loop until `npm run check` and `npm run build` pass successfully.
 
-3.  **Commit and Push**:
+3.  **Cleanup**:
+    -   Run `del *.txt` to remove temporary debug output files.
+    -   (Optional) Add other cleanup commands if needed (e.g., `del *.log`).
+
+4.  **Commit and Push**:
     -   Run `git status` to review changes.
     -   Run `git add .` to stage all changes.
     -   Run `git commit -m "Auto-upload: Verified and Fixed"` (or a more descriptive message if you can generate one based on the changes).
