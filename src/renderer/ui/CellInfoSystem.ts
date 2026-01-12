@@ -217,6 +217,17 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
                 // Ensure text wraps properly in layout
                 let desc = this.generateDescription(cell);
 
+                // Add Income Info (New Feature)
+                // Only if owned? Or potential income?
+                // Request said "income info of each block".
+                // If I click enemy block, I want to know its income? Yes.
+                const income = engine.getTileIncome(selectedRow, selectedCol);
+                if (income > 0) {
+                    let incomeStr = `+${income}`;
+                    if (cell.owner && !cell.isConnected) incomeStr += " (Disc.)";
+                    desc += `\nIncome: ${incomeStr} G`;
+                }
+
                 const breakdown = costDetails.breakdown;
                 if (breakdown) {
                     desc += `\n\n[Cost Logic]\n${breakdown}`;

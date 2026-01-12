@@ -413,6 +413,42 @@ export class GameState {
         });
     }
 
+    // Helper for UI to query income of a specific tile
+    public getTileIncome(r: number, c: number): number {
+        const cell = this.getCell(r, c);
+        if (!cell || !cell.owner) return 0;
+
+        let income = 0;
+
+        if (cell.building === 'town') {
+            income = cell.townIncome;
+        } else if (cell.building === 'gold_mine') {
+            income = GameConfig.GOLD_MINE_INCOME;
+        } else if (cell.type !== 'bridge') {
+            income = GameConfig.GOLD_PER_LAND;
+            if (!cell.isConnected) {
+                income *= 0.5;
+            }
+        }
+
+        // Add Base Upgrades if applicable
+        if (cell.building === 'base') {
+            income += this.getSingleBaseUpgradeBonus(cell);
+        }
+
+        return income;
+    }
+
+    private getSingleBaseUpgradeBonus(cell: Cell): number {
+        let bonus = 0;
+        if (cell.incomeLevel > 0) {
+            for (let i = 0; i < cell.incomeLevel; i++) {
+                bonus += GameConfig.UPGRADE_INCOME_BONUS[i];
+            }
+        }
+        return bonus;
+    }
+
     deserialize(json: string) {
         const data = JSON.parse(json);
         this.players = data.players;

@@ -447,7 +447,12 @@ describe('GameEngine', () => {
             // P2 cuts the line at (0,1)
             // We simulate P2 playing.
             engine.state.currentPlayerId = 'P2';
-            engine.state.players['P2'].gold = 100;
+            engine.state.players['P2'].gold = 9999;
+            // P2 needs land for distance calculation, otherwise cost is Infinite
+            engine.state.setOwner(1, 1, 'P2');
+            engine.state.setBuilding(1, 1, 'base');
+            engine.state.updateConnectivity('P2');
+
             // P2 takes (0,1)
             engine.pendingMoves = [{ r: 0, c: 1 }]; // Manually set pending for P2
 
@@ -575,6 +580,8 @@ describe('GameEngine', () => {
 
             // P1 adjacent to P2 Base
             engine.state.setOwner(1, 0, 'P1');
+            engine.state.setBuilding(1, 0, 'base'); // Needs base for connection
+            engine.state.updateConnectivity('P1');
             engine.state.players['P1'].gold = 1000;
 
             // P1 captures P2 Base

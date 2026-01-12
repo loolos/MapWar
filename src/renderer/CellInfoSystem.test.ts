@@ -136,6 +136,7 @@ describe('CellInfoSystem', () => {
             pendingInteractions: [],
             getCostDetails: (_r: number, _c: number) => ({ cost: 10, breakdown: 'Test Breakdown' }),
             getMoveCost: (_r: number, _c: number) => 10,
+            getTileIncome: (_r: number, _c: number) => 0,
             interactionRegistry: { getAvailableActions: () => [] }
         } as unknown as GameEngine;
     });

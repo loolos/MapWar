@@ -322,18 +322,28 @@ export class GameEngine {
             // Try to Add
             const validation = this.validateMove(row, col);
             if (validation.valid) {
-                this.pendingMoves.push({ r: row, c: col });
-                this.lastError = null;
-                this.emit('sfx:select');
+                // STRICT COST CHECK (User Requirement)
+                const player = this.state.getCurrentPlayer();
+                const currentPlanCost = this.calculatePlannedCost();
+                const moveCost = this.getMoveCost(row, col);
 
-                // Optional: Log cost breakdown even on success if it's an attack?
-                // User asked: "if clicking an enemy cell to attack... also log price"
-                const cell = this.state.getCell(row, col);
-                if (cell && cell.owner && cell.owner !== this.state.currentPlayerId) {
-                    const details = this.getCostDetails(row, col);
-                    this.emit('logMessage', { text: `Attack Plan: ${details.breakdown} = ${details.cost}G` });
+                if (player.gold < currentPlanCost + moveCost) {
+                    this.lastError = `Insufficient funds (Need ${moveCost} G)`;
+                    this.emit('sfx:cancel');
+                    // Do NOT add to pendingMoves
+                } else {
+                    this.pendingMoves.push({ r: row, c: col });
+                    this.lastError = null;
+                    this.emit('sfx:select');
+
+                    // Optional: Log cost breakdown even on success if it's an attack?
+                    // User asked: "if clicking an enemy cell to attack... also log price"
+                    const cell = this.state.getCell(row, col);
+                    if (cell && cell.owner && cell.owner !== this.state.currentPlayerId) {
+                        const details = this.getCostDetails(row, col);
+                        this.emit('logMessage', { text: `Attack Plan: ${details.breakdown} = ${details.cost}G` });
+                    }
                 }
-
             } else {
                 this.lastError = validation.reason || "Invalid move";
             }
@@ -499,6 +509,11 @@ export class GameEngine {
         return CostSystem.getCostDetails(this.state, row, col);
     }
 
+    // New: Expose Tile Income
+    getTileIncome(row: number, col: number): number {
+        return this.state.getTileIncome(row, col);
+    }
+
     validateMove(row: number, col: number): { valid: boolean, reason?: string } {
         const playerId = this.state.currentPlayerId;
         if (!playerId) return { valid: false, reason: "No active player" };
@@ -586,6 +601,17 @@ export class GameEngine {
 
             if (!cell) continue; // Safety Check
 
+            const player = this.state.players[pid];
+            if (player.gold < cost) {
+                this.emit('logMessage', { text: `Insufficient funds for move at (${move.r}, ${move.c})`, type: 'warning' });
+                // We should probably stop execution here to prevent partial invalid state
+                // Or continue? If we continue, we skip this move.
+                // But later moves might depend on this one.
+                // Pruning should have happened before. If we are here, something is wrong.
+                // Safest: Abort remaining moves.
+                break;
+            }
+
             // Win Condition Check: Capture Enemy Base
             if (cell.building === 'base' && cell.owner !== pid) {
                 // ELIMINATION LOGIC
@@ -664,6 +690,8 @@ export class GameEngine {
                 }
             }
 
+            // Deduct cost immediately to prevent overspending in subsequent iterations
+            this.stateManager.spendGold(pid, cost);
             totalCost += cost;
         }
 
@@ -679,12 +707,19 @@ export class GameEngine {
         interactionsToRun.forEach(interaction => {
             const action = this.interactionRegistry.get(interaction.actionId);
             if (action) {
-                // Re-validate cost (Should be covered by loop check but safe to double check?)
-                // Re-validate availability
+                // Check Availability
                 if (action.isAvailable(this, interaction.r, interaction.c)) {
-                    action.execute(this, interaction.r, interaction.c);
                     const c = typeof action.cost === 'function' ? action.cost(this, interaction.r, interaction.c) : action.cost;
-                    totalCost += c;
+
+                    // Check Gold
+                    const player = this.state.players[pid];
+                    if (player.gold >= c) {
+                        action.execute(this, interaction.r, interaction.c);
+                        this.stateManager.spendGold(pid, c); // Deduct immediately
+                        totalCost += c;
+                    } else {
+                        this.emit('logMessage', { text: `Insufficient funds for interaction ${interaction.actionId}`, type: 'warning' });
+                    }
                 } else {
                     console.warn(`Interaction ${interaction.actionId} failed validation at commit`);
                 }
@@ -706,7 +741,8 @@ export class GameEngine {
         }
 
         if (totalCost > 0) {
-            this.stateManager.spendGold(pid, totalCost);
+            // Already spent incrementally.
+            // this.stateManager.spendGold(pid, totalCost);
 
             // Update Connectivity for ALL players
             // Check for enclaves for ALL players

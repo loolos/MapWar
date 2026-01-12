@@ -185,7 +185,9 @@ describe('GameEngine - Town Mechanics', () => {
 
         // P1 Captures
         engine.state.setOwner(0, 0, 'P1');
-        engine.state.players['P1'].gold = 100;
+        engine.state.setBuilding(0, 0, 'base');
+        engine.state.updateConnectivity('P1');
+        engine.state.players['P1'].gold = 9999;
         engine.pendingMoves = [{ r: 0, c: 1 }];
 
         engine.commitMoves();
