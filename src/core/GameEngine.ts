@@ -277,8 +277,12 @@ export class GameEngine {
         const player = this.state.getCurrentPlayer();
         const currentCost = this.calculatePlannedCost();
         if (player.gold < currentCost + cost) {
-            console.log(`[PlanInteraction] Not enough gold. Gold: ${player.gold}, Cost: ${currentCost + cost}`);
             this.lastError = `Not enough gold for ${label}`;
+            // Error Log (Red)
+            this.emit('logMessage', {
+                text: `Insufficient Funds: Need ${currentCost + cost}G (Have ${player.gold}G) for ${label}.`,
+                type: 'error'
+            });
             this.emit('planUpdate');
             return;
         }
@@ -338,29 +342,14 @@ export class GameEngine {
             // Try to Add (Pass isAction = true)
             const validation = this.validateMove(row, col, true);
             if (validation.valid) {
-                // Double-check cost (redundant but safe)
-                const player = this.state.getCurrentPlayer();
-                const currentPlanCost = this.calculatePlannedCost();
-                const moveCost = this.getMoveCost(row, col);
-
-                if (player.gold < currentPlanCost + moveCost) {
-                    // This branch should theoretically not be reached if validation already checked cost
-                    // But if it is reachable, we should also log.
-                    this.lastError = `Insufficient funds (Need ${moveCost} G)`;
-                    this.emit('sfx:cancel');
-                    // Warning Log (Red)
-                    const details = this.getCostDetails(row, col);
-                    this.emit('logMessage', { text: `Cannot select: Insufficient Funds! Need ${currentPlanCost + moveCost}G (Have ${player.gold}G). ${details.breakdown}`, type: 'error' });
-                } else {
-                    this.pendingMoves.push({ r: row, c: col });
-                    this.lastError = null;
-                    this.emit('sfx:select');
-                    // ... reminders ...
-                    // Reminder Log (Yellow) - Distance Multiplier
-                    const details = this.getCostDetails(row, col);
-                    if (details.breakdown.includes('Distance')) {
-                        this.emit('logMessage', { text: `Reminder: Distance Multiplier Active! Cost is higher due to distance.`, type: 'warning' });
-                    }
+                this.pendingMoves.push({ r: row, c: col });
+                this.lastError = null;
+                this.emit('sfx:select');
+                // ... reminders ...
+                // Reminder Log (Yellow) - Distance Multiplier
+                const details = this.getCostDetails(row, col);
+                if (details.breakdown.includes('Distance')) {
+                    this.emit('logMessage', { text: `Reminder: Distance Multiplier Active! Cost is higher due to distance.`, type: 'warning' });
                 }
             } else {
                 this.lastError = validation.reason || "Invalid move";
@@ -593,6 +582,7 @@ export class GameEngine {
             if (isAction && !player.isAI) {
                 const details = this.getCostDetails(row, col);
                 const logMsg = `Insufficient Funds: Need ${plannedCost + thisMoveCost}G (Have ${player.gold}G). \nCost Logic: ${details.breakdown || 'Base Cost'}`;
+                console.error("GameEngine Log:", logMsg); // Debug for User
                 this.emit('logMessage', { text: logMsg, type: 'error' });
             }
 
