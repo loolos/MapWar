@@ -348,6 +348,78 @@ export class MainScene extends Phaser.Scene {
         this.createCastleTexture(1);
         this.createCastleTexture(2);
         this.createCastleTexture(3);
+
+        // Create Farm Textures
+        this.createFarmTexture(1);
+        this.createFarmTexture(2);
+        this.createFarmTexture(3);
+    }
+
+    private createFarmTexture(level: number) {
+        const key = `farm_lv${level}`;
+        if (this.textures.exists(key)) return;
+
+        const gfx = this.make.graphics({ x: 0, y: 0 });
+
+        // Base Crop Color (Wheat/Gold)
+        const cropColor = 0xFFD700;
+        const cropDark = 0xDAA520; // GoldenRod
+
+        // Padding
+        const pad = 8;
+        const availableWidth = 64 - (pad * 2);
+
+        // Draw randomly based on level to create "mottled" look
+        // We use a pseudo-random approach or fixed patterns to ensure consistency if re-generated
+        // But here we generate once.
+
+        if (level === 1) {
+            // Level 1: Clean, organized large patches (Not very mottled)
+            // 4 Large patches
+            gfx.fillStyle(cropColor);
+            const size = availableWidth / 2 - 2;
+            gfx.fillRect(pad, pad, size, size);
+            gfx.fillRect(pad + size + 4, pad, size, size);
+            gfx.fillRect(pad, pad + size + 4, size, size);
+            gfx.fillRect(pad + size + 4, pad + size + 4, size, size);
+        } else if (level === 2) {
+            // Level 2: Smaller patches, slightly irregular (Start of mottling)
+            // Grid of 3x3 but with some variation
+            const size = availableWidth / 3 - 2;
+            for (let r = 0; r < 3; r++) {
+                for (let c = 0; c < 3; c++) {
+                    // Random color variation
+                    gfx.fillStyle(Math.random() > 0.5 ? cropColor : cropDark);
+                    const ox = pad + c * (size + 2);
+                    const oy = pad + r * (size + 2);
+                    // Slight random offset
+                    const rox = (Math.random() - 0.5) * 2;
+                    const roy = (Math.random() - 0.5) * 2;
+                    gfx.fillRect(ox + rox, oy + roy, size, size);
+                }
+            }
+        } else {
+            // Level 3: Highly Mottled (Many small specks/patches)
+            const count = 30;
+            const size = 6;
+
+            for (let i = 0; i < count; i++) {
+                gfx.fillStyle(Math.random() > 0.3 ? cropColor : cropDark);
+
+                const x = pad + Math.random() * (availableWidth - size);
+                const y = pad + Math.random() * (availableWidth - size);
+
+                gfx.fillRect(x, y, size, size);
+            }
+        }
+
+        // Add an Icon/Symbol overlay? No, the user asked for "mottled" look.
+        // Maybe a minimal border?
+        // gfx.lineStyle(1, 0x000000, 0.2);
+        // gfx.strokeRect(pad, pad, availableWidth, availableWidth);
+
+        gfx.generateTexture(key, 64, 64);
+        gfx.destroy();
     }
 
     private createCastleTexture(level: number) {
@@ -1066,6 +1138,15 @@ export class MainScene extends Phaser.Scene {
                     }
                     const townText = this.add.text(x + this.tileSize / 2, y + this.tileSize / 2, icon, { fontSize: size }).setOrigin(0.5);
                     this.mapContainer.add(townText);
+                } else if (cell.building === 'farm') {
+                    // Farm Visuals
+                    const level = cell.farmLevel || 1;
+                    const key = `farm_lv${level}`;
+
+                    const farmSprite = this.add.image(x + this.tileSize / 2, y + this.tileSize / 2, key);
+                    farmSprite.setDisplaySize(this.tileSize, this.tileSize);
+                    this.mapContainer.add(farmSprite);
+
                 } else if (cell.building === 'wall') {
                     // Wall Visuals: Pseudo-3D Height
                     const level = cell.defenseLevel || 1;

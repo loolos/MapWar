@@ -7,7 +7,7 @@ export class Cell {
     col: number;
     owner: PlayerID;
     unit: any | null; // Placeholder for Unit class
-    building: 'base' | 'town' | 'gold_mine' | 'wall' | 'none';
+    building: 'base' | 'town' | 'gold_mine' | 'wall' | 'farm' | 'none';
     isConnected: boolean;
     type: CellType;
 
@@ -21,6 +21,9 @@ export class Cell {
 
     // Watchtower State
     watchtowerLevel: number; // 0 = none
+
+    // Farm State
+    farmLevel: number; // 0 = none
 
     constructor(row: number, col: number) {
         this.row = row;
@@ -37,6 +40,7 @@ export class Cell {
         this.defenseLevel = 0;
         this.incomeLevel = 0;
         this.watchtowerLevel = 0;
+        this.farmLevel = 0;
     }
 
     isOwnedBy(playerId: PlayerID): boolean {
@@ -55,7 +59,8 @@ export class Cell {
             townTurnCount: this.townTurnCount,
             defenseLevel: this.defenseLevel,
             incomeLevel: this.incomeLevel,
-            watchtowerLevel: this.watchtowerLevel
+            watchtowerLevel: this.watchtowerLevel,
+            farmLevel: this.farmLevel
         };
     }
 
@@ -70,6 +75,7 @@ export class Cell {
         cell.defenseLevel = data.defenseLevel || 0;
         cell.incomeLevel = data.incomeLevel || 0;
         cell.watchtowerLevel = data.watchtowerLevel || 0;
+        cell.farmLevel = data.farmLevel || 0;
         return cell;
     }
 }

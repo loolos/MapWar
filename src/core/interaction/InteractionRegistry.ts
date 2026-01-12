@@ -1,5 +1,6 @@
-import { GameConfig } from '../GameConfig';
 import { GameEngine } from '../GameEngine';
+import { GameConfig } from '../GameConfig';
+import { AuraSystem } from '../AuraSystem';
 import type { InteractionDefinition } from './InteractionTypes';
 
 export class InteractionRegistry {
@@ -232,6 +233,54 @@ export class InteractionRegistry {
             immediate: true,
             execute: (engine: GameEngine, r: number, c: number) => {
                 engine.togglePlan(r, c);
+            }
+        });
+
+        // 8. Build Farm
+        this.register({
+            id: 'BUILD_FARM',
+            label: 'Build Farm',
+            description: 'Build a Farm to increase income (Requires Income Aura).',
+            cost: GameConfig.COST_BUILD_FARM,
+            isAvailable: (engine, r, c) => {
+                const cell = engine.state.getCell(r, c);
+                const pid = engine.state.currentPlayerId;
+                // Owned, Plain, Connected, No Building
+                if (cell && pid && cell.owner === pid && cell.type === 'plain' && cell.building === 'none' && cell.isConnected) {
+                    // Must be in Income Aura
+                    return AuraSystem.isInIncomeAura(engine.state, r, c, pid);
+                }
+                return false;
+            },
+            execute: (engine, r, c) => {
+                const cell = engine.state.getCell(r, c);
+                if (cell) {
+                    cell.building = 'farm';
+                    cell.farmLevel = 1;
+                    engine.emit('logMessage', { text: `Farm built at (${r},${c})`, type: 'info' });
+                }
+            }
+        });
+
+        // 9. Upgrade Farm
+        this.register({
+            id: 'UPGRADE_FARM',
+            label: 'Upgrade Farm',
+            description: 'Upgrade Farm to increase income.',
+            cost: GameConfig.COST_UPGRADE_FARM,
+            isAvailable: (engine, r, c) => {
+                const cell = engine.state.getCell(r, c);
+                const pid = engine.state.currentPlayerId;
+                // Owned, Farm, Not Max Level
+                return !!(cell && pid && cell.owner === pid && cell.building === 'farm' && cell.farmLevel < GameConfig.FARM_MAX_LEVEL);
+            },
+            execute: (engine, r, c) => {
+                const cell = engine.state.getCell(r, c);
+                if (cell) {
+                    cell.farmLevel++;
+                    const inc = GameConfig.FARM_INCOME[cell.farmLevel];
+                    engine.emit('logMessage', { text: `Farm upgraded to Lv ${cell.farmLevel} (+${inc}G)`, type: 'info' });
+                }
             }
         });
     }

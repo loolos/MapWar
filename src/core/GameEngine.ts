@@ -658,6 +658,16 @@ export class GameEngine {
                 cell.townTurnCount = 0;
             }
 
+            // Farm Destruction Logic
+            // If captured by enemy, destroy farm (revert to plain)
+            // Note: If capturing from Neutral, maybe keep it? But Farms are usually built by players.
+            // Requirement: "如果被敌军占领则毁掉变会空地平原" (If occupied by enemy, destroyed to plain)
+            if (cell.building === 'farm' && cell.owner && cell.owner !== pid) {
+                cell.building = 'none';
+                cell.farmLevel = 0;
+                this.emit('logMessage', { text: `Farm at (${move.r}, ${move.c}) destroyed!`, type: 'combat' });
+            }
+
             // Transformation: Water -> Bridge
             if (cell && cell.type === 'water') {
                 cell.type = 'bridge';
