@@ -130,8 +130,8 @@ describe('GameEngine - Town Mechanics', () => {
 
         // Test income
         const report = engine.state.accrueResources('P1')!;
-        // Base 10 + Town 1 = 11.
-        expect(report.total).toBe(11);
+        // Base 0 (No Base) + Town 1 = 1.
+        expect(report.total).toBe(1);
     });
 
     it('grows income by 1 every 2 turns', () => {

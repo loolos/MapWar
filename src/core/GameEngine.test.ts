@@ -134,9 +134,9 @@ describe('GameEngine', () => {
             // Now check cost of (0,2)
             // (0,2) is adjacent to (0,1) [Pending], but NOT (0,0) [Owned].
             const cost = engine.getMoveCost(0, 2);
-            // Expect 39 (Cost 48 discounted by Aura 20% -> 38.4 -> 39 ceil?)
-            // Expect 39 (Cost 48 discounted by Aura 20% -> 38.4 -> 39 ceil?)
-            expect(cost).toBe(39);
+            // Expect 20 (Cost 24 discounted by Aura 20% -> 19.2 -> 20 ceil? No, floor discount.)
+            // Base 20 * 1.2 = 24. Dist 1 = 24. Discount 20% = 4. 24-4 = 20.
+            expect(cost).toBe(20);
         });
 
         it('charges 48G for base attack', () => {
@@ -344,15 +344,14 @@ describe('GameEngine', () => {
 
             // Calculation:
             // Base: 10
-            // Land (0,0): Connected = 1
+            // Land (0,0): Base Tile = 0 Land Income
             // Land (5,5): Disconnected = 0.5
-            // Total = 11.5 -> floor(11.5) = 11
+            // Total = 10.5 -> floor(10.5) = 10
 
-            expect(report.total).toBe(11);
+            expect(report.total).toBe(10);
             // Land income calculation:
-            // Total (11) - Base (10) = 1.
-            // Theoretical unfloored land was 1.5. But we only report realized gains which matches the math.
-            expect(report.land).toBe(1);
+            // Total (10) - Base (10) = 0.
+            expect(report.land).toBe(0);
         });
 
     });
@@ -503,9 +502,9 @@ describe('GameEngine', () => {
 
             // Check income report
             const report = engine.state.accrueResources('P1')!;
-            // Base: 10. Land (0,0): 1. Bridge: 0. Total: 11.
-            expect(report.total).toBe(11);
-            expect(report.land).toBe(1); // Only count (0,0) logic for income? 
+            // Base: 10. Land (0,0) is Base (0 land income). Bridge: 0. Total: 10.
+            expect(report.total).toBe(10);
+            expect(report.land).toBe(0); // Base tile provides Base Income, not Land Income.
             // In accrueResources, landCount counts owned cells.
             // But logic says: if type !== bridge, add income.
             // The test should verify income amount.

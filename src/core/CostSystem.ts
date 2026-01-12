@@ -3,11 +3,11 @@ import { GameState } from './GameState';
 import { AuraSystem } from './AuraSystem';
 
 export class CostSystem {
-    static getMoveCost(state: GameState, row: number, col: number): number {
-        return this.getCostDetails(state, row, col).cost;
+    static getMoveCost(state: GameState, row: number, col: number, pendingMoves: { r: number, c: number }[] = []): number {
+        return this.getCostDetails(state, row, col, pendingMoves).cost;
     }
 
-    static getCostDetails(state: GameState, row: number, col: number): { cost: number, breakdown: string } {
+    static getCostDetails(state: GameState, row: number, col: number, pendingMoves: { r: number, c: number }[] = []): { cost: number, breakdown: string } {
         const cell = state.getCell(row, col);
         if (!cell) return { cost: 0, breakdown: '' };
 
@@ -79,7 +79,7 @@ export class CostSystem {
         // User Request: Cost multiplied by N where N is Manhattan Distance to nearest connected own cell.
         // "Manhattan Diamond" = Manhattan Distance.
         if (isAttack && curr) {
-            const dist = this.getDistanceToNearestConnected(state, row, col, curr);
+            const dist = this.getDistanceToNearestConnected(state, row, col, curr, pendingMoves);
 
             // If dist is 1 (Adjacent), multiplier is 1.
             // If dist is 2, multiplier is 2.
@@ -128,7 +128,7 @@ export class CostSystem {
         return { cost: Math.max(1, baseCost), breakdown: breakdownParts.join(' ') };
     }
 
-    static getDistanceToNearestConnected(state: GameState, targetR: number, targetC: number, playerId: string): number {
+    static getDistanceToNearestConnected(state: GameState, targetR: number, targetC: number, playerId: string, pendingMoves: { r: number, c: number }[] = []): number {
         let minDist = Infinity;
 
         // Iterate all cells to find owned & connected ones
@@ -140,10 +140,20 @@ export class CostSystem {
                     if (dist < minDist) {
                         minDist = dist;
                     }
-                    if (minDist === 1) return 1;
                 }
             }
         }
+
+        // Also check Pending Moves (treat as connected sources with dist 0 relative to themselves)
+        // Effectively, if target is adjacent to a pending move, dist should be 1.
+        for (const pm of pendingMoves) {
+            const dist = Math.abs(pm.r - targetR) + Math.abs(pm.c - targetC);
+            if (dist < minDist) {
+                minDist = dist;
+            }
+        }
+
+        if (minDist === 1) return 1;
         return minDist;
     }
 

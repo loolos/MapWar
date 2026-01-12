@@ -1170,27 +1170,41 @@ export class MainScene extends Phaser.Scene {
         }
 
 
-        // 4. AURA RANGE INDICATOR (Base & Watchtower)
+        // 4. AURA RANGE INDICATORS
         if (this.selectedRow !== null && this.selectedCol !== null) {
             const selectedCell = grid[this.selectedRow][this.selectedCol];
-            const auraRange = AuraSystem.getAuraRange(selectedCell);
+            const supportRange = AuraSystem.getAuraRange(selectedCell);
+            const incomeRange = AuraSystem.getIncomeAuraRange(selectedCell);
 
-            if (auraRange > 0) {
-                // Determine Color based on Source
-                let color = 0x00FFFF; // Cyan (Watchtower default)
-                if (selectedCell.building === 'base') {
-                    color = 0xFF8800; // Orange for Base
+            // 4a. Support Aura (Cyan/White)
+            if (supportRange > 0) {
+                const color = 0x00FFFF; // Cyan for support
+                this.highlightGraphics.lineStyle(2, color, 0.6);
+                this.highlightGraphics.fillStyle(color, 0.15);
+
+                for (let r = 0; r < totalHeight; r++) {
+                    for (let c = 0; c < totalWidth; c++) {
+                        const dist = Math.abs(r - this.selectedRow) + Math.abs(c - this.selectedCol);
+                        if (dist <= supportRange && dist > 0) {
+                            const tx = c * this.tileSize;
+                            const ty = r * this.tileSize;
+                            this.highlightGraphics.strokeRect(tx + 2, ty + 2, this.tileSize - 4, this.tileSize - 4);
+                            this.highlightGraphics.fillRect(tx + 2, ty + 2, this.tileSize - 4, this.tileSize - 4);
+                        }
+                    }
                 }
+            }
 
+            // 4b. Income Aura (Orange)
+            if (incomeRange > 0) {
+                const color = 0xFF8800; // Orange for income
                 this.highlightGraphics.lineStyle(4, color, 0.8);
                 this.highlightGraphics.fillStyle(color, 0.3);
 
-                // Iterate grid to find in-range tiles
                 for (let r = 0; r < totalHeight; r++) {
                     for (let c = 0; c < totalWidth; c++) {
-                        // Manhattan Distance (Rhombus)
                         const dist = Math.abs(r - this.selectedRow) + Math.abs(c - this.selectedCol);
-                        if (dist <= auraRange && dist > 0) {
+                        if (dist <= incomeRange && dist > 0) {
                             const tx = c * this.tileSize;
                             const ty = r * this.tileSize;
                             this.highlightGraphics.strokeRect(tx, ty, this.tileSize, this.tileSize);

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GameEngine } from '../../core/GameEngine';
+import { AuraSystem } from '../../core/AuraSystem';
 
 export class CellInfoSystem extends Phaser.GameObjects.Container {
     bgGraphics: Phaser.GameObjects.Graphics;
@@ -233,8 +234,14 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
                 // If I click enemy block, I want to know its income? Yes.
                 const income = engine.getTileIncome(selectedRow, selectedCol);
                 if (income > 0) {
-                    let incomeStr = `+${income}`;
+                    let incomeStr = `+${income.toFixed(1)}`;
                     if (cell.owner && !cell.isConnected) incomeStr += " (Disc.)";
+
+                    // Check for Aura Bonus (using raw state for logic check)
+                    if (cell.owner && AuraSystem.isInIncomeAura(engine.state, selectedRow, selectedCol, cell.owner)) {
+                        incomeStr += " (Aura +50%)";
+                    }
+
                     desc += `\nIncome: ${incomeStr} G`;
                 }
 

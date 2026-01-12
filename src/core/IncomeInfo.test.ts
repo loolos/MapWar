@@ -38,18 +38,19 @@ describe('Income Info Logic', () => {
         base.incomeLevel = 0;
 
         let income = engine.getTileIncome(0, 0);
-        expect(income).toBe(0 + GameConfig.GOLD_PER_LAND); // Base counts as land? Accrue logic counts it.
+        // Base income is now 10 (GOLD_PER_TURN_BASE) replacing land income
+        expect(income).toBe(GameConfig.GOLD_PER_TURN_BASE);
 
         // Level 1 Upgrade (+1)
         base.incomeLevel = 1;
         income = engine.getTileIncome(0, 0);
-        // Bonus for Lv1 is UPGRADE_INCOME_BONUS[0] = 1
-        expect(income).toBe(GameConfig.GOLD_PER_LAND + 1);
+        // Bonus for Lv1 is UPGRADE_INCOME_BONUS[0] = 1. Total = 10 + 1 = 11.
+        expect(income).toBe(GameConfig.GOLD_PER_TURN_BASE + 1);
 
         // Level 2 (+1 + 2 = +3)
         base.incomeLevel = 2;
         income = engine.getTileIncome(0, 0);
-        expect(income).toBe(GameConfig.GOLD_PER_LAND + 1 + 2);
+        expect(income).toBe(GameConfig.GOLD_PER_TURN_BASE + 1 + 2);
     });
 
     it('returns 0 for disconnected tiles', () => {

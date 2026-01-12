@@ -122,4 +122,34 @@ describe('AuraSystem Logic', () => {
         const outRange = AuraSystem.getSupportDiscount(engine.state, 0, 0, 'P1');
         expect(outRange.discount).toBe(0);
     });
+
+    it('calculates income aura range based on income level', () => {
+        engine.state.setOwner(0, 0, 'P1');
+        engine.state.setBuilding(0, 0, 'base');
+        const base = engine.state.getCell(0, 0)!;
+
+        // Lv 0: Range 0
+        expect(AuraSystem.getIncomeAuraRange(base)).toBe(0);
+
+        // Lv 3: Range 3
+        base.incomeLevel = 3;
+        expect(AuraSystem.getIncomeAuraRange(base)).toBe(3);
+
+        engine.state.setBuilding(0, 0, 'wall');
+        expect(AuraSystem.getIncomeAuraRange(base)).toBe(0);
+    });
+
+    it('verifies isInIncomeAura logic', () => {
+        engine.state.setOwner(0, 0, 'P1');
+        engine.state.setBuilding(0, 0, 'base');
+        const base = engine.state.getCell(0, 0)!;
+        base.incomeLevel = 1; // Range 1
+
+        // (0,1) is Dist 1 -> In Range
+        expect(AuraSystem.isInIncomeAura(engine.state, 0, 1, 'P1')).toBe(true);
+        // (1,1) is Dist 2 -> Out of Range 1
+        expect(AuraSystem.isInIncomeAura(engine.state, 1, 1, 'P1')).toBe(false);
+        // (0,0) is Source -> Should return false (dist > 0)
+        expect(AuraSystem.isInIncomeAura(engine.state, 0, 0, 'P1')).toBe(false);
+    });
 });

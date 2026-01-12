@@ -1,6 +1,7 @@
 import { Cell } from './Cell';
 import { GameConfig, type Player, type PlayerID } from './GameConfig';
 import { MapGenerator, type MapType } from './map/MapGenerator';
+import { AuraSystem } from './AuraSystem';
 
 export class GameState {
     grid: Cell[][];
@@ -228,16 +229,28 @@ export class GameState {
         this.updateConnectivity(playerId);
 
         // Single Source of Truth for Income
-        const totalIncome = this.calculateIncome(playerId);
+        // const totalIncome = this.calculateIncome(playerId); // Not needed anymore
 
         let landCount = 0;
         const depletedMines: { r: number, c: number }[] = [];
 
-        // Iterate for side effects ONLY (Town Growth, Mine Depletion)
+        // Explicitly calculate breakdown
+        let calculatedBaseIncome = 0;
+        let calculatedLandIncome = 0;
+
+        // Iterate for side effects AND income breakdown
         for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
             for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
                 const cell = this.grid[r][c];
                 if (cell.owner === playerId) {
+                    const inc = this.getTileIncome(r, c); // Reuse logic
+
+                    if (cell.building === 'base') {
+                        calculatedBaseIncome += inc;
+                    } else {
+                        calculatedLandIncome += inc;
+                    }
+
                     if (cell.building === 'town') {
                         // Town Growth Logic (Side Effect)
                         cell.townTurnCount++;
@@ -262,16 +275,20 @@ export class GameState {
             }
         }
 
+        // Validate Total (Sanity Check)
+        const checkTotal = Math.floor(calculatedBaseIncome + calculatedLandIncome);
+        // Total should match calculateIncome?
+        // calculateIncome might have been slightly different if state changed? No.
+
         // Apply Income
-        this.players[playerId].gold += totalIncome;
+        this.players[playerId].gold += checkTotal;
 
-        // Recalculate breakdown for reporting consistency
-        const baseIncome = GameConfig.GOLD_PER_TURN_BASE;
-        const upgradeBonus = this.calculateBaseUpgradeBonus(playerId);
-        // Land Income is remaining
-        const landIncome = totalIncome - baseIncome - upgradeBonus;
+        // Ensure reported land + base = total
+        // We use the calculated Base sum as the "Base" component, and the rest is "Land".
+        // This handles rounding correctly (e.g. 10.5 -> 10. Land=0).
+        const reportedLand = checkTotal - calculatedBaseIncome;
 
-        return { total: totalIncome, base: baseIncome, land: landIncome, landCount, depletedMines, upgradeBonus };
+        return { total: checkTotal, base: calculatedBaseIncome, land: reportedLand, landCount, depletedMines, upgradeBonus: 0 };
     }
 
     public calculateIncome(playerId: PlayerID): number {
@@ -280,46 +297,44 @@ export class GameState {
         // Ensure connectivity is current
         this.updateConnectivity(playerId);
 
-        let landIncome = 0;
+        let totalIncome = 0;
 
         for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
             for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
                 const cell = this.grid[r][c];
                 if (cell.owner === playerId) {
-                    if (cell.building === 'town') {
-                        landIncome += cell.townIncome;
+                    let cellIncome = 0;
+
+                    if (cell.building === 'base') {
+                        // Base Income
+                        cellIncome = GameConfig.GOLD_PER_TURN_BASE;
+                        // Add Upgrades
+                        cellIncome += this.getSingleBaseUpgradeBonus(cell);
+                    } else if (cell.building === 'town') {
+                        cellIncome = cell.townIncome;
                     } else if (cell.building === 'gold_mine') {
-                        landIncome += GameConfig.GOLD_MINE_INCOME;
+                        cellIncome = GameConfig.GOLD_MINE_INCOME;
                     } else if (cell.type !== 'bridge') {
-                        if (cell.isConnected) {
-                            landIncome += GameConfig.GOLD_PER_LAND;
-                        } else {
-                            landIncome += GameConfig.GOLD_PER_LAND * 0.5;
+                        // Land Income
+                        cellIncome = GameConfig.GOLD_PER_LAND;
+                        if (!cell.isConnected) {
+                            cellIncome *= 0.5;
                         }
                     }
-                }
-            }
-        }
 
-        return Math.floor(GameConfig.GOLD_PER_TURN_BASE + landIncome + this.calculateBaseUpgradeBonus(playerId));
-    }
-
-    private calculateBaseUpgradeBonus(playerId: PlayerID): number {
-        let upgradeBonus = 0;
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
-                const cell = this.grid[r][c];
-                if (cell.owner === playerId && cell.building === 'base' && cell.incomeLevel > 0) {
-                    let bonus = 0;
-                    for (let i = 0; i < cell.incomeLevel; i++) {
-                        bonus += GameConfig.UPGRADE_INCOME_BONUS[i];
+                    // Apply Aura Bonus (50%) - Applies to ALL tile income
+                    if (cellIncome > 0 && AuraSystem.isInIncomeAura(this, r, c, playerId)) {
+                        cellIncome *= 1.5;
                     }
-                    upgradeBonus += bonus;
+
+                    totalIncome += cellIncome;
                 }
             }
         }
-        return upgradeBonus;
+
+        return Math.floor(totalIncome);
     }
+
 
     public updateConnectivity(playerId: PlayerID) {
         if (!playerId) return;
@@ -420,7 +435,10 @@ export class GameState {
 
         let income = 0;
 
-        if (cell.building === 'town') {
+        if (cell.building === 'base') {
+            income = GameConfig.GOLD_PER_TURN_BASE;
+            income += this.getSingleBaseUpgradeBonus(cell);
+        } else if (cell.building === 'town') {
             income = cell.townIncome;
         } else if (cell.building === 'gold_mine') {
             income = GameConfig.GOLD_MINE_INCOME;
@@ -431,9 +449,9 @@ export class GameState {
             }
         }
 
-        // Add Base Upgrades if applicable
-        if (cell.building === 'base') {
-            income += this.getSingleBaseUpgradeBonus(cell);
+        // Apply Aura Bonus (50%)
+        if (income > 0 && AuraSystem.isInIncomeAura(this, r, c, cell.owner!)) {
+            income *= 1.5;
         }
 
         return income;

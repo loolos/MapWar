@@ -10,6 +10,13 @@ describe('Plan Validation Logic', () => {
         engine.startGame();
         engine.state.setOwner(0, 0, 'P1');
         engine.state.setBuilding(0, 0, 'base');
+
+        // Ensure path is valid (Plains)
+        engine.state.grid[0][1].type = 'plain';
+        engine.state.grid[0][2].type = 'plain';
+        engine.state.grid[0][1].owner = null; // Neutral
+        engine.state.grid[0][2].owner = null; // Neutral
+
         engine.state.updateConnectivity('P1');
         engine.state.currentPlayerId = 'P1';
     });

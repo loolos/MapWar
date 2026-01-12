@@ -82,4 +82,30 @@ export class AuraSystem {
 
         return 0;
     }
+
+    /**
+     * returns the aura range for income buildings.
+     */
+    static getIncomeAuraRange(cell: Cell): number {
+        if (!cell || cell.building !== 'base') return 0;
+        return cell.incomeLevel;
+    }
+
+    /**
+     * Checks if a tile is within any friendly base's income aura.
+     */
+    static isInIncomeAura(state: GameState, r: number, c: number, playerId: string): boolean {
+        for (let row = 0; row < GameConfig.GRID_HEIGHT; row++) {
+            for (let col = 0; col < GameConfig.GRID_WIDTH; col++) {
+                const cell = state.getCell(row, col);
+                if (cell && cell.owner === playerId && cell.building === 'base' && cell.incomeLevel > 0) {
+                    const dist = Math.abs(row - r) + Math.abs(col - c);
+                    if (dist <= cell.incomeLevel && dist > 0) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
 }

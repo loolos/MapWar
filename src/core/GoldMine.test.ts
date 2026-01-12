@@ -80,6 +80,9 @@ describe('Gold Mine Feature', () => {
     it('provides 5 gold income per turn', () => {
         engine.state.setOwner(0, 0, 'P1');
         engine.state.setBuilding(0, 0, 'gold_mine');
+        // Add Base for global income check
+        engine.state.setOwner(0, 1, 'P1');
+        engine.state.setBuilding(0, 1, 'base');
 
         // Ensure no mock interfererence with depletion (mock > 0.05)
         vi.spyOn(Math, 'random').mockReturnValue(0.9);

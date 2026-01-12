@@ -86,18 +86,18 @@ describe('Base Upgrades', () => {
         let report = engine.state.accrueResources('P1');
         console.log("Income Report Lv1:", report);
 
-        expect(report?.land).toBe(1); // Base counts as land
-        expect(report?.total).toBe(GameConfig.GOLD_PER_TURN_BASE + 1 + 1);
+        expect(report?.land).toBe(0); // Base tile provides 0 land income
+        expect(report?.total).toBe(GameConfig.GOLD_PER_TURN_BASE + 1); // Base(10) + Bonus(1)
 
         // 2. Upgrade Level 2
         engine.planInteraction(0, 0, 'UPGRADE_INCOME');
         engine.commitMoves();
         expect(cell.incomeLevel).toBe(2);
 
-        // Base (10) + Land (1) + Level 1 (1) + Level 2 (2) = 14.
+        // Base (10) + Level 1 (1) + Level 2 (2) = 13.
         report = engine.state.accrueResources('P1');
         console.log("Income Report Lv2:", report);
-        expect(report?.total).toBe(GameConfig.GOLD_PER_TURN_BASE + 1 + 1 + 2);
+        expect(report?.total).toBe(GameConfig.GOLD_PER_TURN_BASE + 1 + 2);
 
         // 3. Verify Levels 3, 4, 5
         for (let i = 3; i <= 5; i++) {
@@ -109,7 +109,7 @@ describe('Base Upgrades', () => {
         // Final Check at Level 5
         // Bonus total: 1+2+3+4+5 = 15
         report = engine.state.accrueResources('P1');
-        const expectedTotal = GameConfig.GOLD_PER_TURN_BASE + 1 + 15;
+        const expectedTotal = GameConfig.GOLD_PER_TURN_BASE + 15;
         expect(report?.total).toBe(expectedTotal);
     });
 
@@ -216,9 +216,11 @@ describe('Base Upgrades', () => {
         expect(cell.incomeLevel).toBe(2);
         expect(cell.defenseLevel).toBe(1);
 
-        // Verify Income (Lv 2 is +1 +2 = +3)
+        // Verify Income (Lv 2 means: Lv1(+1) + Lv2(+2) = +3 Bonus)
         const report = engine.state.accrueResources('P1');
-        const expectedTotal = GameConfig.GOLD_PER_TURN_BASE + 1 + 3; // Base(10) + Land(1) + Bonus(3)
+
+        // Base(10) + Bonus(3) = 13. (Base Tile provides 0 Land Income).
+        const expectedTotal = GameConfig.GOLD_PER_TURN_BASE + 3;
         expect(report?.total).toBe(expectedTotal);
 
         // Verify Defense Cost (Lv 1 is +30 pre-multiplier)

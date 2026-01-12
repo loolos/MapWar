@@ -502,7 +502,8 @@ export class GameEngine {
 
     // Helper to get cost of a specific move
     getMoveCost(row: number, col: number): number {
-        return CostSystem.getMoveCost(this.state, row, col);
+        // Pass pendingMoves to allow chaining logic
+        return CostSystem.getMoveCost(this.state, row, col, this.pendingMoves || []);
     }
 
     getCostDetails(row: number, col: number): { cost: number, breakdown: string } {
@@ -556,6 +557,7 @@ export class GameEngine {
             let reason = `Not enough gold(Need ${thisMoveCost})`;
             const isLongRange = !this.state.isAdjacentToOwned(row, col, player.id);
             if (isLongRange) reason += " (Includes Distance Penalty)";
+
 
             // User Request: Don't log for AI
             if (!player.isAI) {
