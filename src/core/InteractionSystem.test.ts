@@ -127,7 +127,7 @@ describe('Interaction System', () => {
         expect(engine.lastError).toBeNull();
     });
 
-    it.skip('Cascade Cancellation: Cancelling A cancels dependent B', () => {
+    it('Cascade Cancellation: Cancelling A cancels dependent B', () => {
         // Setup:
         // [Base/Owned] [A] [B]
         // Player at (0,0). A at (0,1). B at (0,2).
