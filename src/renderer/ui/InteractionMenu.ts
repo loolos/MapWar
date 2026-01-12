@@ -200,14 +200,13 @@ export class InteractionMenu extends Phaser.GameObjects.Container {
         }).setOrigin(1, 0);
 
         // Interaction
-        const zone = this.scene.add.zone(w / 2, h / 2, w, h).setInteractive({ useHandCursor: canAfford });
+        const zone = this.scene.add.zone(w / 2, h / 2, w, h).setInteractive({ useHandCursor: true });
 
         zone.on('pointerdown', () => {
-            if (canAfford) {
-                this.engine.planInteraction(this.currentR!, this.currentC!, opt.id);
-                // Re-render to update active state
-                this.render();
-            }
+            // Always allow click to trigger Engine validation/logging
+            this.engine.planInteraction(this.currentR!, this.currentC!, opt.id);
+            // Re-render to update active state
+            this.render();
         });
 
         // Hover

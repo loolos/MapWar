@@ -56,6 +56,8 @@ describe('Income Info Logic', () => {
     it('returns half income for disconnected tiles', () => {
         engine.state.setOwner(5, 5, 'P1'); // Far away
         const cell = engine.state.getCell(5, 5)!;
+        cell.type = 'plain';
+        cell.building = 'none';
         cell.isConnected = false;
 
         const income = engine.getTileIncome(5, 5);

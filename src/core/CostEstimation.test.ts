@@ -43,7 +43,7 @@ describe('Cost Estimation Logic', () => {
         // Original Gold 50 might be borderline or fail if rounding differs.
         // Increase Gold to guarantee validation passes if logic is correct (valid chain, just expensive).
 
-        engine.state.players['P1'].gold = 100;
+        engine.state.players['P1'].gold = 1000;
 
         // Plan A
         engine.togglePlan(0, 1);
