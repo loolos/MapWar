@@ -53,7 +53,7 @@ describe('Income Info Logic', () => {
         expect(income).toBe(GameConfig.GOLD_PER_TURN_BASE + 1 + 2);
     });
 
-    it('returns 0 for disconnected tiles', () => {
+    it('returns half income for disconnected tiles', () => {
         engine.state.setOwner(5, 5, 'P1'); // Far away
         const cell = engine.state.getCell(5, 5)!;
         cell.isConnected = false;
