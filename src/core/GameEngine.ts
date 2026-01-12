@@ -334,8 +334,8 @@ export class GameEngine {
         const existingIndex = this.pendingMoves.findIndex(m => m.r === row && m.c === col);
 
         if (existingIndex >= 0) {
-            // Remove (and all subsequent)
-            this.pendingMoves.splice(existingIndex);
+            // Remove (only this one, let revalidate handle dependencies)
+            this.pendingMoves.splice(existingIndex, 1);
             this.lastError = null;
             this.emit('sfx:cancel');
         } else {
@@ -582,7 +582,6 @@ export class GameEngine {
             if (isAction && !player.isAI) {
                 const details = this.getCostDetails(row, col);
                 const logMsg = `Insufficient Funds: Need ${plannedCost + thisMoveCost}G (Have ${player.gold}G). \nCost Logic: ${details.breakdown || 'Base Cost'}`;
-                console.error("GameEngine Log:", logMsg); // Debug for User
                 this.emit('logMessage', { text: logMsg, type: 'error' });
             }
 

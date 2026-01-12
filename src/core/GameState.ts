@@ -198,7 +198,7 @@ export class GameState {
         if (cell) cell.owner = owner;
     }
 
-    setBuilding(row: number, col: number, type: 'base' | 'town' | 'gold_mine' | 'wall' | 'none') {
+    setBuilding(row: number, col: number, type: 'base' | 'town' | 'gold_mine' | 'wall' | 'farm' | 'none') {
         const cell = this.getCell(row, col);
         if (cell) cell.building = type;
     }
@@ -359,31 +359,7 @@ export class GameState {
             for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
                 const cell = this.grid[r][c];
                 if (cell.owner === playerId) {
-                    let cellIncome = 0;
-
-                    if (cell.building === 'base') {
-                        // Base Income
-                        cellIncome = GameConfig.GOLD_PER_TURN_BASE;
-                        // Add Upgrades
-                        cellIncome += this.getSingleBaseUpgradeBonus(cell);
-                    } else if (cell.building === 'town') {
-                        cellIncome = cell.townIncome;
-                    } else if (cell.building === 'gold_mine') {
-                        cellIncome = GameConfig.GOLD_MINE_INCOME;
-                    } else if (cell.type !== 'bridge') {
-                        // Land Income
-                        cellIncome = GameConfig.GOLD_PER_LAND;
-                        if (!cell.isConnected) {
-                            cellIncome *= 0.5;
-                        }
-                    }
-
-                    // Apply Aura Bonus (50%) - Applies to ALL tile income
-                    if (cellIncome > 0 && AuraSystem.isInIncomeAura(this, r, c, playerId)) {
-                        cellIncome *= 1.5;
-                    }
-
-                    totalIncome += cellIncome;
+                    totalIncome += this.getTileIncome(r, c);
                 }
             }
         }
@@ -499,44 +475,15 @@ export class GameState {
         } else if (cell.building === 'gold_mine') {
             income = GameConfig.GOLD_MINE_INCOME;
         } else if (cell.building === 'farm') {
-            // Farm Income Logic
-            // [0, 1, 3, 6]
             const level = Math.min(cell.farmLevel, GameConfig.FARM_MAX_LEVEL);
             income = GameConfig.FARM_INCOME[level];
-            if (!cell.isConnected) {
-                income = 0; // Farms need supply line? Or half?
-                // User said: "connected tiles correctly have their income halved" for land.
-                // Assuming Farms also follow "disconnected = 0.5x" OR "disconnected = 0"?
-                // Standard logic: "disconnected tiles correctly have their income halved".
-                // But previously `getTileIncome` did:
-                // if (!cell.isConnected) income *= 0.5;
-                // BUT wait, looking at lines 431-433 in original:
-                // } else if (cell.type !== 'bridge') {
-                //      income = GameConfig.GOLD_PER_LAND;
-                //      if (!cell.isConnected) income *= 0.5;
-                // }
-                // So Farm replaces Land Income? YES.
-                // Does Farm get halved if disconnected?
-                // Usually buildings don't function well without supply.
-                // Let's assume 0.5x like land for now unless specified.
-                // Wait, User Request: "如果被敌军占领则毁掉变会空地平原" implies it's fragile.
-                // Let's stick to 0.5x for consistency with land/town (Towns have their own logic).
-                // Actually Towns: `cell.townIncome` is returned directly. Does Town income halve?
-                // Checking `calculateIncome`:
-                // Town income is NOT halved in current code (lines 297-298).
-                // Gold Mine (lines 299-300) NOT halved.
-                // Only Land (lines 430-433) is halved.
-                // Base (lines 292-296) NOT halved.
-
-                // DECISION: Farms should probably behave like Land but upgraded.
-                // So I will apply 0.5x if disconnected.
-                income *= 0.5;
-            }
         } else if (cell.type !== 'bridge') {
             income = GameConfig.GOLD_PER_LAND;
-            if (!cell.isConnected) {
-                income *= 0.5;
-            }
+        }
+
+        // Halve income if disconnected (Except Base)
+        if (!cell.isConnected && cell.building !== 'base') {
+            income *= 0.5;
         }
 
         // Apply Aura Bonus (50%)

@@ -109,7 +109,11 @@ describe('GameEngine - Town Mechanics', () => {
         engine.state.setOwner(0, 0, 'P1');
         engine.state.setBuilding(0, 0, 'town');
         engine.state.getCell(0, 0)!.townIncome = 1;
-        engine.state.getCell(0, 0)!.isConnected = true; // Towns need connection? "IncomeLogic: Town income added". Code implies towns provide income regardless?
+
+        // P1 needs a base for connectivity
+        engine.state.setOwner(0, 1, 'P1');
+        engine.state.setBuilding(0, 1, 'base');
+        engine.state.updateConnectivity('P1');
         // Let's check logic:
         // if (cell.building === 'town') { landIncome += cell.townIncome; }
         // It does NOT check isConnected for towns in my implementation!
@@ -130,16 +134,20 @@ describe('GameEngine - Town Mechanics', () => {
 
         // Test income
         const report = engine.state.accrueResources('P1')!;
-        // Base 0 (No Base) + Town 1 = 1.
-        expect(report.total).toBe(1);
+        // Base 10 + Town 1 = 11.
+        expect(report.total).toBe(11);
     });
 
     it('grows income by 1 every 2 turns', () => {
-        // Setup P1 Town
+        // Setup P1 Town and Base
         engine.state.setOwner(0, 0, 'P1');
         engine.state.setBuilding(0, 0, 'town');
         engine.state.getCell(0, 0)!.townIncome = 1;
         engine.state.getCell(0, 0)!.townTurnCount = 0;
+
+        engine.state.setOwner(0, 1, 'P1');
+        engine.state.setBuilding(0, 1, 'base');
+        engine.state.updateConnectivity('P1');
 
         // Turn 1
         engine.state.accrueResources('P1');
@@ -163,12 +171,16 @@ describe('GameEngine - Town Mechanics', () => {
     });
 
     it('caps income at 10', () => {
-        // Setup P1 Town at limit
+        // Setup P1 Town and Base
         engine.state.setOwner(0, 0, 'P1');
         engine.state.setBuilding(0, 0, 'town');
         const cell = engine.state.getCell(0, 0)!;
         cell.townIncome = 10;
         cell.townTurnCount = 100;
+
+        engine.state.setOwner(0, 1, 'P1');
+        engine.state.setBuilding(0, 1, 'base');
+        engine.state.updateConnectivity('P1');
 
         engine.state.accrueResources('P1');
         // Should trigger interval check but fail cap check

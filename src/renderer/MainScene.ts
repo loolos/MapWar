@@ -976,17 +976,13 @@ export class MainScene extends Phaser.Scene {
                 this.engine.pendingMoves.some(m => m.r === row && m.c === col);
 
             if (options.length === 1 && !isPlanned) {
-                // Check if affordable?
+                // Auto-Plan (Try to execute)
+                // We call planInteraction regardless of cost. 
+                // If affordable, it keeps the plan.
+                // If NOT affordable, it logs the error (via GameEngine logic) and rejects the plan.
                 const opt = options[0];
-                const action = this.engine.interactionRegistry.get(opt.id);
-                // Cost calculation
-                const costVal = typeof action?.cost === 'function' ? action!.cost(this.engine, row, col) : action!.cost;
-                const canAfford = this.engine.state.getCurrentPlayer().gold >= this.engine.calculatePlannedCost() + costVal;
+                this.engine.planInteraction(row, col, opt.id);
 
-                if (canAfford) {
-                    // Auto-Plan
-                    this.engine.planInteraction(row, col, opt.id);
-                }
                 // ALWAYS Show Menu to reflect state (Green Highlight if planned, Red if not affordable)
                 this.interactionMenu.show(row, col);
             } else if (options.length > 0) {

@@ -58,9 +58,40 @@ describe('Income Info Logic', () => {
         const cell = engine.state.getCell(5, 5)!;
         cell.type = 'plain';
         cell.building = 'none';
-        cell.isConnected = false;
+        engine.state.updateConnectivity('P1');
 
         const income = engine.getTileIncome(5, 5);
         expect(income).toBe(0.5); // Disconnected tiles provide half income
+    });
+
+    it('returns half income for disconnected towns', () => {
+        engine.state.setOwner(5, 5, 'P1');
+        engine.state.setBuilding(5, 5, 'town');
+        const cell = engine.state.getCell(5, 5)!;
+        cell.townIncome = 10;
+        engine.state.updateConnectivity('P1');
+
+        const income = engine.getTileIncome(5, 5);
+        expect(income).toBe(5);
+    });
+
+    it('returns half income for disconnected farms', () => {
+        engine.state.setOwner(5, 5, 'P1');
+        engine.state.setBuilding(5, 5, 'farm');
+        const cell = engine.state.getCell(5, 5)!;
+        cell.farmLevel = 1; // Income = 2
+        engine.state.updateConnectivity('P1');
+
+        const income = engine.getTileIncome(5, 5);
+        expect(income).toBe(1);
+    });
+
+    it('returns half income for disconnected gold mines', () => {
+        engine.state.setOwner(5, 5, 'P1');
+        engine.state.setBuilding(5, 5, 'gold_mine');
+        engine.state.updateConnectivity('P1');
+
+        const income = engine.getTileIncome(5, 5);
+        expect(income).toBe(GameConfig.GOLD_MINE_INCOME * 0.5);
     });
 });

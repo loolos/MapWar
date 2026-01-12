@@ -712,6 +712,35 @@ describe('GameEngine', () => {
                 }));
             });
 
+            it('emits warning log when cascade cancellation occurs', () => {
+                const spy = vi.fn();
+                engine.on('logMessage', spy);
+                engine.state.players['P1'].gold = 1000;
+
+                // Setup Chain: Base(0,0) -> (0,1) -> (0,2)
+                // (0,1) and (0,2) are Neutral
+                engine.state.setOwner(0, 1, null);
+                engine.state.setOwner(0, 2, null);
+
+                // Plan (0,1) - Valid (Adjacent to Base)
+                engine.togglePlan(0, 1);
+
+                // Plan (0,2) - Valid (Adjacent to Pending (0,1))
+                engine.togglePlan(0, 2);
+
+                expect(engine.pendingMoves).toHaveLength(2);
+
+                // Cancel (0,1) - This should cascade and cancel (0,2)
+                engine.togglePlan(0, 1);
+
+                expect(engine.pendingMoves).toHaveLength(0); // Both removed
+
+                expect(spy).toHaveBeenCalledWith(expect.objectContaining({
+                    type: 'warning',
+                    text: expect.stringContaining('Dependent moves cancelled')
+                }));
+            });
+
             it('emits income summary log on turn start', () => {
                 const spy = vi.fn();
                 engine.on('logMessage', spy);
