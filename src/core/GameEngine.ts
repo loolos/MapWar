@@ -179,8 +179,14 @@ export class GameEngine {
             if (incomeReport.farm > 0) parts.push(`Farms: +${incomeReport.farm}`);
             if (incomeReport.land > 0) parts.push(`Land(${incomeReport.landCount}): +${incomeReport.land}`);
 
-            const summaryText = `Turn Start Income: +${incomeReport.total}G [ ${parts.join(', ')} ]`;
-            this.emit('logMessage', { text: summaryText, type: 'info' });
+            // Log Income Summary (Info)
+            const incomeMsg = `Turn ${this.state.turnCount} Start. Income: +${incomeReport.total} (${parts.join(', ')})`;
+
+            // Only log for HUMAN (current player after turn switch)
+            const player = this.state.getCurrentPlayer();
+            if (!player.isAI) {
+                this.emit('logMessage', { text: incomeMsg, type: 'info' });
+            }
 
             if (incomeReport.depletedMines && incomeReport.depletedMines.length > 0) {
                 incomeReport.depletedMines.forEach(m => {
@@ -448,9 +454,12 @@ export class GameEngine {
             const newMoves = this.pendingMoves.filter(m => reachable.has(`${m.r},${m.c}`));
 
             if (newMoves.length !== this.pendingMoves.length) {
+                const removedCount = this.pendingMoves.length - newMoves.length;
                 this.pendingMoves = newMoves;
                 changed = true;
                 this.emit('sfx:cancel'); // Feedback for auto-cancel?
+                // Warning Log (Yellow) - Cascade Cancellation
+                this.emit('logMessage', { text: `Dependent moves cancelled (${removedCount} items).`, type: 'warning' });
             }
 
             // COST CHECK (After connectivity pruning)
@@ -552,7 +561,11 @@ export class GameEngine {
         const isAdjToPending = this.isAdjacentToPending(row, col);
 
         if (!isAdjToConnected && !isAdjToPending) {
-            return { valid: false, reason: "Must connect to Main Base supply line" };
+            const reason = "Must connect to Main Base supply line";
+            if (isAction && !player.isAI) {
+                this.emit('logMessage', { text: reason, type: 'error' });
+            }
+            return { valid: false, reason };
         }
 
         // 3. Terrain Check
@@ -561,6 +574,10 @@ export class GameEngine {
             // "If in adjacent area of occupied area, player can click build bridge"
             const isAdjToOwned = this.state.isAdjacentToOwned(row, col, playerId);
             if (!isAdjToOwned) {
+                const reason = "Bridges can only be built from existing territory";
+                if (isAction && !player.isAI) {
+                    this.emit('logMessage', { text: reason, type: 'error' });
+                }
                 return { valid: false, reason: "Bridges can only be built from existing territory" };
             }
         }
