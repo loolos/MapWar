@@ -267,6 +267,65 @@ export class MapGenerator {
                 dist++;
             }
         }
+
+        // 3. Additional Random Rivers for Scaling
+        const extraRivers = Math.floor((width * height) / 150); // One per ~150 tiles
+        for (let j = 0; j < extraRivers; j++) {
+            this.generateRandomRiver(grid, width, height);
+        }
+    }
+
+    private static generateRandomRiver(grid: Cell[][], width: number, height: number) {
+        // Pick a random edge point
+        const side = Math.floor(Math.random() * 4);
+        let r = 0;
+        let c = 0;
+        let dr = 0;
+        let dc = 0;
+
+        if (side === 0) { // Top
+            c = Math.floor(Math.random() * width);
+            dr = 1;
+            dc = (Math.random() - 0.5) * 2;
+        } else if (side === 1) { // Bottom
+            r = height - 1;
+            c = Math.floor(Math.random() * width);
+            dr = -1;
+            dc = (Math.random() - 0.5) * 2;
+        } else if (side === 2) { // Left
+            r = Math.floor(Math.random() * height);
+            dc = 1;
+            dr = (Math.random() - 0.5) * 2;
+        } else { // Right
+            r = Math.floor(Math.random() * height);
+            c = width - 1;
+            dc = -1;
+            dr = (Math.random() - 0.5) * 2;
+        }
+
+        let currR = r;
+        let currC = c;
+        let dist = 0;
+        const maxDist = Math.max(width, height);
+
+        while (this.isValid(grid, Math.floor(currR), Math.floor(currC)) && dist < maxDist) {
+            const cellR = Math.floor(currR);
+            const cellC = Math.floor(currC);
+            grid[cellR][cellC].type = 'water';
+
+            // Slight meander
+            dr += (Math.random() - 0.5) * 0.4;
+            dc += (Math.random() - 0.5) * 0.4;
+
+            // Normalize vector slightly to keep moving
+            const mag = Math.sqrt(dr * dr + dc * dc);
+            if (mag > 0) {
+                currR += dr / mag;
+                currC += dc / mag;
+            }
+
+            dist++;
+        }
     }
 
     private static ensureAccessibility(grid: Cell[][], width: number, height: number, playerCount: number) {
