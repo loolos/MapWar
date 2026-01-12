@@ -332,8 +332,8 @@ export class GameEngine {
             this.lastError = null;
             this.emit('sfx:cancel');
         } else {
-            // Try to Add
-            const validation = this.validateMove(row, col);
+            // Try to Add (Pass isAction = true)
+            const validation = this.validateMove(row, col, true);
             if (validation.valid) {
                 // Double-check cost (redundant but safe)
                 const player = this.state.getCurrentPlayer();
@@ -341,13 +341,13 @@ export class GameEngine {
                 const moveCost = this.getMoveCost(row, col);
 
                 if (player.gold < currentPlanCost + moveCost) {
+                    // This branch should theoretically not be reached if validation already checked cost
+                    // But if it is reachable, we should also log.
                     this.lastError = `Insufficient funds (Need ${moveCost} G)`;
                     this.emit('sfx:cancel');
                     // Warning Log (Red)
-                    // Use exact same formatting logic as before or simplify?
                     const details = this.getCostDetails(row, col);
                     this.emit('logMessage', { text: `Cannot select: Insufficient Funds! Need ${currentPlanCost + moveCost}G (Have ${player.gold}G). ${details.breakdown}`, type: 'error' });
-                    // Do NOT add to pendingMoves
                 } else {
                     this.pendingMoves.push({ r: row, c: col });
                     this.lastError = null;
@@ -362,23 +362,7 @@ export class GameEngine {
             } else {
                 this.lastError = validation.reason || "Invalid move";
                 this.emit('sfx:cancel');
-
-                // New: Explicitly Log validation failures?
-                // If the reason is "Not enough gold", we should log it as error to match user expectation.
-                if (validation.reason?.includes('Not enough gold')) {
-                    const player = this.state.getCurrentPlayer();
-                    const plannedCost = this.calculatePlannedCost();
-                    const thisMoveCost = this.getMoveCost(row, col);
-                    // Reconstruct detail message
-                    const details = this.getCostDetails(row, col);
-                    const logMsg = `Insufficient Funds: Need ${plannedCost + thisMoveCost}G (Have ${player.gold}G). \nCost Logic: ${details.breakdown || 'Base Cost'}`;
-                    this.emit('logMessage', { text: logMsg, type: 'error' });
-                } else {
-                    // Log other reasons as warnings? (e.g. "Must connect to supply line")
-                    // User didn't ask for this, but useful feedback.
-                    // For now, let's stick to fixing the requested bug.
-                    console.log(`Validation Failed: ${validation.reason}`);
-                }
+                // LOGGING IS NOW HANDLED BY validateMove(..., true)
             }
         }
 
@@ -552,13 +536,13 @@ export class GameEngine {
         return this.state.getTileIncome(row, col);
     }
 
-    validateMove(row: number, col: number): { valid: boolean, reason?: string } {
+    validateMove(row: number, col: number, isAction: boolean = false): { valid: boolean; reason?: string } {
         const playerId = this.state.currentPlayerId;
         if (!playerId) return { valid: false, reason: "No active player" };
-        const player = this.state.players[playerId];
+        const player = this.state.getCurrentPlayer();
+        const cell = this.state.getCell(row, col);
 
         // 1. Basic Cell Checks
-        const cell = this.state.getCell(row, col);
         if (!cell) return { valid: false, reason: "Out of bounds" };
         if (cell.owner === playerId) return { valid: false, reason: "Already owned" }; // Self-own check
 
@@ -591,7 +575,13 @@ export class GameEngine {
             const isLongRange = !this.state.isAdjacentToOwned(row, col, player.id);
             if (isLongRange) reason += " (Includes Distance Penalty)";
 
-            // Return failure (Logging handled by caller)
+            // Only log if this is an explicit action (User Click) AND not AI
+            if (isAction && !player.isAI) {
+                const details = this.getCostDetails(row, col);
+                const logMsg = `Insufficient Funds: Need ${plannedCost + thisMoveCost}G (Have ${player.gold}G). \nCost Logic: ${details.breakdown || 'Base Cost'}`;
+                this.emit('logMessage', { text: logMsg, type: 'error' });
+            }
+
             return { valid: false, reason };
         }
 
