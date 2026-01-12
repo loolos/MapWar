@@ -227,92 +227,51 @@ export class GameState {
         // User Request: Determine connectivity state BEFORE calculating income
         this.updateConnectivity(playerId);
 
+        // Single Source of Truth for Income
+        const totalIncome = this.calculateIncome(playerId);
+
         let landCount = 0;
-        let landIncome = 0;
         const depletedMines: { r: number, c: number }[] = [];
 
+        // Iterate for side effects ONLY (Town Growth, Mine Depletion)
         for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
             for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
                 const cell = this.grid[r][c];
                 if (cell.owner === playerId) {
-
                     if (cell.building === 'town') {
-                        // Town Growth Logic
+                        // Town Growth Logic (Side Effect)
                         cell.townTurnCount++;
                         if (cell.townTurnCount % GameConfig.TOWN_GROWTH_INTERVAL === 0) {
                             if (cell.townIncome < GameConfig.TOWN_INCOME_CAP) {
                                 cell.townIncome += GameConfig.TOWN_INCOME_GROWTH;
                             }
                         }
-                        landIncome += cell.townIncome;
                         landCount++;
                     }
                     else if (cell.building === 'gold_mine') {
-                        // Gold Mine Logic
-                        landIncome += GameConfig.GOLD_MINE_INCOME;
                         landCount++;
-
-                        // Depletion Check (Only if owned and active)
+                        // Depletion Check (Side Effect)
                         if (Math.random() < GameConfig.GOLD_MINE_DEPLETION_RATE) {
-                            // Collapse!
                             cell.building = 'none';
                             depletedMines.push({ r, c });
                         }
-                    }
-                    else if (cell.type !== 'bridge') { // Bridges provide 0 income
+                    } else if (cell.type !== 'bridge') {
                         landCount++;
-                        // Income Logic: Full (1) if connected, Half (0.5) if disconnected
-                        if (cell.isConnected) {
-                            landIncome += GameConfig.GOLD_PER_LAND;
-                        } else {
-                            landIncome += GameConfig.GOLD_PER_LAND * 0.5;
-                        }
                     }
                 }
             }
         }
 
+        // Apply Income
+        this.players[playerId].gold += totalIncome;
+
+        // Recalculate breakdown for reporting consistency
         const baseIncome = GameConfig.GOLD_PER_TURN_BASE;
+        const upgradeBonus = this.calculateBaseUpgradeBonus(playerId);
+        // Land Income is remaining
+        const landIncome = totalIncome - baseIncome - upgradeBonus;
 
-        // Calculate Base Upgrade Bonuses
-        let upgradeBonus = 0;
-        // Scan all bases owned by player to add their upgrade bonuses
-        // Wait, baseIncome is global "base" income? Or "from Base buildings"?
-        // Original logic: "baseIncome = 10". Then adding land logic.
-        // If I own multiple bases (from capturing), do I get multiple base incomes?
-        // Currently: "active bases" logic isn't explicit, it's just a flat 10.
-        // I should probably add the upgrade bonus based on the cell's level.
-
-        // Re-scan or integrate into loop above? 
-        // Iterate grid for Base Upgrades (since they are properties of the cell)
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
-                const cell = this.grid[r][c];
-                if (cell.owner === playerId && cell.building === 'base' && cell.incomeLevel > 0) {
-                    // Arrays are 0-indexed. Level 1 -> index 0.
-                    // Bonus is cumulative? "Increases income BY 1, 2...". 
-                    // User said: "Upgrade 4 times... increase income 1G, 2G... total 20".
-                    // Implicit: Level 1 adds 1. Level 2 adds 2? Or Total is 1, 2, 3?
-                    // "respectively increase income 1G, 2G... total 20"
-                    // 1+2+3+4 = 10. 
-                    // Base is 10. Total 20.
-                    // So Level 1 adds +1. Level 2 adds +2 (Total +3). 
-                    // I will implement as: Sum of bonuses up to current level.
-                    let bonus = 0;
-                    for (let i = 0; i < cell.incomeLevel; i++) {
-                        bonus += GameConfig.UPGRADE_INCOME_BONUS[i];
-                    }
-                    upgradeBonus += bonus;
-                }
-            }
-        }
-
-        const total = baseIncome + landIncome + upgradeBonus;
-        const finalTotal = Math.floor(total);
-
-        this.players[playerId].gold += finalTotal;
-
-        return { total: finalTotal, base: baseIncome, land: landIncome, landCount, depletedMines };
+        return { total: totalIncome, base: baseIncome, land: landIncome, landCount, depletedMines, upgradeBonus };
     }
 
     public calculateIncome(playerId: PlayerID): number {

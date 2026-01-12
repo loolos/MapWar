@@ -538,13 +538,12 @@ export class GameEngine {
             const isLongRange = !this.state.isAdjacentToOwned(row, col, player.id);
             if (isLongRange) reason += " (Includes Distance Penalty)";
 
-            // User Request: Explain WHY costs are high and show formatted logic
-            // We already have specific logging, but let's make it very clear for the user feedback
-            const details = this.getCostDetails(row, col);
-
-            // Format for clearer reading in log
-            const logMsg = `Check Failed: Need ${plannedCost + thisMoveCost}G (Have ${player.gold}G). \nCost Logic: ${details.breakdown || 'Base Cost'}`;
-            this.emit('logMessage', { text: logMsg, type: 'error' });
+            // User Request: Don't log for AI
+            if (!player.isAI) {
+                const details = this.getCostDetails(row, col);
+                const logMsg = `Check Failed: Need ${plannedCost + thisMoveCost}G (Have ${player.gold}G). \nCost Logic: ${details.breakdown || 'Base Cost'}`;
+                this.emit('logMessage', { text: logMsg, type: 'error' });
+            }
 
             return { valid: false, reason };
         }
@@ -762,29 +761,12 @@ export class GameEngine {
     }
 
     accrueResources(playerId: string) {
-        const player = this.state.players[playerId];
-        if (!player) return;
-
-        // Calculate Income
-        let income = GameConfig.GOLD_PER_TURN_BASE; // 10
-
-        // Count owned cells for income
-        // We can optimize this by maintaining a count, but iteration is fine for now
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
-                const cell = this.state.grid[r][c];
-                if (cell.owner === playerId) {
-                    if (cell.building === 'town') {
-                        income += GameConfig.TOWN_INCOME_BASE;
-                    } else {
-                        income += GameConfig.GOLD_PER_LAND; // 1
-                    }
-                }
-            }
+        // Delegate to GameState
+        const stats = this.state.accrueResources(playerId);
+        if (stats) {
+            this.events.emit('turnChange'); // UI Update
+            // Can verify funds here if needed
         }
-
-        player.gold += income;
-        this.events.emit('turnChange'); // UI Update
     }
     private checkForEnclaves(playerId: string): boolean {
         // Reset Pending Moves
