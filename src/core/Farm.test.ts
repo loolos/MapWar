@@ -49,13 +49,13 @@ describe('Farm Logic', () => {
         expect(cell.farmLevel).toBe(1);
 
         // Verify Income
-        // Farm Lv 1 = 2 gold. + Aura (1.5x) = 3 gold.
+        // Farm Lv 1 = 2 gold. + Aura (Level 1 Base @ Dist 1 = 30%) = 2 * 1.3 = 2.6.
         const income = engine.getTileIncome(0, 1);
-        expect(income).toBe(3);
+        expect(income).toBeCloseTo(2.6, 5);
 
         // Verify Aura Bonus (Base + Farm in aura?)
         const incomeWithAura = engine.state.getTileIncome(0, 1);
-        expect(incomeWithAura).toBe(3);
+        expect(incomeWithAura).toBeCloseTo(2.6, 5);
     });
 
     it('upgrades farm and increases income', () => {
@@ -72,9 +72,9 @@ describe('Farm Logic', () => {
         expect(cell.farmLevel).toBe(2);
 
         // Base Income Lv 2 = 4 gold.
-        // With Aura (1.5x) = 6.
+        // With Aura (30%) = 4 * 1.3 = 5.2.
         const income = engine.state.getTileIncome(0, 1);
-        expect(income).toBe(6);
+        expect(income).toBeCloseTo(5.2, 5);
     });
 
     it('destroys farm on capture', () => {

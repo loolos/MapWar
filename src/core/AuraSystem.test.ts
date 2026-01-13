@@ -153,3 +153,87 @@ describe('AuraSystem Logic', () => {
         expect(AuraSystem.isInIncomeAura(engine.state, 0, 0, 'P1')).toBe(false);
     });
 });
+
+describe('Tiered Income Aura Bonuses', () => {
+    let engine: GameEngine;
+
+    beforeEach(() => {
+        engine = new GameEngine();
+        // Clear grid
+        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+                const cell = engine.state.getCell(r, c)!;
+                cell.owner = null;
+                cell.building = 'none';
+                cell.incomeLevel = 0;
+            }
+        }
+    });
+
+    it('Level 1 Base gives 30% at Range 1', () => {
+        engine.state.setOwner(5, 5, 'P1');
+        engine.state.setBuilding(5, 5, 'base');
+        const base = engine.state.getCell(5, 5)!;
+        base.incomeLevel = 1;
+
+        // Dist 1
+        const bonus = AuraSystem.getIncomeAuraBonus(engine.state, 5, 6, 'P1');
+        expect(bonus).toBeCloseTo(0.30, 5); // 30%
+
+        // Dist 2 (Out of Range)
+        const bonusOut = AuraSystem.getIncomeAuraBonus(engine.state, 5, 7, 'P1');
+        expect(bonusOut).toBe(0);
+    });
+
+    it('Level 2 Base gives 35% at Range 1, 30% at Range 2', () => {
+        engine.state.setOwner(5, 5, 'P1');
+        engine.state.setBuilding(5, 5, 'base');
+        const base = engine.state.getCell(5, 5)!;
+        base.incomeLevel = 2;
+
+        // Dist 1: 0.30 + (2-1)*0.05 = 0.35
+        expect(AuraSystem.getIncomeAuraBonus(engine.state, 5, 6, 'P1')).toBeCloseTo(0.35, 5);
+
+        // Dist 2: 0.30 + (2-2)*0.05 = 0.30
+        expect(AuraSystem.getIncomeAuraBonus(engine.state, 5, 7, 'P1')).toBeCloseTo(0.30, 5);
+    });
+
+    it('Level 5 Base validates full gradient', () => {
+        engine.state.setOwner(0, 0, 'P1');
+        engine.state.setBuilding(0, 0, 'base');
+        const base = engine.state.getCell(0, 0)!;
+        base.incomeLevel = 5;
+
+        // Dist 1: 0.30 + (5-1)*0.05 = 0.30 + 0.20 = 0.50
+        expect(AuraSystem.getIncomeAuraBonus(engine.state, 0, 1, 'P1')).toBeCloseTo(0.50, 5);
+
+        // Dist 2: 0.30 + (5-2)*0.05 = 0.30 + 0.15 = 0.45
+        expect(AuraSystem.getIncomeAuraBonus(engine.state, 0, 2, 'P1')).toBeCloseTo(0.45, 5);
+
+        // Dist 3: 0.40
+        expect(AuraSystem.getIncomeAuraBonus(engine.state, 0, 3, 'P1')).toBeCloseTo(0.40, 5);
+
+        // Dist 4: 0.35
+        expect(AuraSystem.getIncomeAuraBonus(engine.state, 0, 4, 'P1')).toBeCloseTo(0.35, 5);
+
+        // Dist 5: 0.30
+        expect(AuraSystem.getIncomeAuraBonus(engine.state, 0, 5, 'P1')).toBeCloseTo(0.30, 5);
+    });
+
+    it('Takes maximum bonus from multiple bases', () => {
+        // Base A at (0,0) - Level 1 (Range 1) -> 30% at (0,1)
+        engine.state.setOwner(0, 0, 'P1');
+        engine.state.setBuilding(0, 0, 'base');
+        engine.state.getCell(0, 0)!.incomeLevel = 1;
+
+        // Base B at (0,2) - Level 2 (Range 2) -> 35% at (0,1) [Dist 1 from B]
+        engine.state.setOwner(0, 2, 'P1');
+        engine.state.setBuilding(0, 2, 'base');
+        engine.state.getCell(0, 2)!.incomeLevel = 2;
+
+        // Target (0,1) is Dist 1 from A (30%) and Dist 1 from B (35%)
+        // Should take 35%
+        const bonus = AuraSystem.getIncomeAuraBonus(engine.state, 0, 1, 'P1');
+        expect(bonus).toBeCloseTo(0.35, 5);
+    });
+});

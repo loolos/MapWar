@@ -94,18 +94,54 @@ export class AuraSystem {
     /**
      * Checks if a tile is within any friendly base's income aura.
      */
+    /**
+     * Checks if a tile is within any friendly base's income aura.
+     * @deprecated Use getIncomeAuraBonus instead for precise value.
+     */
     static isInIncomeAura(state: GameState, r: number, c: number, playerId: string): boolean {
+        return this.getIncomeAuraBonus(state, r, c, playerId) > 0;
+    }
+
+    /**
+     * Calculates the production bonus for a tile based on nearby friendly bases.
+     * Logic:
+     * - Each base has an aura range equal to its income level.
+     * - Bonus at outer edge (Distance == Level) is AURA_BONUS_BASE (30%).
+     * - Bonus increases by AURA_BONUS_STEP (5%) for each step closer (Distance < Level).
+     * - Formula: Base + (Level - Distance) * Step
+     * - Returns the MAXIMUM bonus from any single effective base (no stacking).
+     */
+    static getIncomeAuraBonus(state: GameState, r: number, c: number, playerId: string): number {
+        let maxBonus = 0;
+
         for (let row = 0; row < GameConfig.GRID_HEIGHT; row++) {
             for (let col = 0; col < GameConfig.GRID_WIDTH; col++) {
                 const cell = state.getCell(row, col);
+                // Check for own Base with Income Level > 0
                 if (cell && cell.owner === playerId && cell.building === 'base' && cell.incomeLevel > 0) {
                     const dist = Math.abs(row - r) + Math.abs(col - c);
-                    if (dist <= cell.incomeLevel && dist > 0) {
-                        return true;
+                    const range = cell.incomeLevel;
+
+                    // If within range (and not the base itself, usually base doesn't boost itself but logic implies neighbors?)
+                    // The prompt says "surrounding Manhattan 1", so distance > 0 checks that it is not the base itself.
+                    if (dist <= range && dist > 0) {
+                        // Calculate Bonus
+                        // e.g. Level 1 (Range 1). Target at Dist 1.
+                        // Bonus = 0.30 + (1 - 1) * 0.05 = 0.30 (30%)
+                        // e.g. Level 2 (Range 2). Target at Dist 1.
+                        // Bonus = 0.30 + (2 - 1) * 0.05 = 0.35 (35%)
+                        // e.g. Level 2 (Range 2). Target at Dist 2.
+                        // Bonus = 0.30 + (2 - 2) * 0.05 = 0.30 (30%)
+
+                        const bonus = GameConfig.AURA_BONUS_BASE + (cell.incomeLevel - dist) * GameConfig.AURA_BONUS_STEP;
+
+                        if (bonus > maxBonus) {
+                            maxBonus = bonus;
+                        }
                     }
                 }
             }
         }
-        return false;
+        return maxBonus;
     }
 }

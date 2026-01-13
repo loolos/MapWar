@@ -32,6 +32,9 @@ export const GameConfig = {
     BASE_SUPPORT_DISCOUNT_BASE: 0.20,
     BASE_SUPPORT_RANGE_PER_LEVEL: 1,
     BASE_SUPPORT_DISCOUNT_PER_LEVEL: 0.05,
+    // Income Aura Configs
+    AURA_BONUS_BASE: 0.30, // 30% at max range (Level 1)
+    AURA_BONUS_STEP: 0.05, // +5% per step closer / higher level
     // Wall Configs
     COST_BUILD_WALL: 10,
     WALL_DEFENSE_BONUS: 30, // Increased from 20

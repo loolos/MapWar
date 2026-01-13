@@ -488,8 +488,10 @@ export class GameState {
         }
 
         // Apply Aura Bonus (50%)
-        if (income > 0 && AuraSystem.isInIncomeAura(this, r, c, cell.owner!)) {
-            income *= 1.5;
+        // Apply Aura Bonus
+        const auraBonus = AuraSystem.getIncomeAuraBonus(this, r, c, cell.owner!);
+        if (income > 0 && auraBonus > 0) {
+            income *= (1 + auraBonus);
         }
 
         return income;
