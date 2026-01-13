@@ -643,8 +643,13 @@ describe('GameEngine', () => {
             engine.state.getCell(0, 1)!.defenseLevel = 1; // Weak wall
 
             // P1 Moves to (0, 1)
+            // validateMove only checks rules now (Adjacency, Terrain)
             const valid = engine.validateMove(0, 1);
             expect(valid.valid).toBe(true);
+
+            // Cost check would pass too since we have gold
+            const costValid = engine.checkMoveCost(0, 1);
+            expect(costValid.valid).toBe(true);
 
             // Toggle Plan acts as planMove if not present
             engine.togglePlan(0, 1);
@@ -741,17 +746,31 @@ describe('GameEngine', () => {
                 }));
             });
 
-            it('emits income summary log on turn start', () => {
-                const spy = vi.fn();
-                engine.on('logMessage', spy);
-                engine.endTurn();
-                const calls = JSON.stringify(spy.mock.calls, null, 2);
-                if (!calls.includes('Turn Start Income') || !calls.includes('"type": "info"')) {
-                    throw new Error('Spy calls mismatch: ' + calls);
-                }
+            it('validates rules separate from cost', () => {
+                // Setup: P1 has 0 Gold. Valid move available at (0,1).
+                engine.state.players['P1'].gold = 0;
+
+                // 1. Rules should PASS (Adjacency OK)
+                const ruleCheck = engine.validateMove(0, 1, true);
+                expect(ruleCheck.valid).toBe(true);
+
+                // 2. Cost should FAIL
+                const costCheck = engine.checkMoveCost(0, 1, true);
+                expect(costCheck.valid).toBe(false);
+                expect(costCheck.reason).toContain('Not enough gold');
             });
         });
 
-
+        it('emits income summary log on turn start', () => {
+            const spy = vi.fn();
+            engine.on('logMessage', spy);
+            engine.endTurn();
+            const calls = JSON.stringify(spy.mock.calls, null, 2);
+            if (!calls.includes('Turn Start Income') || !calls.includes('"type": "info"')) {
+                throw new Error('Spy calls mismatch: ' + calls);
+            }
+        });
     });
+
+
 });

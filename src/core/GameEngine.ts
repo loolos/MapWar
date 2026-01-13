@@ -256,7 +256,7 @@ export class GameEngine {
         }
 
         // Validation
-        if (!action.isAvailable(this, row, col)) {
+        if (!action.isAvailable(this, row, col, true)) {
             console.log(`[PlanInteraction] Action ${actionId} not available at ${row},${col}. Owner: ${this.state.getCell(row, col)?.owner}, Current: ${this.state.currentPlayerId}, Building: ${this.state.getCell(row, col)?.building}`);
             this.lastError = "Action not available";
             this.emit('planUpdate');
@@ -340,21 +340,29 @@ export class GameEngine {
             this.emit('sfx:cancel');
         } else {
             // Try to Add (Pass isAction = true)
-            const validation = this.validateMove(row, col, true);
-            if (validation.valid) {
-                this.pendingMoves.push({ r: row, c: col });
-                this.lastError = null;
-                this.emit('sfx:select');
-                // ... reminders ...
-                // Reminder Log (Yellow) - Distance Multiplier
-                const details = this.getCostDetails(row, col);
-                if (details.breakdown.includes('Distance')) {
-                    this.emit('logMessage', { text: `Reminder: Distance Multiplier Active! Cost is higher due to distance.`, type: 'warning' });
+            const ruleValidation = this.validateMove(row, col, true);
+            if (ruleValidation.valid) {
+                // ONLY if rules pass, check cost
+                const costValidation = this.checkMoveCost(row, col, true);
+                if (costValidation.valid) {
+                    this.pendingMoves.push({ r: row, c: col });
+                    this.lastError = null;
+                    this.emit('sfx:select');
+                    // ... reminders ...
+                    // Reminder Log (Yellow) - Distance Multiplier
+                    const details = this.getCostDetails(row, col);
+                    if (details.breakdown.includes('Distance')) {
+                        this.emit('logMessage', { text: `Reminder: Distance Multiplier Active! Cost is higher due to distance.`, type: 'warning' });
+                    }
+                } else {
+                    // Rules passed, but Cost failed
+                    this.lastError = costValidation.reason || "Insufficient funds";
+                    this.emit('sfx:cancel');
                 }
+
             } else {
-                this.lastError = validation.reason || "Invalid move";
+                this.lastError = ruleValidation.reason || "Invalid move";
                 this.emit('sfx:cancel');
-                // LOGGING IS NOW HANDLED BY validateMove(..., true)
             }
         }
 
@@ -568,8 +576,18 @@ export class GameEngine {
             }
         }
 
-        // 4. Cost Check
-        // Calculate total cost of pending moves + this move (Refactored to helper)
+        // 4. Cost Check - MOVED to checkMoveCost
+        // validateMove now only checks RULES.
+
+        return { valid: true };
+    }
+
+    // New: Explicit Cost Check
+    checkMoveCost(row: number, col: number, isAction: boolean = false): { valid: boolean; reason?: string } {
+        const playerId = this.state.currentPlayerId;
+        if (!playerId) return { valid: false, reason: "No active player" };
+        const player = this.state.getCurrentPlayer();
+
         const plannedCost = this.calculatePlannedCost();
         const thisMoveCost = this.getMoveCost(row, col);
 
@@ -587,9 +605,9 @@ export class GameEngine {
 
             return { valid: false, reason };
         }
-
         return { valid: true };
     }
+
 
     public isValidCell(r: number, c: number): boolean {
         return r >= 0 && r < GameConfig.GRID_HEIGHT && c >= 0 && c < GameConfig.GRID_WIDTH;

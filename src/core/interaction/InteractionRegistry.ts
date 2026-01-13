@@ -225,9 +225,10 @@ export class InteractionRegistry {
             cost: (engine: GameEngine, r: number, c: number) => {
                 return engine.getMoveCost(r, c);
             },
-            isAvailable: (engine, r: number, c: number) => {
+            isAvailable: (engine, r: number, c: number, isAction: boolean = false) => {
                 // Use existing move validation
-                const validation = engine.validateMove(r, c);
+                // Pass isAction to allow logging if this check is part of an explicit user action
+                const validation = engine.validateMove(r, c, isAction);
                 return validation.valid;
             },
             immediate: true,
