@@ -154,11 +154,13 @@ export class PlayerStatusSystem {
             const pid = (row as any).playerId;
             const player = state.players[pid];
             const goldTxt = row.getAt(4) as Phaser.GameObjects.Text;
-            goldTxt.setText(player.gold.toString());
+            goldTxt.setText(Math.floor(player.gold).toString());
 
             const incomeTxt = row.getAt(5) as Phaser.GameObjects.Text;
             const income = engine.state.calculateIncome(pid);
-            incomeTxt.setText(`+${income}/t`);
+            // Show decimal if non-integer, otherwise int
+            const incomeStr = Number.isInteger(income) ? income.toString() : income.toFixed(1);
+            incomeTxt.setText(`+${incomeStr}/t`);
 
             const currentId = state.currentPlayerId || '';
             const pAlpha = currentId === pid ? 1 : 0.4;

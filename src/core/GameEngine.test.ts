@@ -347,11 +347,11 @@ describe('GameEngine', () => {
             // Base: 10
             // Land (0,0): Base Tile = 0 Land Income
             // Land (5,5): Disconnected = 0.5
-            // Total = 10.5 -> floor(10.5) = 10
+            // Total = 10.5
 
-            expect(report.total).toBe(10);
+            expect(report.total).toBe(10.5);
             // Land income calculation:
-            // Total = floor(10 + 0.5) = 10.
+            // Total = 10 + 0.5 = 10.5.
             // Detailed report shows 10 for Base and 0.5 for Land.
             expect(report.land).toBe(0.5);
         });

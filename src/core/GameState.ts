@@ -276,7 +276,8 @@ export class GameState {
         }
 
         // Validate Total (Sanity Check)
-        const checkTotal = Math.floor(calculatedBaseIncome + calculatedLandIncome);
+        // We now allow fractional gold to persist (e.g. 11.5 + 11.5 = 23)
+        const checkTotal = calculatedBaseIncome + calculatedLandIncome;
         // Total should match calculateIncome?
         // calculateIncome might have been slightly different if state changed? No.
 
@@ -364,7 +365,7 @@ export class GameState {
             }
         }
 
-        return Math.floor(totalIncome);
+        return totalIncome; // Return float for precise display
     }
 
 
