@@ -130,12 +130,16 @@ vi.mock('phaser', () => {
                     return t;
                 }),
                 existing: vi.fn(),
-                zone: vi.fn(() => ({ // Added zone
-                    setInteractive: vi.fn(),
-                    on: vi.fn(),
-                    setSize: vi.fn(),
-                    setOrigin: vi.fn()
-                }))
+                zone: vi.fn(() => {
+                    const z = {
+                        setInteractive: vi.fn(() => z),
+                        on: vi.fn(() => z),
+                        setSize: vi.fn(() => z),
+                        setOrigin: vi.fn(() => z),
+                        destroy: vi.fn()
+                    };
+                    return z;
+                })
             };
             this.scale = {
                 width: 800,

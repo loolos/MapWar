@@ -207,7 +207,7 @@ export class InteractionRegistry {
             }
         });
 
-        // 5. Move / Capture / Attack (Unified)
+        // 5. Move / Capture / Attack (Land Only)
         this.register({
             id: 'MOVE',
             label: (engine: GameEngine, r: number, c: number) => {
@@ -225,11 +225,43 @@ export class InteractionRegistry {
             cost: (engine: GameEngine, r: number, c: number) => {
                 return engine.getMoveCost(r, c);
             },
-            isAvailable: (engine, r: number, c: number, isAction: boolean = false) => {
-                // Use existing move validation
-                // Pass isAction to allow logging if this check is part of an explicit user action
-                const validation = engine.validateMove(r, c, isAction);
-                return validation.valid;
+            isAvailable: (engine, r: number, c: number) => {
+                const cell = engine.state.getCell(r, c);
+                const pid = engine.state.currentPlayerId;
+                if (!cell || !pid) return false;
+
+                // Rule: NOT Water (Water is handled by Build Bridge)
+                if (cell.type === 'water') return false;
+
+                // Rule: NOT Owned (Self-ownership prevents move)
+                // Note: Re-clicking owned tile is handled by UI/Engine as "Cancel" or "Menu", 
+                // but as an "Available Action" in the menu, "Move" shouldn't appear for self.
+                return cell.owner !== pid;
+            },
+            immediate: true,
+            execute: (engine: GameEngine, r: number, c: number) => {
+                engine.togglePlan(r, c);
+            }
+        });
+
+        // 10. Build Bridge (Water Only)
+        this.register({
+            id: 'BUILD_BRIDGE',
+            label: 'Build Bridge',
+            description: 'Construct a bridge to cross water.',
+            cost: (engine: GameEngine, r: number, c: number) => {
+                return engine.getMoveCost(r, c); // Uses same cost logic (CostSystem handles bridge cost)
+            },
+            isAvailable: (engine, r: number, c: number) => {
+                const cell = engine.state.getCell(r, c);
+                const pid = engine.state.currentPlayerId;
+                if (!cell || !pid) return false;
+
+                // Rule: MUST be Water
+                if (cell.type !== 'water') return false;
+
+                // Rule: NOT Owned (Can't build on existing bridge/owned water if that existed)
+                return cell.owner !== pid;
             },
             immediate: true,
             execute: (engine: GameEngine, r: number, c: number) => {

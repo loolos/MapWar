@@ -44,6 +44,10 @@ export class AIController {
                     for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
                         const validation = this.engine.validateMove(r, c);
                         if (validation.valid) {
+                            // NEW: Check Cost explicitly (since validateMove purely checks rules now)
+                            const costValidation = this.engine.checkMoveCost(r, c);
+                            if (!costValidation.valid) continue;
+
                             const cell = grid[r][c];
                             const cost = this.engine.getMoveCost(r, c);
 
@@ -253,7 +257,28 @@ export class AIController {
     private scoreTactical(cell: Cell): number {
         let score = 0;
         if (cell.type === 'hill') score += AIConfig.SCORE_HILL;
+        if (cell.type === 'hill') score += AIConfig.SCORE_HILL;
         else if (cell.type === 'bridge') score += AIConfig.SCORE_BRIDGE;
+        else if (cell.type === 'water') {
+            // New Mechanic: Build Bridge
+            // Heuristic: If this water tile is adjacent to valid unowned land (Expansion) or Enemy (Attack), boost it.
+            // Bridges are expensive (50), so only do it if useful.
+            score -= 20; // Base penalty for cost perception beyond raw gold
+
+            // Check neighbors for opportunity
+            const neighbors = [
+                { r: cell.row + 1, c: cell.col }, { r: cell.row - 1, c: cell.col },
+                { r: cell.row, c: cell.col + 1 }, { r: cell.row, c: cell.col - 1 }
+            ];
+            for (const n of neighbors) {
+                if (this.engine.isValidCell(n.r, n.c)) {
+                    const nCell = this.engine.state.getCell(n.r, n.c);
+                    if (nCell && nCell.owner !== this.engine.state.currentPlayerId) {
+                        score += 30; // Bonus for bridging to stored targets
+                    }
+                }
+            }
+        }
         return score;
     }
 
