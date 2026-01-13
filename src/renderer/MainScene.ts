@@ -198,7 +198,7 @@ export class MainScene extends Phaser.Scene {
         this.interactionMenu = new InteractionMenu(this, this.engine); // NEW
 
         // Initialize Sound Manager
-        this.soundManager = new SoundManager(this);
+        this.soundManager = new SoundManager();
 
         this.setupButtons();
 

@@ -486,6 +486,7 @@ export class GameEngine {
             // Check Cost
             const currentCost = this.calculatePlannedCost();
             const player = this.state.getCurrentPlayer();
+
             if (player.gold < currentCost) {
                 // Remove last interaction or move to reduce cost?
                 // Simple approach: Remove the last pending Move/Interaction?
@@ -717,6 +718,7 @@ export class GameEngine {
             if (!cell) continue; // Safety Check
 
             const player = this.state.players[pid];
+            // Check against remaining gold
             if (player.gold < cost) {
                 this.emit('logMessage', { text: `Insufficient funds for move at (${move.r}, ${move.c})`, type: 'warning' });
                 // We should probably stop execution here to prevent partial invalid state

@@ -1,87 +1,114 @@
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { SoundManager } from './SoundManager';
+import * as Tone from 'tone';
 
-// Mock Phaser module to prevent 'window is not defined' error
-vi.mock('phaser', () => {
+// Mock Tone.js
+vi.mock('tone', () => {
     return {
-        default: {
-            Scene: class { },
-            Sound: {
-                BaseSound: class { }
-            }
-        }
+        PolySynth: vi.fn().mockImplementation(function () {
+            return {
+                toDestination: vi.fn().mockReturnThis(),
+                triggerAttackRelease: vi.fn(),
+                volume: { value: 0 },
+                set: vi.fn()
+            };
+        }),
+        MetalSynth: vi.fn().mockImplementation(function () {
+            return {
+                toDestination: vi.fn().mockReturnThis(),
+                triggerAttackRelease: vi.fn(),
+                volume: { value: 0 },
+                harmonicity: 0
+            };
+        }),
+        NoiseSynth: vi.fn().mockImplementation(function () {
+            return {
+                toDestination: vi.fn().mockReturnThis(),
+                triggerAttackRelease: vi.fn(),
+                volume: { value: 0 }
+            };
+        }),
+        MembraneSynth: vi.fn().mockImplementation(function () {
+            return {
+                toDestination: vi.fn().mockReturnThis(),
+                triggerAttackRelease: vi.fn(),
+                volume: { value: 0 }
+            };
+        }),
+        MonoSynth: vi.fn().mockImplementation(function () {
+            return {
+                toDestination: vi.fn().mockReturnThis(),
+                triggerAttackRelease: vi.fn(),
+                volume: { value: 0 }
+            };
+        }),
+        Synth: vi.fn(),
+        Loop: vi.fn().mockImplementation(function (cb: any) {
+            return {
+                start: vi.fn().mockReturnThis(),
+                stop: vi.fn(),
+                callback: cb
+            };
+        }),
+        Transport: {
+            start: vi.fn(),
+            stop: vi.fn(),
+            cancel: vi.fn(),
+            bpm: { value: 0 }
+        },
+        Destination: {
+            mute: false
+        },
+        now: vi.fn(() => 0),
+        start: vi.fn().mockResolvedValue(undefined),
+        context: { state: 'suspended' },
+        Time: vi.fn(() => ({ toSeconds: () => 0.1 }))
     };
 });
-
-import { SoundManager } from './SoundManager';
-
-// Mock Phaser Scene and AudioContext
-const mockContext = {
-    createOscillator: vi.fn(() => ({
-        connect: vi.fn(),
-        start: vi.fn(),
-        stop: vi.fn(),
-        frequency: { setValueAtTime: vi.fn() },
-        type: 'sine'
-    })),
-    createGain: vi.fn(() => ({
-        connect: vi.fn(),
-        gain: { setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() }
-    })),
-    createBiquadFilter: vi.fn(() => ({
-        connect: vi.fn(),
-        frequency: { setValueAtTime: vi.fn(), value: 0 },
-        type: 'lowpass'
-    })),
-    createBuffer: vi.fn(() => ({
-        getChannelData: vi.fn(() => new Float32Array(1024))
-    })),
-    createBufferSource: vi.fn(() => ({
-        connect: vi.fn(),
-        start: vi.fn(),
-        buffer: null
-    })),
-    currentTime: 0,
-    state: 'running',
-    sampleRate: 44100
-};
-
-const mockScene = {
-    sound: {
-        get: vi.fn(),
-        add: vi.fn(),
-        context: mockContext
-    }
-} as any;
 
 describe('SoundManager', () => {
     let soundManager: SoundManager;
 
     beforeEach(() => {
+        soundManager = new SoundManager();
+    });
+
+    afterEach(() => {
         vi.clearAllMocks();
-        soundManager = new SoundManager(mockScene);
     });
 
-    it('initializes with PEACE state', () => {
+    it('initializes default state', () => {
         expect(soundManager.bgmState).toBe('PEACE');
+        expect(soundManager.isMuted).toBe(false);
     });
 
-    it('updates music state correctly', () => {
-        soundManager.setBgmState('CONFLICT');
-        expect(soundManager.bgmState).toBe('CONFLICT');
+    it('starts Tone context on interaction', () => {
+        soundManager.playSfx('sfx:move');
+        expect(Tone.start).toHaveBeenCalled();
     });
 
-    it('plays dynamic BGM without crashing', () => {
-        vi.useFakeTimers();
-        soundManager.setBgmState('CONFLICT'); // Ensure drums play (deterministic)
-        soundManager.playBgm('missing_file'); // Trigger fallback
+    it('plays MetalSynth for attack SFX', () => {
+        soundManager.playSfx('sfx:attack');
+        expect(Tone.MetalSynth).toHaveBeenCalled();
+    });
 
-        // Advance time to trigger loop
-        vi.advanceTimersByTime(1000);
+    it('updates bgm state and triggers Transport', () => {
+        soundManager.setBgmState('TENSION');
+        expect(soundManager.bgmState).toBe('TENSION');
 
-        // Check if oscillators were created (implies loop ran)
-        expect(mockContext.createOscillator).toHaveBeenCalled();
+        soundManager.playBgm('bgm_test');
+        expect(Tone.Transport.start).toHaveBeenCalled();
+        expect(Tone.Transport.bpm.value).toBe(90); // Tension BPM
+    });
 
-        vi.useRealTimers();
+    it('toggles mute correctly', () => {
+        soundManager.toggleMute();
+        expect(soundManager.isMuted).toBe(true);
+        expect(Tone.Destination.mute).toBe(true);
+
+        soundManager.toggleMute();
+        expect(soundManager.isMuted).toBe(false);
+        expect(Tone.Destination.mute).toBe(false);
     });
 });

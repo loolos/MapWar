@@ -317,6 +317,19 @@ vi.mock('./ui/LogSystem', () => ({
     })
 }));
 
+vi.mock('../core/audio/SoundManager', () => ({
+    SoundManager: vi.fn().mockImplementation(function () {
+        return {
+            playSfx: vi.fn(),
+            playBgm: vi.fn(),
+            stopBgm: vi.fn(),
+            setBgmState: vi.fn(),
+            toggleMute: vi.fn(),
+            isMuted: false
+        };
+    })
+}));
+
 
 describe('MainScene', () => {
     let scene: MainScene;
