@@ -237,9 +237,13 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
                     let incomeStr = `+${income.toFixed(1)}`;
                     if (cell.owner && !cell.isConnected) incomeStr += " (Disc.)";
 
-                    // Check for Aura Bonus (using raw state for logic check)
-                    if (cell.owner && AuraSystem.isInIncomeAura(engine.state, selectedRow, selectedCol, cell.owner)) {
-                        incomeStr += " (Aura +50%)";
+                    // Check for Aura Bonus
+                    if (cell.owner) {
+                        const bonus = AuraSystem.getIncomeAuraBonus(engine.state, selectedRow, selectedCol, cell.owner);
+                        if (bonus > 0) {
+                            const percent = Math.round(bonus * 100);
+                            incomeStr += ` (Aura +${percent}%)`;
+                        }
                     }
 
                     desc += `\nIncome: ${incomeStr} G`;
