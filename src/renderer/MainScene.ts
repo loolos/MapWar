@@ -369,62 +369,81 @@ export class MainScene extends Phaser.Scene {
 
         const gfx = this.make.graphics({ x: 0, y: 0 });
 
-        // Base Crop Color (Wheat/Gold)
-        const cropColor = 0xFFD700;
-        const cropDark = 0xDAA520; // GoldenRod
+        // Colors: Wheat/Earth
+        const soilColor = 0x8B4513; // SaddleBrown (Base soil)
+        const cropColor = 0xFFD700; // Gold
+        const cropSecondary = 0xDAA520; // GoldenRod
 
-        // Padding
+        // Base Size
         const pad = 8;
         const availableWidth = 64 - (pad * 2);
 
-        // Draw randomly based on level to create "mottled" look
-        // We use a pseudo-random approach or fixed patterns to ensure consistency if re-generated
-        // But here we generate once.
+        // Draw Soil Background (Optional, or leave transparent to show terrain?)
+        // Let's leave transparent so we see the "land" type underneath, or draw a "tilled earth" patch.
+        // User asked for "Sparse to Dense".
 
         if (level === 1) {
-            // Level 1: Clean, organized large patches (Not very mottled)
-            // 4 Large patches
-            gfx.fillStyle(cropColor);
-            const size = availableWidth / 2 - 2;
-            gfx.fillRect(pad, pad, size, size);
-            gfx.fillRect(pad + size + 4, pad, size, size);
-            gfx.fillRect(pad, pad + size + 4, size, size);
-            gfx.fillRect(pad + size + 4, pad + size + 4, size, size);
+            // Level 1: Sparse (3 distinct rows, wide gap)
+            // Concept: Early planting. 
+            // Draw 3 vertical stripes.
+            const rowCount = 3;
+            const width = 6; // Thin strips
+            const gap = (availableWidth - (rowCount * width)) / (rowCount - 1);
+
+            gfx.fillStyle(cropSecondary);
+
+            for (let i = 0; i < rowCount; i++) {
+                const x = pad + i * (width + gap);
+                // Draw strip with slight irregularity
+                gfx.fillRect(x, pad + 2, width, availableWidth - 4);
+
+                // Add some "sprouts" (small brighter rects)
+                gfx.fillStyle(cropColor);
+                for (let j = 0; j < 4; j++) {
+                    gfx.fillRect(x + 1, pad + 6 + j * 12, 4, 4);
+                }
+                gfx.fillStyle(cropSecondary); // Reset
+            }
+
         } else if (level === 2) {
-            // Level 2: Smaller patches, slightly irregular (Start of mottling)
-            // Grid of 3x3 but with some variation
-            const size = availableWidth / 3 - 2;
-            for (let r = 0; r < 3; r++) {
-                for (let c = 0; c < 3; c++) {
-                    // Random color variation
-                    gfx.fillStyle(Math.random() > 0.5 ? cropColor : cropDark);
-                    const ox = pad + c * (size + 2);
-                    const oy = pad + r * (size + 2);
-                    // Slight random offset
-                    const rox = (Math.random() - 0.5) * 2;
-                    const roy = (Math.random() - 0.5) * 2;
-                    gfx.fillRect(ox + rox, oy + roy, size, size);
+            // Level 2: Medium (5 rows, thicker)
+            // Concept: Growing field.
+            const rowCount = 5;
+            const width = 6;
+            const gap = (availableWidth - (rowCount * width)) / (rowCount - 1);
+
+            for (let i = 0; i < rowCount; i++) {
+                // Alternating colors for variation
+                gfx.fillStyle(i % 2 === 0 ? cropColor : cropSecondary);
+                const x = pad + i * (width + gap);
+                gfx.fillRect(x, pad, width, availableWidth);
+
+                // Texture: Cross lines (horizontal cuts)
+                gfx.fillStyle(soilColor);
+                // Draw faint lines to simulate stalks
+                // Actually simpler: just draw the main rows fully.
+            }
+
+        } else {
+            // Level 3: Dense (Full Grid / Checkerboard)
+            // Concept: Mature harvest ready.
+            // 8x8 dense grid
+            const cols = 7;
+            const rows = 7;
+            const cellW = availableWidth / cols;
+            const cellH = availableWidth / rows;
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    // Checkerboard slight tint
+                    const isEven = (r + c) % 2 === 0;
+                    gfx.fillStyle(isEven ? cropColor : cropSecondary);
+
+                    // Gap of 1px for "cut" effect
+                    gfx.fillRect(pad + c * cellW, pad + r * cellH, cellW - 1, cellH - 1);
                 }
             }
-        } else {
-            // Level 3: Highly Mottled (Many small specks/patches)
-            const count = 30;
-            const size = 6;
-
-            for (let i = 0; i < count; i++) {
-                gfx.fillStyle(Math.random() > 0.3 ? cropColor : cropDark);
-
-                const x = pad + Math.random() * (availableWidth - size);
-                const y = pad + Math.random() * (availableWidth - size);
-
-                gfx.fillRect(x, y, size, size);
-            }
         }
-
-        // Add an Icon/Symbol overlay? No, the user asked for "mottled" look.
-        // Maybe a minimal border?
-        // gfx.lineStyle(1, 0x000000, 0.2);
-        // gfx.strokeRect(pad, pad, availableWidth, availableWidth);
 
         gfx.generateTexture(key, 64, 64);
         gfx.destroy();
@@ -1031,7 +1050,7 @@ export class MainScene extends Phaser.Scene {
                 child.destroy();
             }
             else if (child.type === 'Image') {
-                if (child.texture && (child.texture.key === 'gold_mine' || child.texture.key.startsWith('watchtower'))) {
+                if (child.texture && (child.texture.key === 'gold_mine' || child.texture.key.startsWith('watchtower') || child.texture.key.startsWith('farm'))) {
                     child.destroy();
                 }
             }
