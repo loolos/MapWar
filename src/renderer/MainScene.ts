@@ -321,6 +321,13 @@ export class MainScene extends Phaser.Scene {
             this.cursors = this.input.keyboard.createCursorKeys();
         }
 
+        // Music State Listener
+        this.engine.on('musicState', (state: 'PEACE' | 'TENSION' | 'CONFLICT' | 'DOOM') => {
+            if (this.soundManager) {
+                this.soundManager.setBgmState(state);
+            }
+        });
+
         // Trigger Initial Layout
         this.resize(this.scale.gameSize);
         // Safety: Reprocess layout after short delay to ensure UI updates are caught
@@ -1450,10 +1457,8 @@ export class MainScene extends Phaser.Scene {
         }
 
         // Update Audio Intensity
-        if (this.engine) {
-            const intensity = this.engine.calculateIntensity();
-            this.soundManager.setIntensity(intensity);
-        }
+        // Audio Intensity is now handled via events (engine.on('musicState', ...))
+        // See create() for event listener setup.
 
         // Handle Map Scrolling
         // Handle Map Scrolling (Discrete Viewport Panning)

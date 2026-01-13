@@ -523,9 +523,6 @@ describe('GameEngine', () => {
 
             // Capture (0,2) via bridge
             // (0,2) is adjacent to (0,1) which is now a bridge owned by P1
-            const plain = engine.state.getCell(0, 2)!;
-            plain.type = 'plain';
-
             engine.togglePlan(0, 2);
             expect(engine.pendingMoves).toHaveLength(1); // Should be valid
 
@@ -772,5 +769,50 @@ describe('GameEngine', () => {
         });
     });
 
+    describe('Audio / Tension System', () => {
+        it('starts in PEACE when safe', () => {
+            const spy = vi.fn();
+            engine.on('musicState', spy);
+
+            // Trigger check
+            (engine as any).checkAudioState(); // access private or trigger via commit
+
+            expect(spy).toHaveBeenCalledWith('PEACE');
+        });
+
+        it('switches to TENSION when adjacent to enemy', () => {
+            const spy = vi.fn();
+            engine.on('musicState', spy);
+
+            // Setup: P1 at (0,0), Enemy P2 at (0,1)
+            engine.state.setOwner(0, 0, 'P1');
+            engine.state.setBuilding(0, 0, 'none'); // Ensure not a base so it's just Tension
+            engine.state.setOwner(0, 1, 'P2');
+
+            // Force player P1
+            engine.state.currentPlayerId = 'P1';
+
+            // Trigger
+            (engine as any).checkAudioState();
+
+            expect(spy).toHaveBeenCalledWith('TENSION');
+        });
+
+        it('switches to DOOM when Base is threatened', () => {
+            const spy = vi.fn();
+            engine.on('musicState', spy);
+
+            // Setup: P1 Base at (0,0), Enemy P2 at (0,1)
+            engine.state.setOwner(0, 0, 'P1');
+            engine.state.setBuilding(0, 0, 'base');
+            engine.state.setOwner(0, 1, 'P2');
+
+            engine.state.currentPlayerId = 'P1';
+
+            (engine as any).checkAudioState();
+
+            expect(spy).toHaveBeenCalledWith('DOOM');
+        });
+    });
 
 });

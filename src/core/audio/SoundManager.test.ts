@@ -62,28 +62,18 @@ describe('SoundManager', () => {
         soundManager = new SoundManager(mockScene);
     });
 
-    it('initializes with 0 intensity (Peaceful)', () => {
-        expect(soundManager.intensity).toBe(0);
+    it('initializes with PEACE state', () => {
+        expect(soundManager.bgmState).toBe('PEACE');
     });
 
-    it('clamps intensity between 0 and 1', () => {
-        soundManager.setIntensity(1.5);
-        expect(soundManager.intensity).toBe(1.0);
-
-        soundManager.setIntensity(-0.5);
-        expect(soundManager.intensity).toBe(0.0);
+    it('updates music state correctly', () => {
+        soundManager.setBgmState('CONFLICT');
+        expect(soundManager.bgmState).toBe('CONFLICT');
     });
 
-    it('updates intensity correctly', () => {
-        soundManager.setIntensity(0.5);
-        expect(soundManager.intensity).toBe(0.5);
-    });
-
-    // We can't easily test the internal loop of playBgmFallback without fake timers
-    // but we can verify it doesn't crash?
     it('plays dynamic BGM without crashing', () => {
         vi.useFakeTimers();
-        soundManager.setIntensity(1.0); // Ensure drums play (deterministic)
+        soundManager.setBgmState('CONFLICT'); // Ensure drums play (deterministic)
         soundManager.playBgm('missing_file'); // Trigger fallback
 
         // Advance time to trigger loop

@@ -55,6 +55,7 @@ describe('Unified Move Interaction', () => {
     it('planInteraction triggers MOVE logic via togglePlan', () => {
         // Mock validateMove to ensure we test the wiring, not the validation logic itself
         engine.validateMove = () => ({ valid: true });
+        engine.checkMoveCost = () => ({ valid: true });
 
         // Setup valid move
         engine.state.setOwner(0, 0, 'p1');

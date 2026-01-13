@@ -61,73 +61,113 @@ export class SoundManager {
     }
 
     // Dynamic BGM State
-    public intensity: number = 0.0; // 0.0 (Peaceful) to 1.0 (War)
+    public bgmState: 'PEACE' | 'TENSION' | 'CONFLICT' | 'DOOM' = 'PEACE';
     private bgmInterval: any = null;
 
-    public setIntensity(val: number) {
-        this.intensity = Math.max(0, Math.min(1, val));
+    public setBgmState(state: 'PEACE' | 'TENSION' | 'CONFLICT' | 'DOOM') {
+        if (this.bgmState !== state) {
+            console.log(`[Audio] Switching Music State: ${this.bgmState} -> ${state}`);
+            this.bgmState = state;
+            // Restart loop to apply tempo changes immediately if needed
+            if (this.bgmInterval) {
+                this.playBgmFallback(); // Re-trigger with new state params
+            }
+        }
     }
 
     private playBgmFallback() {
         if (this.bgmInterval) clearInterval(this.bgmInterval);
 
         let beat = 0;
-        // Pentatonic Scale (C Maj): C4, D4, E4, G4, A4, C5
-        const SCALE = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25]; // Hz
+
+        // Configuration per State
+        const CONFIG = {
+            'PEACE': { bpm: 60, prob: 0.2, scale: [261.63, 293.66, 329.63, 392.00, 440.00], drum: 0 },
+            'TENSION': { bpm: 90, prob: 0.3, scale: [261.63, 277.18, 311.13, 349.23, 392.00], drum: 0.2 }, // Minor/Diminished
+            'CONFLICT': { bpm: 120, prob: 0.4, scale: [261.63, 311.13, 392.00, 523.25], drum: 0.5 },
+            'DOOM': { bpm: 150, prob: 0.6, scale: [130.81, 196.00, 261.63, 311.13, 370.00], drum: 0.8 }  // Low & Fast
+        };
 
         const loop = () => {
             if (this.isMuted) return;
+            const cfg = CONFIG[this.bgmState];
+
             try {
                 const ctx = (this.scene.sound as any).context as AudioContext;
                 if (!ctx || ctx.state === 'suspended') return;
                 const now = ctx.currentTime;
 
-                // --- TRACK 1: AMBIENT MELODY (Always On, "Minecraft-like") ---
-                // Probability of playing a note depends on "Peaceful" vibes. 
-                // In war (intensity 1), melody becomes sparse or frantic? Let's keep it calm to contrast.
-                // 25% chance per beat to play a note
-                if (Math.random() < 0.25) {
-                    const note = SCALE[Math.floor(Math.random() * SCALE.length)];
+                // --- TRACK 1: MELODY / ATMOSPHERE ---
+                if (Math.random() < cfg.prob) {
+                    const note = cfg.scale[Math.floor(Math.random() * cfg.scale.length)];
                     const osc = ctx.createOscillator();
                     const gain = ctx.createGain();
 
-                    osc.type = 'sine'; // Pure, calm tone
-                    osc.frequency.setValueAtTime(note, now);
+                    // Instrument Type
+                    if (this.bgmState === 'PEACE') osc.type = 'sine';
+                    else if (this.bgmState === 'TENSION') osc.type = 'triangle';
+                    else osc.type = 'sawtooth'; // Conflict/Doom -> harsher
 
+                    osc.frequency.setValueAtTime(note, now);
                     osc.connect(gain);
                     gain.connect(ctx.destination);
 
-                    // Long attack/release for pad/ambient feel
+                    // Envelope
                     gain.gain.setValueAtTime(0, now);
-                    gain.gain.linearRampToValueAtTime(0.1, now + 0.5);
-                    gain.gain.exponentialRampToValueAtTime(0.001, now + 4.0); // Long tail
+                    const attack = this.bgmState === 'PEACE' ? 0.5 : 0.05;
+                    const release = this.bgmState === 'PEACE' ? 4.0 : 0.5;
+                    gain.gain.linearRampToValueAtTime(0.1, now + attack);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + release);
 
                     osc.start(now);
-                    osc.stop(now + 4.0);
+                    osc.stop(now + release);
                 }
 
-                // --- TRACK 2: WAR DRUMS (Intensity Layer) ---
-                // Volume scales with intensity. At 0 intensity, volume is 0.
-                const drumVol = this.intensity * 0.4;
-
-                if (drumVol > 0.01) {
-                    const playDrum = (vol: number, pitch = 100) => {
+                // --- TRACK 2: PERCUSSION ---
+                if (cfg.drum > 0) {
+                    const playDrum = (vol: number, pitch = 100, isSnare = false) => {
                         const osc = ctx.createOscillator();
                         const gain = ctx.createGain();
-                        osc.frequency.setValueAtTime(pitch, now);
-                        osc.type = 'triangle';
+
+                        // Kick vs Snare
+                        if (isSnare) {
+                            // White Noise burst (Approximated with fast random modulation or check if noise buffer available)
+                            // Use simplified Triangle with high pitch drop for snare-ish tone
+                            osc.type = 'triangle';
+                            osc.frequency.setValueAtTime(200, now);
+                            osc.frequency.exponentialRampToValueAtTime(50, now + 0.1);
+                        } else {
+                            // Kick
+                            osc.frequency.setValueAtTime(pitch, now);
+                            osc.type = 'triangle';
+                            osc.frequency.exponentialRampToValueAtTime(10, now + 0.1);
+                        }
+
                         gain.gain.setValueAtTime(vol, now);
-                        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + (isSnare ? 0.2 : 0.1));
+
                         osc.connect(gain);
                         gain.connect(ctx.destination);
                         osc.start(now);
-                        osc.stop(now + 0.1);
+                        osc.stop(now + 0.2);
                     };
 
-                    // Marching Rhythm
-                    if (beat % 4 === 0) playDrum(drumVol, 80);
-                    else if (beat % 4 === 2) playDrum(drumVol, 80);
-                    else if (beat % 4 === 3) playDrum(drumVol * 0.5, 120);
+
+
+                    if (this.bgmState === 'TENSION') {
+                        // Heartbeat: Boom... Boom...
+                        if (beat % 8 === 0 || beat % 8 === 2) playDrum(cfg.drum, 60);
+                    }
+                    else if (this.bgmState === 'CONFLICT') {
+                        // Marching: Boom, snare, boom, snare
+                        if (beat % 2 === 0) playDrum(cfg.drum, 80); // Kick
+                        else playDrum(cfg.drum * 0.7, 150, true);   // Snare
+                    }
+                    else if (this.bgmState === 'DOOM') {
+                        // Rapid Fire
+                        playDrum(cfg.drum, 60);
+                        if (Math.random() > 0.5) playDrum(cfg.drum * 0.5, 120, true);
+                    }
                 }
 
                 beat++;
@@ -136,9 +176,12 @@ export class SoundManager {
             }
         };
 
-        // Variable Tempo? For now fixed interval, but maybe faster update?
-        // 500ms = 120 BPM. 
-        this.bgmInterval = setInterval(loop, 500);
+        // Calculate Interval from BPM
+        // beat = quarter note? Let's say beat = eighth note for granularity
+        const stateBpm = CONFIG[this.bgmState].bpm;
+        const msPerBeat = (60000 / stateBpm) / 2; // Eighth notes
+
+        this.bgmInterval = setInterval(loop, msPerBeat);
     }
 
     public toggleMute() {

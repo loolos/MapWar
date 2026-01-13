@@ -81,11 +81,17 @@ export class GameEngine {
         // Pass current mapType to ensure same generator is used if map is reset
         // Pass current mapType to ensure same generator is used if map is reset
         this.stateManager.reset(undefined, keepMap, this.state.currentMapType);
+        // Reset pending
         this.pendingMoves = [];
         this.pendingInteractions = [];
         this.lastAiMoves = [];
         this.lastError = null;
         this.isGameOver = false;
+
+        // Update Audio State (React to changes)
+        this.checkAudioState();
+
+        this.emit('stateChanged');
 
         // Initial Income for first player (Restart)
         const firstPlayer = this.state.playerOrder[0];
@@ -164,7 +170,12 @@ export class GameEngine {
         if (this.isGameOver) return;
 
         const incomeReport = this.state.endTurn();
-        this.emit('turnChange');
+
+
+        // Turn Change -> Re-evaluate Music
+        this.checkAudioState();
+
+        this.emit('turnChanged', this.state.currentPlayerId);
         if (incomeReport) {
             this.emit('incomeReport', incomeReport);
 
@@ -615,6 +626,67 @@ export class GameEngine {
 
 
 
+    // --- Audio / Tension System ---
+
+    private updateMusicState() {
+        const tensionState = this.calculateTensionState();
+        this.emit('musicState', tensionState);
+    }
+
+    private calculateTensionState(): 'PEACE' | 'TENSION' | 'CONFLICT' | 'DOOM' {
+        // 1. DOOM: Any owned Base under direct threat (HP < Max) OR very low total units/land count compared to enemy?
+        // Simple Doom Check: My Base HP < 100? (Base HP not fully implemented yet, let's assume HP checks or Enemy Adjacency to Base)
+        const pid = this.state.currentPlayerId;
+
+        let doom = false;
+        let conflict = false;
+        let tension = false;
+
+        // Scan Grid for critical states
+        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+                const cell = this.state.grid[r][c];
+
+                // Doom: Enemy adjacent to My Base
+                if (cell.owner === pid && cell.building === 'base') {
+                    const neighbors = this.state.getNeighbors(r, c);
+                    if (neighbors.some((n: any) => n.owner && n.owner !== pid)) {
+                        doom = true;
+                    }
+                }
+
+                // Conflict: Recent skirmishes? 
+                // We can track lastTurnAttacks. For now, check if I am adjacent to Enemy everywhere (Frontline density)
+                if (cell.owner === pid) {
+                    const neighbors = this.state.getNeighbors(r, c);
+                    if (neighbors.some((n: any) => {
+                        const isEnemy = n.owner && n.owner !== pid;
+                        return isEnemy;
+                    })) {
+                        tension = true;
+                    }
+                }
+            }
+        }
+
+        // Check recent history for Conflict
+        // If last player action was Attack, or lost units
+        if (this.lastAiMoves.length > 5) conflict = true; // Lots of AI activity? Mock.
+
+        if (doom) return 'DOOM';
+        if (conflict) return 'CONFLICT'; // Need usage stats for true conflict detection
+        // For now, let's toggle CONFLICT if user just Attacked
+        // (This might need a 'combatCounter' in state to be robust)
+
+        if (tension) return 'TENSION';
+        return 'PEACE';
+    }
+
+    // Call this after moves committed
+    private checkAudioState() {
+        this.updateMusicState();
+    }
+
     private isAdjacentToPending(row: number, col: number): boolean {
         // Check if adjacent to any cell in pendingMoves
         const neighbors = [
@@ -748,6 +820,14 @@ export class GameEngine {
             totalCost += cost;
         }
 
+        // Emit SFX based on priority (Highest impact first)
+        if (hasTownCapture) this.emit('sfx:capture_town');
+        else if (hasConquer) this.emit('sfx:conquer'); // Epic Capture
+        else if (hasCombat) this.emit('sfx:attack');
+        else if (hasCapture) this.emit('sfx:capture');
+        else if (this.pendingMoves.length > 0) this.emit('sfx:move');
+
+
         // Process Interactions
         // Note: Interactions happen AFTER moves (or concurrent). 
         // If an interaction relies on ownership, and a move changes ownership...
@@ -779,18 +859,20 @@ export class GameEngine {
             }
         });
 
-        // Emit Audio Events based on aggregate actions (Priority Order)
+        // Reset pending
+        this.pendingMoves = [];
+        this.pendingInteractions = [];
+
+        // Update Audio State (React to changes)
+        this.checkAudioState();
+
+        this.emit('stateChanged');
+        this.emit('planUpdate');
+
         if (gameWon) {
-            this.emit('sfx:victory');
             this.isGameOver = true;
             this.emit('gameOver', pid);
-        } else {
-            // Priority: Town Capture > Conquer (Enemy) > Combat > Capture (Neutral) > Move
-            if (hasTownCapture) this.emit('sfx:capture_town');
-            else if (hasConquer) this.emit('sfx:conquer');
-            else if (hasCombat) this.emit('sfx:attack');
-            else if (hasCapture) this.emit('sfx:capture');
-            else this.emit('sfx:move');
+            this.emit('sfx:victory');
         }
 
         if (totalCost > 0) {
@@ -807,15 +889,6 @@ export class GameEngine {
             this.emit('mapUpdate');
         }
 
-        this.pendingMoves = []; // Clear
-        this.pendingInteractions = []; // Clear Interactions
-        this.lastError = null;
-        this.emit('planUpdate');
-
-        if (gameWon) {
-            this.isGameOver = true;
-            this.emit('gameOver', pid); // Winner is current player
-        }
     }
 
     endTurn() {

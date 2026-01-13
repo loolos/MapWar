@@ -530,4 +530,21 @@ export class GameState {
             }
         }
     }
+    getNeighbors(r: number, c: number): Cell[] {
+        const neighbors: Cell[] = [];
+        const directions = [
+            { r: -1, c: 0 }, { r: 1, c: 0 },
+            { r: 0, c: -1 }, { r: 0, c: 1 }
+        ];
+
+        for (const d of directions) {
+            const nr = r + d.r;
+            const nc = c + d.c;
+            const cell = this.getCell(nr, nc);
+            if (cell) {
+                neighbors.push(cell);
+            }
+        }
+        return neighbors;
+    }
 }

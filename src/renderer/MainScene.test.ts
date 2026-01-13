@@ -46,7 +46,22 @@ vi.mock('phaser', () => {
                         connect: vi.fn(),
                         gain: { setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() }
                     })),
+                    createBuffer: vi.fn(() => ({
+                        getChannelData: vi.fn(() => new Float32Array(1024))
+                    })),
+                    createBufferSource: vi.fn(() => ({
+                        connect: vi.fn(),
+                        start: vi.fn(),
+                        stop: vi.fn(),
+                        buffer: null
+                    })),
+                    createBiquadFilter: vi.fn(() => ({
+                        connect: vi.fn(),
+                        frequency: { setValueAtTime: vi.fn(), value: 0 },
+                        type: 'lowpass'
+                    })),
                     currentTime: 0,
+                    state: 'running',
                     destination: {}
                 }
             };

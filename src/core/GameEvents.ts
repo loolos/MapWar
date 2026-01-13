@@ -1,6 +1,10 @@
 
 export interface GameEventMap {
-    'turnChange': void;
+    'turnChanged': string; // activePlayerId
+    'stateChanged': void;
+    'musicState': 'PEACE' | 'TENSION' | 'CONFLICT' | 'DOOM';
+
+    'turnChange': void; // Legacy?
     'gameStart': void;
     'mapUpdate': void;
     'gameRestart': void;
