@@ -703,6 +703,8 @@ export class GameEngine {
         const pid = this.state.currentPlayerId;
         if (!pid) return;
 
+        // Snapshot costs BEFORE execution to ensure consistency with the Plan
+
         let totalCost = 0;
         let gameWon = false;
 
@@ -711,8 +713,16 @@ export class GameEngine {
         let hasTownCapture = false;
         let hasConquer = false;
 
-        for (const move of this.pendingMoves) {
-            const cost = this.getMoveCost(move.r, move.c);
+
+        // Snapshot costs BEFORE execution to ensure consistency with the Plan
+        // logic (which assumes current state for all moves).
+        // This prevents "Cheaper than planned" issues where capturing A makes B closer/cheaper during execution.
+        const movesWithCost = this.pendingMoves.map(m => ({
+            move: m,
+            cost: this.getMoveCost(m.r, m.c)
+        }));
+
+        for (const { move, cost } of movesWithCost) {
             const cell = this.state.getCell(move.r, move.c);
 
             if (!cell) continue; // Safety Check
