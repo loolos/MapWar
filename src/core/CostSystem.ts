@@ -123,6 +123,22 @@ export class CostSystem {
                 baseCost -= discountAmount;
                 breakdownParts.push(`Support(-${Math.floor(discount * 100)}%)`);
             }
+
+            // 6. Wall Defense Aura (Defender's Walls protecting this tile)
+            // Target is cell. Owner is cell.owner.
+            // But we checked isAttack only if cell.owner !== curr. So cell.owner IS the defender.
+            if (cell.owner) {
+                const defenseBonus = AuraSystem.getDefenseAuraBonus(state, row, col, cell.owner);
+                if (defenseBonus > 0) {
+                    // Increase Cost
+                    // Logic: "Cost increased by 20%...". Is it additive or multiplicative to base?
+                    // Usually multiplicative to the current running cost or base?
+                    // Let's apply it to the baseCost (which includes terrain/multipliers already).
+                    const addedCost = Math.floor(baseCost * defenseBonus);
+                    baseCost += addedCost;
+                    breakdownParts.push(`WallCover(+${Math.floor(defenseBonus * 100)}%)`);
+                }
+            }
         }
 
         return { cost: Math.max(1, baseCost), breakdown: breakdownParts.join(' ') };
@@ -198,6 +214,16 @@ export class CostSystem {
                 breakdownParts.push(`Wall(Base+${baseWallCost}, Lv${cell.defenseLevel}+${upgradeBonus})`);
             } else {
                 breakdownParts.push(`Wall Disconnected(+0)`);
+            }
+        }
+
+        // Aura: Wall Defense (from Neighbors)
+        if (cell.owner) {
+            const defenseBonus = AuraSystem.getDefenseAuraBonus(state, row, col, cell.owner);
+            if (defenseBonus > 0) {
+                const addedCost = Math.floor(baseCost * defenseBonus);
+                baseCost += addedCost;
+                breakdownParts.push(`WallCover(+${Math.floor(defenseBonus * 100)}%)`);
             }
         }
 

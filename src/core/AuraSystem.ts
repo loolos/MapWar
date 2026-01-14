@@ -144,4 +144,33 @@ export class AuraSystem {
         }
         return maxBonus;
     }
+
+    /**
+     * Calculates the defensive aura bonus from adjacent friendly walls.
+     * @param state Current GameState
+     * @param r Target Row
+     * @param c Target Col
+     * @param ownerId The owner of the walls (usually the defender)
+     * @returns The maximum defense bonus (e.g., 0.2 for 20%)
+     */
+    static getDefenseAuraBonus(state: GameState, r: number, c: number, ownerId: string): number {
+        let maxBonus = 0;
+        const neighbors = [
+            { r: r - 1, c: c }, { r: r + 1, c: c },
+            { r: r, c: c - 1 }, { r: r, c: c + 1 }
+        ];
+
+        for (const n of neighbors) {
+            const cell = state.getCell(n.r, n.c);
+            if (cell && cell.owner === ownerId && cell.building === 'wall' && cell.isConnected) {
+                // Determine Wall Level (Default 0 if undefined, max 2 for array index)
+                const level = Math.min(GameConfig.WALL_DEFENSE_AURA_BONUS.length - 1, Math.max(0, cell.defenseLevel));
+                const bonus = GameConfig.WALL_DEFENSE_AURA_BONUS[level];
+                if (bonus > maxBonus) {
+                    maxBonus = bonus;
+                }
+            }
+        }
+        return maxBonus;
+    }
 }

@@ -1244,6 +1244,22 @@ export class MainScene extends Phaser.Scene {
                     }
                 }
 
+                // Wall Defense Aura Visualization (Shield Icon)
+                if (cell.owner) {
+                    const defBonus = AuraSystem.getDefenseAuraBonus(this.engine.state, r, c, cell.owner);
+                    if (defBonus > 0) {
+                        // Display Shield Icon in Top-Right
+                        // const bonusPercent = Math.round(defBonus * 100);
+                        // Text: '🛡️'
+                        const shield = this.add.text(x + this.tileSize - 2, y + 2, '🛡️', {
+                            fontSize: '14px',
+                            resolution: 2
+                        }).setOrigin(1, 0); // Top-Right Anchor
+
+                        this.mapContainer.add(shield);
+                    }
+                }
+
 
 
                 // Gold Mine removed from here

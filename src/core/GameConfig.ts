@@ -41,6 +41,7 @@ export const GameConfig = {
     WALL_CAPTURE_BASE_ADDITION: 10,
     UPGRADE_WALL_COST: 10,
     UPGRADE_WALL_MAX: 3,
+    WALL_DEFENSE_AURA_BONUS: [0.2, 0.3, 0.4], // Bonus for adjacent friendly tiles per wall level
     // Watchtower Configs
     COST_BUILD_WATCHTOWER: 20,
     COST_UPGRADE_WATCHTOWER: 20,
