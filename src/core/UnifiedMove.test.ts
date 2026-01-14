@@ -8,6 +8,7 @@ describe('Unified Move Interaction', () => {
 
     beforeEach(() => {
         engine = new GameEngine([{ id: 'p1', isAI: false, color: 0x00ff00 }, { id: 'p2', isAI: false, color: 0xff0000 }]);
+        engine.startGame();
         registry = engine.interactionRegistry;
     });
 

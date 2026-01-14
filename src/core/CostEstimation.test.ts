@@ -49,8 +49,11 @@ describe('Cost Estimation Logic', () => {
         engine.togglePlan(0, 1);
         expect(engine.pendingMoves).toHaveLength(1);
 
-        // Plan B
         engine.togglePlan(0, 2);
+
+        if (engine.pendingMoves.length !== 2) {
+            throw new Error(`CostEstimation Failed. Expected 2 moves, got ${engine.pendingMoves.length}. Reason: ${engine.lastError}`);
+        }
 
         expect(engine.pendingMoves).toHaveLength(2);
         expect(engine.lastError).toBeNull();
