@@ -23,6 +23,9 @@ describe('Cost Estimation Logic', () => {
         // (0,2) is Enemy (Cost 20).
         engine.state.setOwner(0, 1, 'P2');
         engine.state.setOwner(0, 2, 'P2');
+        // Force Plain to avoid random Water blocking moves
+        engine.state.grid[0][1].type = 'plain';
+        engine.state.grid[0][2].type = 'plain';
 
         // Ensure distance logic applies:
         // Dist(0,1) from Base(0,0) = 1. Multiplier x1. Cost = 10.
