@@ -580,6 +580,9 @@ export class MainScene extends Phaser.Scene {
                 this.blBg.clear().setVisible(false);
                 this.brBg.clear().setVisible(false);
 
+                // Set Map Bounds
+                this.mapBounds = new Phaser.Geom.Rectangle(mapX, mapY, mapAreaW, mapAreaH);
+
                 // We need backgrounds for the 4 corners basically.
                 // Using existing BGs or drawing new strict rects?
 
@@ -664,6 +667,9 @@ export class MainScene extends Phaser.Scene {
                 this.blBg.clear().setVisible(true).fillStyle(0x111111, 0.9).fillRect(width - sidebarW, 0, sidebarW, height);
                 // Clear unused
                 this.brBg.clear().setVisible(false);
+
+                // Set Map Bounds
+                this.mapBounds = new Phaser.Geom.Rectangle(mapX, mapY, mapAreaW, mapAreaH);
 
                 // Common Sizing
                 // const uiScale = Math.min(1, (sidebarW - 20) / uiBaseWidth); // Removed
@@ -921,6 +927,8 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
+    private mapBounds: Phaser.Geom.Rectangle | null = null;
+
 
 
     setupButtons() {
@@ -963,6 +971,11 @@ export class MainScene extends Phaser.Scene {
         const mapHeight = gridHeight * this.tileSize;
 
         if (localX < 0 || localX >= mapWidth || localY < 0 || localY >= mapHeight) return;
+
+        // Check against Strict Map Bounds (Screen Space)
+        if (this.mapBounds && !this.mapBounds.contains(pointer.x, pointer.y)) {
+            return;
+        }
 
         // Block input if AI turn
         const currentPlayer = this.engine.state.getCurrentPlayer();

@@ -7,10 +7,6 @@ export class PlayerStatusSystem {
     private maskShape!: Phaser.GameObjects.Graphics;
     private playerRows: Phaser.GameObjects.Container[] = [];
 
-    // Arrows
-    upArrow!: Phaser.GameObjects.Container;
-    downArrow!: Phaser.GameObjects.Container;
-
     // Scroll components
     private listContainer!: Phaser.GameObjects.Container;
     private listMask!: Phaser.Display.Masks.GeometryMask;
@@ -50,9 +46,6 @@ export class PlayerStatusSystem {
             fontFamily: 'Georgia, serif', fontSize: '12px', color: '#dddddd'
         }).setOrigin(0.5);
         this.container.add(this.uiText);
-
-        // Scroll Indicators (Arrows)
-        this.createArrows();
 
         // Scrollable List Container
         this.listContainer = scene.add.container(0, 50);
@@ -97,32 +90,6 @@ export class PlayerStatusSystem {
         this.updateMask(260, height, x, y);
     }
 
-    private createArrows() {
-        // Simple visual arrows
-        this.upArrow = this.createArrowSprite(true);
-        this.downArrow = this.createArrowSprite(false);
-        this.container.add([this.upArrow, this.downArrow]);
-        this.upArrow.setVisible(false);
-        this.downArrow.setVisible(false);
-    }
-
-    private createArrowSprite(isUp: boolean): Phaser.GameObjects.Container {
-        const scene = this.container.scene;
-        const c = scene.add.container(0, 0);
-        const g = scene.add.graphics();
-        g.fillStyle(0xffffff, 0.5);
-        g.beginPath();
-        if (isUp) {
-            g.moveTo(0, 0); g.lineTo(10, 10); g.lineTo(-10, 10);
-        } else {
-            g.moveTo(0, 10); g.lineTo(10, 0); g.lineTo(-10, 0);
-        }
-        g.closePath();
-        g.fillPath();
-        c.add(g);
-        return c;
-    }
-
     // private createScrollButton... REMOVED
 
     private scroll(dy: number) {
@@ -136,10 +103,6 @@ export class PlayerStatusSystem {
         if (this.scrollY < minScroll) this.scrollY = minScroll;
 
         this.listContainer.y = 50 + this.scrollY;
-
-        // Update Arrow Visibility
-        this.upArrow.setVisible(this.scrollY < 0);
-        this.downArrow.setVisible(this.scrollY > minScroll);
     }
 
     public update(engine: GameEngine) {
@@ -210,8 +173,6 @@ export class PlayerStatusSystem {
             this.scrollY = 0;
             this.listContainer.y = 50;
             this.isScrollable = false;
-            this.upArrow.setVisible(false);
-            this.downArrow.setVisible(false);
         } else {
             // Constrain existing scroll
             const minScroll = this.viewHeight - this.contentHeight;
@@ -220,15 +181,7 @@ export class PlayerStatusSystem {
 
             this.isScrollable = true;
             this.scroll(0); // Trigger visibility check
-
-            this.updateArrowPositions();
         }
-    }
-
-    private updateArrowPositions() {
-        const cx = this.currentWidth / 2;
-        this.upArrow.setPosition(cx, 55); // Top of list area
-        this.downArrow.setPosition(cx, 50 + this.viewHeight - 10); // Bottom
     }
 
     // private updateButtonPositions... REMOVED

@@ -252,6 +252,17 @@ vi.mock('phaser', () => {
             },
             Math: {
                 Clamp: vi.fn((v: number, min: number, max: number) => Math.max(min, Math.min(v, max)))
+            },
+            Geom: {
+                Rectangle: class {
+                    x: number; y: number; width: number; height: number;
+                    constructor(x: number, y: number, w: number, h: number) {
+                        this.x = x; this.y = y; this.width = w; this.height = h;
+                    }
+                    contains(x: number, y: number) {
+                        return x >= this.x && x <= this.x + this.width && y >= this.y && y <= this.y + this.height;
+                    }
+                }
             }
         }
     };
@@ -361,15 +372,13 @@ describe('MainScene', () => {
         expect(initSpy).toHaveBeenCalled();
         // Map is 10x10 (640x640)
         // Window 800x600. Sidebar 260. Bottom 200.
-        // Map Area: W = 800 - 260 = 540. H = 600 - 200 = 400.
-        // ScaleX = (540-40)/640 = 500/640 = 0.78
-        // ScaleY = (400-40)/640 = 360/640 = 0.5625
-        // MinScale = 0.5625
-        // Clamp: Min(0.5625, 1.2) = 0.5625.
-        // Min Tile Size 12 / 64 = 0.1875. 0.5625 > 0.1875. OK.
+        // Map Area: W = 800 - (240*2) = 320. H = 600.
+        // ScaleX = (320-40)/640 = 280/640 = 0.4375
+        // ScaleY = (600-40)/640 = 560/640 = 0.875
+        // MinScale = 0.4375
 
-        // Scale should be ~0.5625
-        expect(scene.mapContainer.setScale).toHaveBeenCalledWith(expect.closeTo(0.5625, 0.001));
+        // Scale should be 0.4375
+        expect(scene.mapContainer.setScale).toHaveBeenCalledWith(expect.closeTo(0.4375, 0.001));
         expect(scene.terrainGroup.clear).toHaveBeenCalledWith(true, true);
     });
 
@@ -401,7 +410,11 @@ describe('MainScene', () => {
         scene.mapContainer.x = 100;
         scene.mapContainer.y = 50;
         scene.mapContainer.scaleX = 0.5; // Zoomed out to 50%
+        scene.mapContainer.scaleX = 0.5; // Zoomed out to 50%
         scene.mapContainer.scaleY = 0.5;
+
+        // Bypass mapBounds check for this specific coordinate test as we are manually positioning the container
+        (scene as any).mapBounds = null;
 
         // Target: Cell [1, 1]
         // World Pixel at 100% scale = (64, 64) -> (128, 128)
