@@ -7,6 +7,10 @@ export class PlayerStatusSystem {
     private maskShape!: Phaser.GameObjects.Graphics;
     private playerRows: Phaser.GameObjects.Container[] = [];
 
+    // Arrows
+    upArrow!: Phaser.GameObjects.Container;
+    downArrow!: Phaser.GameObjects.Container;
+
     // Scroll components
     private listContainer!: Phaser.GameObjects.Container;
     private listMask!: Phaser.Display.Masks.GeometryMask;
@@ -16,9 +20,9 @@ export class PlayerStatusSystem {
 
     public readonly BASE_WIDTH = 260;
 
-    // Scroll Buttons
-    private upButton!: Phaser.GameObjects.Container;
-    private downButton!: Phaser.GameObjects.Container;
+    // Scroll Buttons (Removed)
+    // private upButton!: Phaser.GameObjects.Container;
+    // private downButton!: Phaser.GameObjects.Container;
     private isScrollable: boolean = false;
     private isDragging: boolean = false;
     private lastY: number = 0;
@@ -47,13 +51,8 @@ export class PlayerStatusSystem {
         }).setOrigin(0.5);
         this.container.add(this.uiText);
 
-        // Scroll Buttons
-        this.upButton = this.createScrollButton(scene, 'up');
-        this.downButton = this.createScrollButton(scene, 'down');
-        this.container.add(this.upButton);
-        this.container.add(this.downButton);
-        this.upButton.setVisible(false);
-        this.downButton.setVisible(false);
+        // Scroll Indicators (Arrows)
+        this.createArrows();
 
         // Scrollable List Container
         this.listContainer = scene.add.container(0, 50);
@@ -98,31 +97,33 @@ export class PlayerStatusSystem {
         this.updateMask(260, height, x, y);
     }
 
-    private createScrollButton(scene: Phaser.Scene, dir: 'up' | 'down'): Phaser.GameObjects.Container {
-        const btn = scene.add.container(0, 0);
-        const bg = scene.add.graphics();
-        bg.fillStyle(0x444444, 0.8);
-        bg.fillRoundedRect(0, 0, 24, 24, 4);
-        bg.lineStyle(1, 0x888888, 0.5);
-        bg.strokeRoundedRect(0, 0, 24, 24, 4);
-        btn.add(bg);
-
-        const text = scene.add.text(12, 12, dir === 'up' ? '▲' : '▼', {
-            fontSize: '14px', color: '#ffffff'
-        }).setOrigin(0.5);
-        btn.add(text);
-
-        btn.setSize(24, 24);
-        btn.setInteractive({ useHandCursor: true });
-
-        btn.on('pointerdown', () => {
-            const step = dir === 'up' ? 40 : -40;
-            this.scroll(step); // Snap
-        });
-
-        // Continuous scroll on hold could be added here similar to pan
-        return btn;
+    private createArrows() {
+        // Simple visual arrows
+        this.upArrow = this.createArrowSprite(true);
+        this.downArrow = this.createArrowSprite(false);
+        this.container.add([this.upArrow, this.downArrow]);
+        this.upArrow.setVisible(false);
+        this.downArrow.setVisible(false);
     }
+
+    private createArrowSprite(isUp: boolean): Phaser.GameObjects.Container {
+        const scene = this.container.scene;
+        const c = scene.add.container(0, 0);
+        const g = scene.add.graphics();
+        g.fillStyle(0xffffff, 0.5);
+        g.beginPath();
+        if (isUp) {
+            g.moveTo(0, 0); g.lineTo(10, 10); g.lineTo(-10, 10);
+        } else {
+            g.moveTo(0, 10); g.lineTo(10, 0); g.lineTo(-10, 0);
+        }
+        g.closePath();
+        g.fillPath();
+        c.add(g);
+        return c;
+    }
+
+    // private createScrollButton... REMOVED
 
     private scroll(dy: number) {
         if (this.contentHeight <= this.viewHeight) return;
@@ -135,6 +136,10 @@ export class PlayerStatusSystem {
         if (this.scrollY < minScroll) this.scrollY = minScroll;
 
         this.listContainer.y = 50 + this.scrollY;
+
+        // Update Arrow Visibility
+        this.upArrow.setVisible(this.scrollY < 0);
+        this.downArrow.setVisible(this.scrollY > minScroll);
     }
 
     public update(engine: GameEngine) {
@@ -205,8 +210,8 @@ export class PlayerStatusSystem {
             this.scrollY = 0;
             this.listContainer.y = 50;
             this.isScrollable = false;
-            this.upButton.setVisible(false);
-            this.downButton.setVisible(false);
+            this.upArrow.setVisible(false);
+            this.downArrow.setVisible(false);
         } else {
             // Constrain existing scroll
             const minScroll = this.viewHeight - this.contentHeight;
@@ -214,26 +219,19 @@ export class PlayerStatusSystem {
             this.listContainer.y = 50 + this.scrollY;
 
             this.isScrollable = true;
-            this.upButton.setVisible(true);
-            this.downButton.setVisible(true);
+            this.scroll(0); // Trigger visibility check
 
-            // Verify Button Positions
-            this.updateButtonPositions();
+            this.updateArrowPositions();
         }
     }
 
-    private updateButtonPositions() {
-        // Strictly align to Left Border (x=0) and Top/Bottom of View area
-        const topY = 50;
-        const bottomY = 50 + this.viewHeight - 24; // Button height is 24
-
-        this.upButton.setPosition(0, topY);
-        this.downButton.setPosition(0, bottomY);
-
-        // Ensure they are on top
-        this.container.bringToTop(this.upButton);
-        this.container.bringToTop(this.downButton);
+    private updateArrowPositions() {
+        const cx = this.currentWidth / 2;
+        this.upArrow.setPosition(cx, 55); // Top of list area
+        this.downArrow.setPosition(cx, 50 + this.viewHeight - 10); // Bottom
     }
+
+    // private updateButtonPositions... REMOVED
 
     private createPlayerRow(player: any, y: number, h: number): Phaser.GameObjects.Container {
         const scene = this.container.scene;

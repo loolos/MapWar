@@ -13,7 +13,7 @@ import { SoundManager } from '../core/audio/SoundManager'; // NEW
 import { LogSystem } from './ui/LogSystem';
 import { InteractionMenu } from './ui/InteractionMenu';
 import type { LogType } from '../core/GameEvents';
-import { AuraSystem } from '../core/AuraSystem';
+import { AuraVisualizer } from './AuraVisualizer';
 
 // ... imports
 
@@ -36,6 +36,7 @@ export class MainScene extends Phaser.Scene {
 
     soundManager!: SoundManager; // NEW
     interactionMenu!: InteractionMenu; // NEW
+    auraVisualizer!: AuraVisualizer; // NEW
 
     // Interaction State
     selectedRow: number | null = null;
@@ -208,6 +209,10 @@ export class MainScene extends Phaser.Scene {
         this.createCameraControls();
 
         this.initializeTerrainVisuals(); // Initial draw of terrain
+
+        // Initialize Aura Visualizer
+        this.auraVisualizer = new AuraVisualizer(this, this.mapContainer, this.highlightGraphics, this.tileSize);
+
         this.drawMap(); // Initial draw of grid/units
 
         this.scale.on('resize', this.resize, this);
@@ -1244,26 +1249,6 @@ export class MainScene extends Phaser.Scene {
                     }
                 }
 
-                // Wall Defense Aura Visualization (Shield Icon)
-                if (cell.owner) {
-                    const defBonus = AuraSystem.getDefenseAuraBonus(this.engine.state, r, c, cell.owner);
-                    if (defBonus > 0) {
-                        // Display Shield Icon in Top-Right
-                        // const bonusPercent = Math.round(defBonus * 100);
-                        // Text: '🛡️'
-                        const shield = this.add.text(x + this.tileSize - 2, y + 2, '🛡️', {
-                            fontSize: '14px',
-                            resolution: 2
-                        }).setOrigin(1, 0); // Top-Right Anchor
-
-                        this.mapContainer.add(shield);
-                    }
-                }
-
-
-
-                // Gold Mine removed from here
-
                 // 3. SELECTION / HIGHLIGHTS
                 // Pending Moves OR Interactions (Unified "Planned")
                 const isPendingMove = this.engine.pendingMoves.some(m => m.r === r && m.c === c);
@@ -1278,7 +1263,7 @@ export class MainScene extends Phaser.Scene {
                     this.selectionGraphics.strokeRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
                 }
 
-                // AI Moves History (Keep as is)
+                // AI Moves History
                 const isAiMove = this.engine.lastAiMoves.some(m => m.r === r && m.c === c);
                 if (isAiMove) {
                     this.highlightGraphics.lineStyle(4, GameConfig.COLORS.HIGHLIGHT_AI, 1.0);
@@ -1287,57 +1272,11 @@ export class MainScene extends Phaser.Scene {
             }
         }
 
-
-        // 4. AURA RANGE INDICATORS
-        if (this.selectedRow !== null && this.selectedCol !== null) {
-            const selectedCell = grid[this.selectedRow][this.selectedCol];
-            const supportRange = AuraSystem.getAuraRange(selectedCell);
-            const incomeRange = AuraSystem.getIncomeAuraRange(selectedCell);
-
-            // 4a. Support Aura (Cyan/White)
-            if (supportRange > 0) {
-                const color = 0x00FFFF; // Cyan for support
-                this.highlightGraphics.lineStyle(2, color, 0.6);
-                this.highlightGraphics.fillStyle(color, 0.15);
-
-                for (let r = 0; r < totalHeight; r++) {
-                    for (let c = 0; c < totalWidth; c++) {
-                        const dist = Math.abs(r - this.selectedRow) + Math.abs(c - this.selectedCol);
-                        if (dist <= supportRange && dist > 0) {
-                            const tx = c * this.tileSize;
-                            const ty = r * this.tileSize;
-                            this.highlightGraphics.strokeRect(tx + 2, ty + 2, this.tileSize - 4, this.tileSize - 4);
-                            this.highlightGraphics.fillRect(tx + 2, ty + 2, this.tileSize - 4, this.tileSize - 4);
-                        }
-                    }
-                }
-            }
-
-            // 4b. Income Aura (Orange)
-            if (incomeRange > 0) {
-                const color = 0xFF8800; // Orange for income
-                this.highlightGraphics.lineStyle(4, color, 0.8);
-                this.highlightGraphics.fillStyle(color, 0.3);
-
-                for (let r = 0; r < totalHeight; r++) {
-                    for (let c = 0; c < totalWidth; c++) {
-                        const dist = Math.abs(r - this.selectedRow) + Math.abs(c - this.selectedCol);
-                        if (dist <= incomeRange && dist > 0) {
-                            const tx = c * this.tileSize;
-                            const ty = r * this.tileSize;
-                            this.highlightGraphics.strokeRect(tx, ty, this.tileSize, this.tileSize);
-                            this.highlightGraphics.fillRect(tx, ty, this.tileSize, this.tileSize);
-                        }
-                    }
-                }
-            }
-        }
+        // 4. AURA VISUALIZATION (Unified)
+        this.auraVisualizer.update(this.engine, this.selectedRow, this.selectedCol);
 
         // Ensure map is correctly positioned after content change?
-        // resize() handles scale/pos.
-        // If this is first draw, we might need to force resize logic?
         if (!this.hasRenderedOnce) {
-            // this.resize(this.scale.gameSize); // Removed to prevent infinite loop
             this.hasRenderedOnce = true;
         }
     }
