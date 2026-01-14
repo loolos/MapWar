@@ -58,9 +58,10 @@ describe('Wall Mechanics', () => {
 
         const cost = engine.getMoveCost(0, 0);
         // Base Cost (Attack 20 + WallBase 10 + WallLv1 30 = 60) * Multiplier (1.2) = 72.
-        // Aura Discount (P2 Base nearby): 20% of 72 = 14.4 -> 14. 
-        // 72 - 14 = 58.
-        expect(cost).toBe(58);
+        // Base Defense Aura (P1 Base nearby): +20% of 72 = 14.4 -> 86.4 -> 86.
+        // Aura Discount (P2 Base nearby): 20% of 86 = 17.2 -> 17.
+        // 86 - 17 = 69.
+        expect(cost).toBe(69);
     });
 
     it('can upgrade wall', () => {
@@ -93,9 +94,10 @@ describe('Wall Mechanics', () => {
 
         // Base(20) + WallBase(10) + WallLv2(30*2=60) = 90.
         // 90 * 1.2 = 108.
-        // Aura Discount (P2 Base): 20% of 108 = 21.6 -> 21.
-        // 108 - 21 = 87.
-        expect(cost).toBe(87);
+        // Base Defense Aura (P1 Base): 108 * 1.2 = 129.6 -> 129.
+        // Aura Discount (P2 Base): 20% of 129 = 25.8 -> 25.
+        // 129 - 25 = 104.
+        expect(cost).toBe(104);
     });
 
     it('capture degrades wall', () => {

@@ -61,6 +61,12 @@ export class AuraVisualizer {
         if (cell.building === 'wall' && cell.isConnected && cell.owner) {
             this.drawDefenseAura(engine, selectedRow, selectedCol, cell.owner);
         }
+
+        // 4. Base Defense Aura (Shield Icons)
+        // Shows SHIELDS on friends in range.
+        if (cell.building === 'base' && cell.isConnected && cell.owner) {
+            this.drawBaseDefenseAura(engine, selectedRow, selectedCol, cell);
+        }
     }
 
     private drawSupportAura(engine: GameEngine, centerR: number, centerC: number, range: number) {
@@ -159,6 +165,41 @@ export class AuraVisualizer {
 
                     this.mapContainer.add(shield);
                     this.dynamicObjects.push(shield);
+                }
+            }
+        }
+    }
+
+    private drawBaseDefenseAura(engine: GameEngine, centerR: number, centerC: number, baseCell: any) {
+        // Base Range Logic (Same as Support)
+        const range = AuraSystem.getAuraRange(baseCell);
+        const ownerId = baseCell.owner;
+
+        const totalHeight = engine.state.grid.length;
+        const totalWidth = engine.state.grid[0].length;
+
+        for (let r = 0; r < totalHeight; r++) {
+            for (let c = 0; c < totalWidth; c++) {
+                const dist = Math.abs(r - centerR) + Math.abs(c - centerC);
+
+                // Check Range
+                if (dist <= range && dist > 0) {
+                    const targetCell = engine.state.getCell(r, c);
+
+                    // Check Ownership (Must be same owner to benefit from defense)
+                    if (targetCell && targetCell.owner === ownerId) {
+                        const x = c * this.tileSize;
+                        const y = r * this.tileSize;
+
+                        // Draw Large Shield
+                        const shield = this.scene.add.text(x + this.tileSize / 2, y + this.tileSize / 2, '🛡️', {
+                            fontSize: '32px',
+                            resolution: 2
+                        }).setOrigin(0.5);
+
+                        this.mapContainer.add(shield);
+                        this.dynamicObjects.push(shield);
+                    }
                 }
             }
         }

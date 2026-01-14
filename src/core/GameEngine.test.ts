@@ -112,8 +112,8 @@ describe('GameEngine', () => {
 
             // P1 (0,0) attacks (0,1)
             const cost = engine.getMoveCost(0, 1);
-            // Expect 20 (Base Attack Cost. Multiplier seems effective 1.0 here or isAttack check variance?)
-            expect(cost).toBe(20);
+            // Expect 24 (20 Base * 1.2 Defense Aura)
+            expect(cost).toBe(24);
         });
 
         it('charges 40G for chained distance attack', () => {
@@ -136,8 +136,8 @@ describe('GameEngine', () => {
             // (0,2) is adjacent to (0,1) [Pending], but NOT (0,0) [Owned].
             const cost = engine.getMoveCost(0, 2);
             // Expect 20 (Cost 24 discounted by Aura 20% -> 19.2 -> 20 ceil? No, floor discount.)
-            // Base 20 * 1.2 = 24. Dist 2 (Strict) = 48. Discount 20% = 9. 48-9 = 39.
-            expect(cost).toBe(39);
+            // Expect 46 (39 Base + Defense Aura ~20%)
+            expect(cost).toBe(46);
         });
 
         it('charges 48G for base attack', () => {

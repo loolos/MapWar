@@ -146,15 +146,17 @@ export class AuraSystem {
     }
 
     /**
-     * Calculates the defensive aura bonus from adjacent friendly walls.
+     * Calculates the defensive aura bonus from adjacent friendly walls OR nearby friendly BASES.
      * @param state Current GameState
      * @param r Target Row
      * @param c Target Col
-     * @param ownerId The owner of the walls (usually the defender)
+     * @param ownerId The owner of the walls/bases (usually the defender)
      * @returns The maximum defense bonus (e.g., 0.2 for 20%)
      */
     static getDefenseAuraBonus(state: GameState, r: number, c: number, ownerId: string): number {
         let maxBonus = 0;
+
+        // 1. Wall Defense (Adjacent)
         const neighbors = [
             { r: r - 1, c: c }, { r: r + 1, c: c },
             { r: r, c: c - 1 }, { r: r, c: c + 1 }
@@ -163,7 +165,6 @@ export class AuraSystem {
         for (const n of neighbors) {
             const cell = state.getCell(n.r, n.c);
             if (cell && cell.owner === ownerId && cell.building === 'wall' && cell.isConnected) {
-                // Determine Wall Level (Default 0 if undefined, max 2 for array index)
                 const level = Math.min(GameConfig.WALL_DEFENSE_AURA_BONUS.length - 1, Math.max(0, cell.defenseLevel));
                 const bonus = GameConfig.WALL_DEFENSE_AURA_BONUS[level];
                 if (bonus > maxBonus) {
@@ -171,6 +172,31 @@ export class AuraSystem {
                 }
             }
         }
+
+        // 2. Base Defense (Range based on Support Range)
+        // Iterate grid to find owned Bases
+        // Optimization: Could limit loop if grid is large, but 10x10 is fine.
+        for (let row = 0; row < GameConfig.GRID_HEIGHT; row++) {
+            for (let col = 0; col < GameConfig.GRID_WIDTH; col++) {
+                const cell = state.getCell(row, col);
+                if (cell && cell.owner === ownerId && cell.building === 'base' && cell.isConnected) {
+                    // Range Logic: Same as Support Range?
+                    // User Request: "Range and ... same as [Support Aura]"
+                    // Support Range starts at 2.
+                    const range = GameConfig.BASE_SUPPORT_RANGE_BASE + (cell.defenseLevel * GameConfig.BASE_SUPPORT_RANGE_PER_LEVEL);
+
+                    const dist = Math.abs(row - r) + Math.abs(col - c);
+                    if (dist <= range && dist > 0) { // dist > 0: Base doesn't defend itself? (Usually it has its own inherent defense stats)
+                        // Bonus Logic: Start 20%, +10% per level
+                        const bonus = GameConfig.BASE_DEFENSE_AURA_BONUS_BASE + (cell.defenseLevel * GameConfig.BASE_DEFENSE_AURA_BONUS_STEP);
+                        if (bonus > maxBonus) {
+                            maxBonus = bonus;
+                        }
+                    }
+                }
+            }
+        }
+
         return maxBonus;
     }
 }
