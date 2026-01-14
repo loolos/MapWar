@@ -8,6 +8,9 @@ export class MenuScene extends Phaser.Scene {
         super('MenuScene');
     }
 
+    private title!: Phaser.GameObjects.Text;
+    private domElement!: Phaser.GameObjects.DOMElement;
+
     create() {
         // Background
         this.add.graphics().fillStyle(0x222222).fillRect(0, 0, this.scale.width, this.scale.height);
@@ -16,21 +19,12 @@ export class MenuScene extends Phaser.Scene {
         // Adjust Y dynamically if needed, or keep it simple.
         // Title (Phaser)
         const fontSize = Math.min(48, this.scale.width * 0.1); // Dynamic font size
-        const title = this.add.text(this.scale.width / 2, 50, 'MAP WAR', {
+        this.title = this.add.text(this.scale.width / 2, 50, 'MAP WAR', {
             fontSize: `${fontSize}px`,
             color: '#ffffff',
             fontStyle: 'bold',
             shadow: { offsetX: 2, offsetY: 2, color: '#000', blur: 4, fill: true }
         }).setOrigin(0.5);
-
-        // Handle Resize for Title
-        this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
-            title.setPosition(gameSize.width / 2, 50);
-            title.setFontSize(Math.min(48, gameSize.width * 0.1));
-            // DOM element handles itself via CSS, but we might need to reposition it?
-            // Phaser DOM objects don't auto-center if we used explicit x/y.
-            // We need to update DOM position too.
-        });
 
         // HTML UI Container
         // responsive-layout class will handle 2-column on desktop, stack on mobile
@@ -193,13 +187,13 @@ export class MenuScene extends Phaser.Scene {
             </div>
         `;
 
-        const domElement = this.add.dom(this.scale.width / 2, this.scale.height / 2 + 20).createFromHTML(uiHTML);
-        domElement.setPerspective(800);
+        this.domElement = this.add.dom(this.scale.width / 2, this.scale.height / 2 + 20).createFromHTML(uiHTML);
+        this.domElement.setPerspective(800);
 
         // --- Logic Binding ---
 
         // 1. Populate Presets
-        const presetSelect = domElement.getChildByID('presetSelect') as HTMLSelectElement;
+        const presetSelect = this.domElement.getChildByID('presetSelect') as HTMLSelectElement;
         const saves = Object.keys(SaveRegistry);
         saves.forEach(key => {
             const opt = document.createElement('option');
@@ -210,8 +204,8 @@ export class MenuScene extends Phaser.Scene {
 
         // 2. Update Player List
         const updateSlots = () => {
-            const countInput = domElement.getChildByID('playerCountInput') as HTMLInputElement;
-            const listDiv = domElement.getChildByID('playerList') as HTMLDivElement;
+            const countInput = this.domElement.getChildByID('playerCountInput') as HTMLInputElement;
+            const listDiv = this.domElement.getChildByID('playerList') as HTMLDivElement;
             if (!countInput || !listDiv) return;
 
             const count = Phaser.Math.Clamp(parseInt(countInput.value) || 2, 2, 8);
@@ -241,7 +235,7 @@ export class MenuScene extends Phaser.Scene {
             listDiv.innerHTML = html;
         };
 
-        const countInp = domElement.getChildByID('playerCountInput');
+        const countInp = this.domElement.getChildByID('playerCountInput');
         if (countInp) {
             countInp.addEventListener('change', updateSlots);
             countInp.addEventListener('input', updateSlots);
@@ -249,19 +243,19 @@ export class MenuScene extends Phaser.Scene {
         updateSlots(); // Initial
 
         // 3. Start Game Listener
-        const btn = domElement.getChildByID('startGameBtn');
+        const btn = this.domElement.getChildByID('startGameBtn');
         if (btn) {
             btn.addEventListener('click', () => {
-                const presetVal = (domElement.getChildByID('presetSelect') as HTMLSelectElement).value;
+                const presetVal = (this.domElement.getChildByID('presetSelect') as HTMLSelectElement).value;
 
                 if (presetVal) {
                     this.scene.start('MainScene', { loadPreset: presetVal });
                 } else {
                     // New Game
-                    const wInput = domElement.getChildByID('mapWidthInput') as HTMLInputElement;
-                    const hInput = domElement.getChildByID('mapHeightInput') as HTMLInputElement;
-                    const cInput = domElement.getChildByID('playerCountInput') as HTMLInputElement;
-                    const typeInput = domElement.getChildByID('mapTypeSelect') as HTMLSelectElement;
+                    const wInput = this.domElement.getChildByID('mapWidthInput') as HTMLInputElement;
+                    const hInput = this.domElement.getChildByID('mapHeightInput') as HTMLInputElement;
+                    const cInput = this.domElement.getChildByID('playerCountInput') as HTMLInputElement;
+                    const typeInput = this.domElement.getChildByID('mapTypeSelect') as HTMLSelectElement;
 
                     const width = Phaser.Math.Clamp(parseInt(wInput.value) || 10, 10, 40);
                     const height = Phaser.Math.Clamp(parseInt(hInput.value) || 10, 10, 40);
@@ -275,7 +269,7 @@ export class MenuScene extends Phaser.Scene {
                     // Gather Configs
                     const configs: any[] = [];
                     for (let i = 1; i <= count; i++) {
-                        const typeSelect = domElement.getChildByID(`type_P${i}`) as HTMLSelectElement;
+                        const typeSelect = this.domElement.getChildByID(`type_P${i}`) as HTMLSelectElement;
                         const isAI = typeSelect.value === 'ai';
                         const color = GameConfig.COLORS['P' + i as keyof typeof GameConfig.COLORS];
                         configs.push({ id: `P${i}`, isAI, color });
@@ -286,9 +280,22 @@ export class MenuScene extends Phaser.Scene {
             });
         }
 
-        // Handle Resize for DOM Element
-        this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
-            domElement.setPosition(gameSize.width / 2, gameSize.height / 2 + 20);
+        // Handle Resize
+        this.scale.on('resize', this.resize, this);
+
+        // Cleanup listener on shutdown
+        this.events.once('shutdown', () => {
+            this.scale.off('resize', this.resize, this);
         });
+    }
+
+    private resize(gameSize: Phaser.Structs.Size) {
+        if (this.title) {
+            this.title.setPosition(gameSize.width / 2, 50);
+            this.title.setFontSize(Math.min(48, gameSize.width * 0.1));
+        }
+        if (this.domElement) {
+            this.domElement.setPosition(gameSize.width / 2, gameSize.height / 2 + 20);
+        }
     }
 }

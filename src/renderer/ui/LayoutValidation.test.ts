@@ -238,6 +238,7 @@ vi.mock('phaser', () => {
                 make: any;
                 textures: any;
                 sound: any;
+                events: any;
                 constructor(_key: string) {
                     this.cameras = { main: { setBackgroundColor: vi.fn(), setViewport: vi.fn() } };
                     this.add = {
@@ -248,7 +249,7 @@ vi.mock('phaser', () => {
                         text: vi.fn(() => new MockText()),
                         existing: vi.fn()
                     };
-                    this.scale = { width: 800, height: 600, on: vi.fn(), gameSize: { width: 800, height: 600 } };
+                    this.scale = { width: 800, height: 600, on: vi.fn(), off: vi.fn(), gameSize: { width: 800, height: 600 } };
                     this.load = { image: vi.fn(), audio: vi.fn() };
                     this.input = {
                         on: vi.fn(), enabled: true,
@@ -262,6 +263,7 @@ vi.mock('phaser', () => {
                     this.time = { delayedCall: vi.fn((_delay, callback) => callback()) };
                     this.textures = { exists: vi.fn(() => false) };
                     this.sound = { get: vi.fn(), add: vi.fn(() => ({ play: vi.fn(), stop: vi.fn(), pause: vi.fn(), resume: vi.fn() })), play: vi.fn() };
+                    this.events = { on: vi.fn(), once: vi.fn(), off: vi.fn(), emit: vi.fn() };
                 }
             },
             GameObjects: {

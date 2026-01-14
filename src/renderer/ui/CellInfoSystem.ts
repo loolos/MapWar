@@ -24,6 +24,9 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
     upArrow!: Phaser.GameObjects.Container;
     downArrow!: Phaser.GameObjects.Container;
 
+    // Constants
+    readonly BASE_WIDTH = 200;
+
     // State
     scrollY: number = 0;
     contentHeight: number = 0;
@@ -304,7 +307,43 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
 
         this.drawBackground(width, height);
         this.updateMask(width, height);
+        this.updateTextStyles(width); // New: Update styles before layout
         this.layout(width, height);
+    }
+
+    private calculateFontSize(width: number, baseSize: number): string {
+        // Reference Width: 160px (allows standard phones to use base size in split layout)
+        const refWidth = 160;
+        const scale = width / refWidth;
+
+        // Limits (Reduced by ~20% as requested)
+        const minSize = 7.2; // Was 9
+        const maxSize = baseSize + 3; // Was +6. 20% scaling reduction roughly halves the growth range.
+
+        const newSize = baseSize * scale;
+        const clamped = Phaser.Math.Clamp(newSize, minSize, maxSize);
+        return `${clamped.toFixed(1)}px`;
+    }
+
+    private updateTextStyles(width: number) {
+        // Base sizes (Reduced by ~30%)
+        // Old: 18, 16, 14 -> New: 13, 11, 10
+        const headerSize = this.calculateFontSize(width, 13);
+        const standardSize = this.calculateFontSize(width, 11);
+        const smallSize = this.calculateFontSize(width, 10);
+
+        // Apply
+        this.headerText.setStyle({ fontSize: headerSize });
+        this.typeText.setStyle({ fontSize: standardSize });
+        this.ownerText.setStyle({ fontSize: standardSize });
+        this.costText.setStyle({ fontSize: standardSize });
+        this.planText.setStyle({ fontSize: standardSize }); // Keep color logic
+
+        // Use setFontSize for planText? No, setStyle is fine here as we don't word wrap it separately usually, 
+        // but layout() will be called next.
+
+        this.descText.setStyle({ fontSize: smallSize });
+        this.planDetailsText.setStyle({ fontSize: smallSize });
     }
 
     private drawBackground(w: number, h: number) {
@@ -339,7 +378,8 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
             if (isText) {
                 const txt = item as Phaser.GameObjects.Text;
                 txt.setPosition(padding, currentY);
-                txt.setStyle({ wordWrap: { width: contentW } });
+                // Use setWordWrapWidth to avoid overwriting fontSize set by updateTextStyles!
+                txt.setWordWrapWidth(contentW);
                 currentY += txt.height + 4; // Spacing
             } else {
                 // Divider

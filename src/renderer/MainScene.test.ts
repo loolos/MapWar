@@ -23,6 +23,7 @@ vi.mock('phaser', () => {
         make: any;
         textures: any;
         sound: any; // NEW
+        events: any;
 
         constructor(_key: string) {
             this.sound = {
@@ -64,6 +65,13 @@ vi.mock('phaser', () => {
                     state: 'running',
                     destination: {}
                 }
+            };
+
+            this.events = {
+                on: vi.fn(),
+                once: vi.fn(),
+                off: vi.fn(),
+                emit: vi.fn()
             };
 
             this.cameras = {

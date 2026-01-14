@@ -340,6 +340,14 @@ export class MainScene extends Phaser.Scene {
             this.resize(this.scale.gameSize);
         });
 
+        // Listen for Resize Events
+        this.scale.on('resize', this.resize, this);
+
+        // Cleanup on Shutdown
+        this.events.once('shutdown', () => {
+            this.scale.off('resize', this.resize, this);
+        });
+
         this.engine.startGame();
     }
 

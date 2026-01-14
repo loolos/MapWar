@@ -13,8 +13,9 @@ export const NearVictory = {
         const p1 = {
             id: 'P1',
             color: GameConfig.COLORS.P1,
-            gold: 500, // Rich
-            income: 20,
+            gold: 9999, // Very Rich for testing layout
+            income: 500, // Placeholder, game will recalculate? Or visual only? 
+            // GameEngine usually recalculates on load, but let's set high.
             isAI: false
         };
 
@@ -51,8 +52,10 @@ export const NearVictory = {
 
                 // Scenario: P1 owns nearly everything up to P2
                 // Let's say P1 owns rows 0-7
-                if (r < 8) {
+                // And fill with Level 3 Farms for massive income
+                else if (r < 8) {
                     owner = 'P1';
+                    building = 'farm_lv3';
                 }
 
                 // Create a "Bridge Testing" scenario
@@ -61,6 +64,7 @@ export const NearVictory = {
                 if (r === 8) {
                     type = 'water';
                     owner = null; // Unowned water
+                    building = 'none';
                 }
 
                 // Set Cell

@@ -130,6 +130,13 @@ export class PlayerStatusSystem {
             const incomeStr = Number.isInteger(income) ? income.toString() : income.toFixed(1);
             incomeTxt.setText(`+${incomeStr}/t`);
 
+            // Dynamically reposition Income Text to avoid overlap as Gold Text grows
+            // incomeTxt is placed 10px to the left of goldTxt's left edge.
+            // goldTxt origin is (1, 0.5), so its x is its right edge.
+            // To get left edge: goldTxt.x - goldTxt.displayWidth
+            incomeTxt.setX(goldTxt.x - goldTxt.displayWidth - 10);
+
+
             const currentId = state.currentPlayerId || '';
             const pAlpha = currentId === pid ? 1 : 0.4;
             row.setAlpha(pAlpha);
