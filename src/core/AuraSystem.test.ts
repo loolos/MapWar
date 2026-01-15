@@ -9,8 +9,10 @@ describe('AuraSystem Logic', () => {
     beforeEach(() => {
         engine = new GameEngine();
         // Setup Grid
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+        const height = engine.state.grid.length;
+        const width = height > 0 ? engine.state.grid[0].length : 0;
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
                 engine.state.grid[r][c].owner = null;
                 engine.state.grid[r][c].building = 'none';
                 engine.state.grid[r][c].watchtowerLevel = 0;
@@ -160,8 +162,10 @@ describe('Tiered Income Aura Bonuses', () => {
     beforeEach(() => {
         engine = new GameEngine();
         // Clear grid
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+        const height = engine.state.grid.length;
+        const width = height > 0 ? engine.state.grid[0].length : 0;
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
                 const cell = engine.state.getCell(r, c)!;
                 cell.owner = null;
                 cell.building = 'none';

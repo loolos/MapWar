@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { GameEngine } from './GameEngine';
-import { GameConfig } from './GameConfig';
 
 describe('AI Behavior', () => {
     let engine: GameEngine;
@@ -9,8 +8,10 @@ describe('AI Behavior', () => {
         engine = new GameEngine();
 
         // Clear Grid for Determinism
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+        const height = engine.state.grid.length;
+        const width = height > 0 ? engine.state.grid[0].length : 0;
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
                 engine.state.grid[r][c].owner = null;
                 engine.state.grid[r][c].building = 'none';
                 engine.state.grid[r][c].type = 'plain'; // Default to plain

@@ -10,8 +10,10 @@ describe('GameEngine - Town Mechanics', () => {
         engine = new GameEngine();
 
         // Clear Grid for Isolation
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+        const height = engine.state.grid.length;
+        const width = height > 0 ? engine.state.grid[0].length : 0;
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
                 engine.state.grid[r][c].owner = null;
                 engine.state.grid[r][c].type = 'plain'; // Ensure plain terrain
                 engine.state.grid[r][c].building = 'none';
@@ -26,8 +28,10 @@ describe('GameEngine - Town Mechanics', () => {
         // Since we clear grid in beforeEach, we need to re-init or check a fresh engine
         const freshEngine = new GameEngine();
         let townCount = 0;
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+        const height = freshEngine.state.grid.length;
+        const width = height > 0 ? freshEngine.state.grid[0].length : 0;
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
                 if (freshEngine.state.grid[r][c].building === 'town') {
                     townCount++;
                 }

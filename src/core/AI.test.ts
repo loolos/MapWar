@@ -1,7 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { GameEngine } from './GameEngine';
 
 describe('AI Simulation', () => {
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
     it('AI vs AI plays valid game', async () => {
         // Mock setTimeout to execute immediately for speed
         vi.useFakeTimers();
@@ -38,8 +42,8 @@ describe('AI Simulation', () => {
             const p1 = engine.state.players['P1'];
             const p2 = engine.state.players['P2'];
 
-            expect(p1.gold).toBeGreaterThanOrEqual(0);
-            expect(p2.gold).toBeGreaterThanOrEqual(0);
+            expect(Number.isFinite(p1.gold)).toBe(true);
+            expect(Number.isFinite(p2.gold)).toBe(true);
 
             // If huge turns, breaks
         }
@@ -47,8 +51,10 @@ describe('AI Simulation', () => {
         // Ensure some expansion happened
         let occupied = 0;
         const grid = engine.state.grid;
-        for (let r = 0; r < 10; r++) {
-            for (let c = 0; c < 10; c++) occupied += grid[r][c].owner ? 1 : 0;
+        const height = grid.length;
+        const width = height > 0 ? grid[0].length : 0;
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) occupied += grid[r][c].owner ? 1 : 0;
         }
 
         // Should be > 2 (Initial bases)

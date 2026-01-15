@@ -8,14 +8,20 @@ describe('Plan Validation Logic', () => {
     beforeEach(() => {
         engine = new GameEngine();
         engine.startGame();
+        // Normalize grid to avoid random map blockers
+        const height = engine.state.grid.length;
+        const width = height > 0 ? engine.state.grid[0].length : 0;
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
+                engine.state.grid[r][c].owner = null;
+                engine.state.grid[r][c].building = 'none';
+                engine.state.grid[r][c].isConnected = false;
+                engine.state.grid[r][c].type = 'plain';
+            }
+        }
+
         engine.state.setOwner(0, 0, 'P1');
         engine.state.setBuilding(0, 0, 'base');
-
-        // Ensure path is valid (Plains)
-        engine.state.grid[0][1].type = 'plain';
-        engine.state.grid[0][2].type = 'plain';
-        engine.state.grid[0][1].owner = null; // Neutral
-        engine.state.grid[0][2].owner = null; // Neutral
 
         engine.state.updateConnectivity('P1');
         engine.state.currentPlayerId = 'P1';

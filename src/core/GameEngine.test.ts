@@ -10,8 +10,10 @@ describe('GameEngine', () => {
         engine.startGame();
 
         // Clear Grid for Isolation
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+        const height = engine.state.grid.length;
+        const width = height > 0 ? engine.state.grid[0].length : 0;
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
                 engine.state.grid[r][c].owner = null;
                 engine.state.grid[r][c].building = 'none'; // Correct type
                 engine.state.grid[r][c].isConnected = false;
@@ -54,9 +56,11 @@ describe('GameEngine', () => {
 
     it('accrues gold on turn end', () => {
         // P1 -> P2
+        const p2Before = engine.state.players['P2'].gold;
         engine.endTurn();
-        // Initial checks are already covered in defaults. 
-        // We trust logic for now or add specific assetions later.
+
+        expect(engine.state.currentPlayerId).toBe('P2');
+        expect(engine.state.players['P2'].gold).toBeGreaterThan(p2Before);
     });
 
     describe('Planning Phase', () => {

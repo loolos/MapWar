@@ -9,8 +9,10 @@ describe('Base Upgrades', () => {
         engine = new GameEngine();
 
         // Clear all ownership to ensure clean slate
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+        const height = engine.state.grid.length;
+        const width = height > 0 ? engine.state.grid[0].length : 0;
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
                 engine.state.grid[r][c].owner = null;
                 engine.state.grid[r][c].building = 'none';
             }
@@ -118,8 +120,10 @@ describe('Base Upgrades', () => {
         engine.state.players['P1'].gold = 100; // Sufficient for upgrade (20)
 
         // Fill grid with P1 Plains to PREVENT any movement/spending
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+        const height = engine.state.grid.length;
+        const width = height > 0 ? engine.state.grid[0].length : 0;
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
                 const cell = engine.state.grid[r][c];
                 cell.type = 'plain';
                 cell.owner = 'P1';

@@ -79,8 +79,8 @@ describe('GameEngine Robustness', () => {
             let start: { r: number, c: number } | null = null;
             let totalLand = 0;
 
-            const h = GameConfig.GRID_HEIGHT;
-            const w = GameConfig.GRID_WIDTH;
+            const h = engine.state.grid.length;
+            const w = h > 0 ? engine.state.grid[0].length : 0;
 
             for (let r = 0; r < h; r++) {
                 for (let c = 0; c < w; c++) {
@@ -137,9 +137,8 @@ describe('GameEngine Robustness', () => {
         let p1Base = null;
         let p2Base = null;
 
-        // Use GameConfig for robustness
-        const h = GameConfig.GRID_HEIGHT;
-        const w = GameConfig.GRID_WIDTH;
+        const h = engine.state.grid.length;
+        const w = h > 0 ? engine.state.grid[0].length : 0;
         // console.log(`[Debug] Grid Size: ${h}x${w}. Actual: ${engine.state.grid.length}x${engine.state.grid[0].length}`);
 
         for (let r = 0; r < h; r++) {
@@ -176,8 +175,8 @@ describe('GameEngine Robustness', () => {
         // Reset with 4 players
         engine.state.reset(p4Configs, false, 'pangaea');
 
-        const h = GameConfig.GRID_HEIGHT;
-        const w = GameConfig.GRID_WIDTH;
+        const h = engine.state.grid.length;
+        const w = h > 0 ? engine.state.grid[0].length : 0;
 
         const bases: { r: number, c: number, id: string }[] = [];
 

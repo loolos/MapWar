@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { GameEngine } from './GameEngine';
-import { GameConfig } from './GameConfig';
 import { AIController } from './AIController';
 
 describe('AIController Logic', () => {
@@ -15,8 +14,10 @@ describe('AIController Logic', () => {
         ai = engine.ai;
 
         // Clean grid
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+        const height = engine.state.grid.length;
+        const width = height > 0 ? engine.state.grid[0].length : 0;
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
                 engine.state.grid[r][c].owner = null;
                 engine.state.grid[r][c].building = 'none';
                 engine.state.grid[r][c].isConnected = false;
@@ -35,8 +36,10 @@ describe('AIController Logic', () => {
         const plainLoc = { r: 6, c: 5 };
 
         // Block everything else with Water
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+        const gridH = engine.state.grid.length;
+        const gridW = gridH > 0 ? engine.state.grid[0].length : 0;
+        for (let r = 0; r < gridH; r++) {
+            for (let c = 0; c < gridW; c++) {
                 const isTestCell = (r === townLoc.r && c === townLoc.c) || (r === plainLoc.r && c === plainLoc.c);
                 const isBase = (r === 5 && c === 5);
                 if (!isTestCell && !isBase) {

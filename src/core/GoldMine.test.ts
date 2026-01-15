@@ -1,14 +1,15 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { GameEngine } from './GameEngine';
-import { GameConfig } from './GameConfig';
 
 describe('Gold Mine Feature', () => {
     let engine: GameEngine;
 
     const resetGrid = (target: GameEngine) => {
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+        const height = target.state.grid.length;
+        const width = height > 0 ? target.state.grid[0].length : 0;
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
                 target.state.grid[r][c].owner = null;
                 target.state.grid[r][c].building = 'none';
                 target.state.grid[r][c].type = 'plain';
