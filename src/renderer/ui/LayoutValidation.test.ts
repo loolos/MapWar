@@ -247,6 +247,7 @@ vi.mock('phaser', () => {
                         image: vi.fn(() => new MockImage()),
                         graphics: vi.fn(() => new MockGraphics()),
                         text: vi.fn(() => new MockText()),
+                        zone: vi.fn(() => ({ setOrigin: vi.fn(), setSize: vi.fn(), setInteractive: vi.fn(), on: vi.fn() })),
                         existing: vi.fn()
                     };
                     this.scale = { width: 800, height: 600, on: vi.fn(), off: vi.fn(), gameSize: { width: 800, height: 600 } };

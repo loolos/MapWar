@@ -8,42 +8,53 @@ export class MenuScene extends Phaser.Scene {
         super('MenuScene');
     }
 
-    private title!: Phaser.GameObjects.Text;
     private domElement!: Phaser.GameObjects.DOMElement;
+    private background!: Phaser.GameObjects.Image;
+
+    preload() {
+        this.load.image('war_map_bg', 'assets/war_map_background.png');
+    }
 
     create() {
         // Background
-        this.add.graphics().fillStyle(0x222222).fillRect(0, 0, this.scale.width, this.scale.height);
+        this.background = this.add.image(this.scale.width / 2, this.scale.height / 2, 'war_map_bg')
+            .setOrigin(0.5)
+            .setDepth(-1); // Ensure behind UI
 
-        // Title (Phaser)
-        // Adjust Y dynamically if needed, or keep it simple.
-        // Title (Phaser)
-        const fontSize = Math.min(48, this.scale.width * 0.1); // Dynamic font size
-        this.title = this.add.text(this.scale.width / 2, 50, 'MAP WAR', {
-            fontSize: `${fontSize}px`,
-            color: '#ffffff',
-            fontStyle: 'bold',
-            shadow: { offsetX: 2, offsetY: 2, color: '#000', blur: 4, fill: true }
-        }).setOrigin(0.5);
+        this.applyBackgroundCover();
 
         // HTML UI Container
-        // responsive-layout class will handle 2-column on desktop, stack on mobile
+        // refined styles for responsiveness and transparency
+        // Using a full-screen flex container to ensure perfect centering regardless of content size changes
         const uiHTML = `
             <style>
+                .ui-root {
+                    width: 100%;
+                    height: 100%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
                 .menu-container {
                     display: grid;
                     grid-template-columns: 1fr 1fr;
                     gap: 15px;
                     width: 90vw;
                     max-width: 800px;
-                    height: 80vh; /* More height on mobile */
-                    background: rgba(0,0,0,0.7);
+                    max-height: 90vh; /* Use max-height, not fixed */
+                    height: auto; /* Allow shrinking */
+                    overflow-y: auto; /* Enable scroll if content is too tall */
+                    background: rgba(0, 0, 0, 0.75); /* Semi-transparent dark bg */
+                    backdrop-filter: blur(5px);
                     padding: 3vw;
                     border-radius: 12px;
                     color: white;
                     font-family: 'Arial', sans-serif;
-                    overflow: hidden; 
-                    font-size: clamp(14px, 2vw, 18px); /* Dynamic Font */
+                    /* Use vmin to scale with the smaller dimension (good for both portrait/landscape) */
+                    font-size: clamp(14px, 2.5vmin, 18px);
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+                    border: 1px solid rgba(255,255,255,0.1);
+                    box-sizing: border-box; 
                 }
                 .col-left {
                     display: flex;
@@ -77,6 +88,7 @@ export class MenuScene extends Phaser.Scene {
                     border-radius: 4px;
                     border: none;
                     text-align: center;
+                    background: rgba(255,255,255,0.9);
                 }
                 .player-list {
                     flex: 1;
@@ -108,34 +120,45 @@ export class MenuScene extends Phaser.Scene {
                     width: 100%;
                     box-shadow: 0 4px 0 #2222aa;
                     margin-top: 5px;
+                    transition: all 0.1s;
                 }
-                .btn-start:hover { background: #6666ff; }
+                .btn-start:hover { background: #6666ff; transform: translateY(-1px); }
                 .btn-start:active { transform: translateY(2px); box-shadow: 0 2px 0 #2222aa; }
 
                 .preset-section {
                     margin-top: auto; 
                 }
                 
-                @media (max-width: 700px) {
+                @media (max-width: 450px), (max-aspect-ratio: 1/1) {
+                    /* Stack if very narrow OR if portrait (height > width) */
                     .menu-container {
                         grid-template-columns: 1fr;
-                        height: 85vh;
-                        overflow-y: auto; /* Scroll whole container on mobile if needed */
-                        padding: 15px;
-                        font-size: 16px; /* Fixed legible size on mobile */
+                        max-height: 95vh;
+                        height: auto;
+                        width: 95vw;
+                        padding: 10px;
+                        font-size: clamp(14px, 3vmin, 16px); 
+                        box-sizing: border-box;
                     }
-                    /* On mobile, stack: Configs first, then Player List */
-                    .col-left { order: 1; }
-                    .col-right { order: 2; height: auto; min-height: 200px; }
-                    .control-group { padding: 10px; }
-                    .player-list { min-height: 200px; }
-                    input, select { font-size: 16px; /* Prevent zoom */ }
+                    /* On mobile/portrait, stack: Configs first, then Player List */
+                    .col-left { order: 1; width: 100%; box-sizing: border-box; }
+                    .col-right { order: 2; height: auto; min-height: 200px; width: 100%; box-sizing: border-box; }
+                    .control-group { padding: 8px; width: 100%; box-sizing: border-box; }
+                    .control-row { flex-wrap: wrap; } 
+                    .player-list { min-height: 200px; width: 100%; box-sizing: border-box; }
+                    
+                    input, select { 
+                        font-size: 16px; 
+                        max-width: 100%; 
+                        box-sizing: border-box;
+                    }
                 }
             </style>
 
-            <div class="menu-container">
-                <!-- Left Column: Configs & Actions -->
-                <div class="col-left">
+            <div class="ui-root">
+                <div class="menu-container">
+                    <!-- Left Column: Configs & Actions -->
+                    <div class="col-left">
                     <div class="control-group">
                         <label style="font-weight:bold; text-align:center;">MAP CONFIG</label>
                         <div class="control-row">
@@ -185,9 +208,12 @@ export class MenuScene extends Phaser.Scene {
                     </div>
                 </div>
             </div>
+            </div>
         `;
 
-        this.domElement = this.add.dom(this.scale.width / 2, this.scale.height / 2 + 20).createFromHTML(uiHTML);
+        this.domElement = this.add.dom(this.scale.width / 2, this.scale.height / 2)
+            .createFromHTML(uiHTML)
+            .setOrigin(0.5); // Explicitly center element
         this.domElement.setPerspective(800);
 
         // --- Logic Binding ---
@@ -217,9 +243,6 @@ export class MenuScene extends Phaser.Scene {
             for (let i = 1; i <= count; i++) {
                 const isAI = i > 1; // Default
                 const color = GameConfig.COLORS['P' + i as keyof typeof GameConfig.COLORS].toString(16).padStart(6, '0');
-
-                // We'd ideally read current value if element exists to avoid resetting dropdowns on count change?
-                // For simplicity, reset on count change is acceptable for MVP.
 
                 html += `
                     <div class="player-slot">
@@ -289,13 +312,25 @@ export class MenuScene extends Phaser.Scene {
         });
     }
 
+    private applyBackgroundCover() {
+        if (!this.background) return;
+        const width = this.scale.width;
+        const height = this.scale.height;
+
+        this.background.setPosition(width / 2, height / 2);
+
+        // Scale to COVER
+        const scaleX = width / this.background.width;
+        const scaleY = height / this.background.height;
+        const scale = Math.max(scaleX, scaleY); // Ensure we cover the whole screen
+        this.background.setScale(scale);
+    }
+
     private resize(gameSize: Phaser.Structs.Size) {
-        if (this.title) {
-            this.title.setPosition(gameSize.width / 2, 50);
-            this.title.setFontSize(Math.min(48, gameSize.width * 0.1));
-        }
+        this.applyBackgroundCover();
+
         if (this.domElement) {
-            this.domElement.setPosition(gameSize.width / 2, gameSize.height / 2 + 20);
+            this.domElement.setPosition(gameSize.width / 2, gameSize.height / 2);
         }
     }
 }
