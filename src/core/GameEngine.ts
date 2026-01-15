@@ -38,12 +38,19 @@ export class GameEngine {
     // Tutorial State
     hasTriggeredEnclaveTutorial: boolean = false;
 
-    constructor(playerConfigs: { id: string, isAI: boolean, color: number }[] = [], mapType: MapType = 'default') {
+    private random: () => number;
+
+    constructor(
+        playerConfigs: { id: string, isAI: boolean, color: number }[] = [],
+        mapType: MapType = 'default',
+        randomFn: () => number = Math.random
+    ) {
         this.stateManager = new GameStateManager(playerConfigs, mapType);
         this.events = new TypedEventEmitter();
         this.pendingMoves = [];
         this.interactionRegistry = new InteractionRegistry();
         this.ai = new AIController(this);
+        this.random = randomFn;
     }
 
     startGame() {
@@ -153,61 +160,47 @@ export class GameEngine {
             return;
         }
 
-        // Apply Moves from Payload (Architecture Recommendation)
-        // Note: Currently pendingMoves is local state. 
-        // If we trust the payload, we calculate costs/apply based on THAT.
-        // For now, let's keep using local pendingMoves for consistency in single player,
-        // but ideally we'd use action.payload.moves for replayability.
-
-        // Let's use the payload moves to be "Multiplayer Ready"
-        // Need to set pendingMoves to the payload's moves (if they differ?)
-        // Or just iteration over payload.moves?
-        this.pendingMoves = action.payload.moves;
-
+        // Validate payload moves against current rules to avoid bypass
+        const validatedMoves: { r: number; c: number }[] = [];
+        const seen = new Set<string>();
+        this.pendingMoves = [];
+        for (const move of action.payload.moves) {
+            const key = `${move.r},${move.c}`;
+            if (seen.has(key)) continue;
+            this.pendingMoves = validatedMoves;
+            const rules = this.validateMove(move.r, move.c, false);
+            if (rules.valid) {
+                validatedMoves.push({ r: move.r, c: move.c });
+                seen.add(key);
+            } else {
+                this.emit('logMessage', { text: `Invalid move in payload at (${move.r}, ${move.c}) skipped.`, type: 'warning' });
+            }
+        }
+        this.pendingMoves = validatedMoves;
         this.commitMoves();
-
-        // Check if game ended in commitMoves
         if (this.isGameOver) return;
 
-        const incomeReport = this.state.endTurn();
+        this.advanceTurn();
+    }
 
+    private advanceTurn() {
+        const incomeReport = this.state.endTurn();
 
         // Turn Change -> Re-evaluate Music
         this.checkAudioState();
 
-        this.emit('turnChanged', this.state.currentPlayerId);
+        this.emit('turnChange');
+
         if (incomeReport) {
             this.emit('incomeReport', incomeReport);
-
-            // Detailed Income Summary Log (White/Info)
-            const parts = [];
-            if (incomeReport.base > 0) parts.push(`Base: +${incomeReport.base}`);
-            if (incomeReport.town > 0) parts.push(`Towns: +${incomeReport.town}`);
-            if (incomeReport.mine > 0) parts.push(`Mines: +${incomeReport.mine}`);
-            if (incomeReport.farm > 0) parts.push(`Farms: +${incomeReport.farm}`);
-            if (incomeReport.land > 0) parts.push(`Land(${incomeReport.landCount}): +${incomeReport.land}`);
-
-            // Log Income Summary (Info)
-            const incomeMsg = `Turn ${this.state.turnCount} Start. Income: +${incomeReport.total} (${parts.join(', ')})`;
-
-            // Only log for HUMAN (current player after turn switch)
-            const player = this.state.getCurrentPlayer();
-            if (!player.isAI) {
-                this.emit('logMessage', { text: incomeMsg, type: 'info' });
-            }
-
-            if (incomeReport.depletedMines && incomeReport.depletedMines.length > 0) {
-                incomeReport.depletedMines.forEach(m => {
-                    this.emit('logMessage', { text: `Gold Mine collapsed at (${m.r}, ${m.c})!`, type: 'info' });
-                });
-                this.emit('sfx:gold_depleted');
-            }
+            this.logIncomeReport(incomeReport);
         }
 
-        // AI Check
         const nextPlayer = this.state.getCurrentPlayer();
-
-
+        const nextPlayerId = this.state.currentPlayerId;
+        if (nextPlayerId) {
+            this.checkForEnclaves(nextPlayerId);
+        }
         if (nextPlayer.isAI) {
             this.triggerAiTurn();
         }
@@ -622,7 +615,9 @@ export class GameEngine {
 
 
     public isValidCell(r: number, c: number): boolean {
-        return r >= 0 && r < GameConfig.GRID_HEIGHT && c >= 0 && c < GameConfig.GRID_WIDTH;
+        const height = this.state.grid.length;
+        const width = height > 0 ? this.state.grid[0].length : 0;
+        return r >= 0 && r < height && c >= 0 && c < width;
     }
 
 
@@ -644,8 +639,10 @@ export class GameEngine {
         let tension = false;
 
         // Scan Grid for critical states
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+        const height = this.state.grid.length;
+        const width = height > 0 ? this.state.grid[0].length : 0;
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
                 const cell = this.state.grid[r][c];
 
                 // Doom: Enemy adjacent to My Base
@@ -726,18 +723,6 @@ export class GameEngine {
             const cell = this.state.getCell(move.r, move.c);
 
             if (!cell) continue; // Safety Check
-
-            const player = this.state.players[pid];
-            // Check against remaining gold
-            if (player.gold < cost) {
-                this.emit('logMessage', { text: `Insufficient funds for move at (${move.r}, ${move.c})`, type: 'warning' });
-                // We should probably stop execution here to prevent partial invalid state
-                // Or continue? If we continue, we skip this move.
-                // But later moves might depend on this one.
-                // Pruning should have happened before. If we are here, something is wrong.
-                // Safest: Abort remaining moves.
-                break;
-            }
 
             // Win Condition Check: Capture Enemy Base
             if (cell.building === 'base' && cell.owner !== pid) {
@@ -820,7 +805,7 @@ export class GameEngine {
 
             // Gold Mine Discovery (Hill + Neutral Capture)
             if (cell.type === 'hill' && !hasCombat) {
-                if (Math.random() < GameConfig.GOLD_MINE_CHANCE) {
+                if (this.random() < GameConfig.GOLD_MINE_CHANCE) {
                     this.state.setBuilding(move.r, move.c, 'gold_mine');
                     this.emit('logMessage', { text: `Gold Mine discovered at (${move.r}, ${move.c})!`, type: 'info' });
                     this.emit('sfx:gold_found');
@@ -855,16 +840,9 @@ export class GameEngine {
                 // Check Availability
                 if (action.isAvailable(this, interaction.r, interaction.c)) {
                     const c = typeof action.cost === 'function' ? action.cost(this, interaction.r, interaction.c) : action.cost;
-
-                    // Check Gold
-                    const player = this.state.players[pid];
-                    if (player.gold >= c) {
-                        action.execute(this, interaction.r, interaction.c);
-                        this.stateManager.spendGold(pid, c); // Deduct immediately
-                        totalCost += c;
-                    } else {
-                        this.emit('logMessage', { text: `Insufficient funds for interaction ${interaction.actionId}`, type: 'warning' });
-                    }
+                    action.execute(this, interaction.r, interaction.c);
+                    this.stateManager.spendGold(pid, c); // Deduct immediately (can go negative)
+                    totalCost += c;
                 } else {
                     console.warn(`Interaction ${interaction.actionId} failed validation at commit`);
                 }
@@ -911,27 +889,7 @@ export class GameEngine {
 
         // Check if game ended in commitMoves
         if (this.isGameOver) return;
-
-        this.state.turnCount++;
-
-        // Switch Player
-        // Switch Player
-        const currentIndex = this.state.playerOrder.indexOf(this.state.currentPlayerId as string);
-        const nextIndex = (currentIndex + 1) % this.state.playerOrder.length;
-        const nextPlayerId = this.state.playerOrder[nextIndex];
-        this.state.currentPlayerId = nextPlayerId;
-
-        // Resource Accrual for NEXT player
-        this.accrueResources(nextPlayerId);
-
-        // Notify
-        this.events.emit('turnChange');
-
-        // Check for Game Over (Enclaves/Bankruptcy - optional)
-        this.checkForEnclaves(nextPlayerId);
-
-        // Trigger AI if applicable
-        this.triggerAiTurn();
+        this.advanceTurn();
     }
 
     accrueResources(playerId: string) {
@@ -952,7 +910,7 @@ export class GameEngine {
         if (incomeReport.farm > 0) parts.push(`Farms: +${incomeReport.farm}`);
         if (incomeReport.land > 0) parts.push(`Land(${incomeReport.landCount}): +${incomeReport.land}`);
 
-        const summaryText = `Turn Start Income: +${incomeReport.total}G [ ${parts.join(', ')} ]`;
+        const summaryText = `Turn ${this.state.turnCount} Start. Income: +${incomeReport.total} (${parts.join(', ')})`;
         this.emit('logMessage', { text: summaryText, type: 'info' });
 
         if (incomeReport.depletedMines && incomeReport.depletedMines.length > 0) {

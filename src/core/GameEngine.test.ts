@@ -763,7 +763,7 @@ describe('GameEngine', () => {
             engine.on('logMessage', spy);
             engine.endTurn();
             const calls = JSON.stringify(spy.mock.calls, null, 2);
-            if (!calls.includes('Turn Start Income') || !calls.includes('"type": "info"')) {
+            if (!calls.includes('Income:') || !calls.includes('"type": "info"')) {
                 throw new Error('Spy calls mismatch: ' + calls);
             }
         });

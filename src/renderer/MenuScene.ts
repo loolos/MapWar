@@ -39,9 +39,9 @@ export class MenuScene extends Phaser.Scene {
                     display: grid;
                     grid-template-columns: 1fr 1fr;
                     gap: 15px;
-                    width: 90vw;
+                    width: 90%;
                     max-width: 800px;
-                    max-height: 90vh; /* Use max-height, not fixed */
+                    max-height: 90%; /* Use max-height, not fixed */
                     height: auto; /* Allow shrinking */
                     overflow-y: auto; /* Enable scroll if content is too tall */
                     background: rgba(0, 0, 0, 0.75); /* Semi-transparent dark bg */
@@ -54,7 +54,8 @@ export class MenuScene extends Phaser.Scene {
                     font-size: clamp(14px, 2.5vmin, 18px);
                     box-shadow: 0 10px 30px rgba(0,0,0,0.5);
                     border: 1px solid rgba(255,255,255,0.1);
-                    box-sizing: border-box; 
+                    box-sizing: border-box;
+                    margin: 0 auto;
                 }
                 .col-left {
                     display: flex;
@@ -107,6 +108,17 @@ export class MenuScene extends Phaser.Scene {
                     margin-bottom: 5px;
                     border-radius: 4px;
                 }
+                .player-slot select {
+                    min-width: 90px;
+                    flex: 0 0 auto;
+                }
+                .player-slot span {
+                    flex: 0 0 auto;
+                }
+                .player-slot select,
+                .player-slot span {
+                    white-space: nowrap;
+                }
 
                 .btn-start {
                     font-size: 1.2em;
@@ -133,9 +145,9 @@ export class MenuScene extends Phaser.Scene {
                     /* Stack if very narrow OR if portrait (height > width) */
                     .menu-container {
                         grid-template-columns: 1fr;
-                        max-height: 95vh;
+                        max-height: 95%;
                         height: auto;
-                        width: 95vw;
+                        width: 95%;
                         padding: 10px;
                         font-size: clamp(14px, 3vmin, 16px); 
                         box-sizing: border-box;
@@ -152,6 +164,8 @@ export class MenuScene extends Phaser.Scene {
                         max-width: 100%; 
                         box-sizing: border-box;
                     }
+                    .player-slot { flex-wrap: wrap; }
+                    .player-slot select { width: 100%; margin-left: 0; }
                 }
             </style>
 
@@ -211,10 +225,15 @@ export class MenuScene extends Phaser.Scene {
             </div>
         `;
 
-        this.domElement = this.add.dom(this.scale.width / 2, this.scale.height / 2)
+        this.domElement = this.add.dom(0, 0)
             .createFromHTML(uiHTML)
-            .setOrigin(0.5); // Explicitly center element
+            .setOrigin(0, 0); // Use top-left to align with full-screen container
         this.domElement.setPerspective(800);
+        const domNode = this.domElement.node as HTMLElement | null;
+        if (domNode) {
+            domNode.style.width = `${this.scale.width}px`;
+            domNode.style.height = `${this.scale.height}px`;
+        }
 
         // --- Logic Binding ---
 
@@ -330,7 +349,12 @@ export class MenuScene extends Phaser.Scene {
         this.applyBackgroundCover();
 
         if (this.domElement) {
-            this.domElement.setPosition(gameSize.width / 2, gameSize.height / 2);
+            this.domElement.setPosition(0, 0);
+            const domNode = this.domElement.node as HTMLElement | null;
+            if (domNode) {
+                domNode.style.width = `${gameSize.width}px`;
+                domNode.style.height = `${gameSize.height}px`;
+            }
         }
     }
 }

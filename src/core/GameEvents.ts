@@ -1,6 +1,5 @@
 
 export interface GameEventMap {
-    'turnChanged': string; // activePlayerId
     'stateChanged': void;
     'musicState': 'PEACE' | 'TENSION' | 'CONFLICT' | 'DOOM';
 
@@ -30,8 +29,14 @@ export interface GameEventMap {
     'sfx:victory': void;
 }
 
+type ListenerEntry<K extends keyof GameEventMap> = {
+    original: (data: GameEventMap[K]) => void;
+    wrapped: (data: GameEventMap[K]) => void;
+    context?: any;
+};
+
 export class TypedEventEmitter {
-    private listeners: { [K in keyof GameEventMap]?: Array<(data: GameEventMap[K]) => void> } = {};
+    private listeners: { [K in keyof GameEventMap]?: Array<ListenerEntry<K>> } = {};
 
     constructor() {
         this.listeners = {};
@@ -41,38 +46,41 @@ export class TypedEventEmitter {
         if (!this.listeners[event]) {
             this.listeners[event] = [];
         }
-        // Basic context binding if needed
-        if (context) {
-            fn = fn.bind(context);
-        }
+        const wrapped = context ? fn.bind(context) : fn;
         // Cast to any to avoid TS generic indexing issues with mapped types
-        (this.listeners[event] as any).push(fn);
+        (this.listeners[event] as any).push({ original: fn, wrapped, context });
         return this;
     }
 
     once<K extends keyof GameEventMap>(event: K, fn: (data: GameEventMap[K]) => void, context?: any): this {
-        const onceWrapper = (data: GameEventMap[K]) => {
-            this.off(event, onceWrapper);
+        if (!this.listeners[event]) {
+            this.listeners[event] = [];
+        }
+        const wrapped = (data: GameEventMap[K]) => {
+            this.off(event, fn, context);
             if (context) fn.call(context, data);
             else fn(data);
         };
-        return this.on(event, onceWrapper);
+        (this.listeners[event] as any).push({ original: fn, wrapped, context });
+        return this;
     }
 
-    off<K extends keyof GameEventMap>(event: K, fn: (data: GameEventMap[K]) => void, _context?: any): this {
+    off<K extends keyof GameEventMap>(event: K, fn: (data: GameEventMap[K]) => void, context?: any): this {
         if (!this.listeners[event]) return this;
-        // Naive removal (won't work well with bind/context unless strict reference match)
-        // For this project, reference match is usually enough.
-
-        this.listeners[event] = (this.listeners[event] as any).filter((l: any) => l !== fn);
+        this.listeners[event] = (this.listeners[event] as any).filter((l: ListenerEntry<K>) => {
+            const matchesFn = l.original === fn || l.wrapped === fn;
+            if (!matchesFn) return true;
+            if (context !== undefined && l.context !== context) return true;
+            return false;
+        });
         return this;
     }
 
     emit<K extends keyof GameEventMap>(event: K, data?: GameEventMap[K]): boolean {
         if (!this.listeners[event]) return false;
-        this.listeners[event]!.forEach(fn => {
+        this.listeners[event]!.forEach((entry) => {
             try {
-                fn(data!);
+                entry.wrapped(data!);
             } catch (err) {
                 console.error(`Error in listener for event '${event}':`, err);
             }

@@ -6,16 +6,20 @@ import { GameConfig } from './GameConfig';
 describe('Gold Mine Feature', () => {
     let engine: GameEngine;
 
+    const resetGrid = (target: GameEngine) => {
+        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+                target.state.grid[r][c].owner = null;
+                target.state.grid[r][c].building = 'none';
+                target.state.grid[r][c].type = 'plain';
+            }
+        }
+    };
+
     beforeEach(() => {
         engine = new GameEngine();
         // Clear grid
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
-                engine.state.grid[r][c].owner = null;
-                engine.state.grid[r][c].building = 'none';
-                engine.state.grid[r][c].type = 'plain'; // Reset type
-            }
-        }
+        resetGrid(engine);
     });
 
     afterEach(() => {
@@ -23,6 +27,11 @@ describe('Gold Mine Feature', () => {
     });
 
     it('discovers a gold mine on hill capture with 20% chance', () => {
+        // Mock random to return < 0.2 (hit)
+        const randomSpy = vi.fn().mockReturnValue(0.1);
+        engine = new GameEngine(undefined, 'default', randomSpy);
+        resetGrid(engine);
+
         // Setup: P1 captures a Hill
         engine.state.setOwner(0, 0, 'P1');
         engine.state.setBuilding(0, 0, 'base');
@@ -32,9 +41,6 @@ describe('Gold Mine Feature', () => {
         // Target: Hill at (0,1)
         engine.state.getCell(0, 1)!.type = 'hill';
         engine.state.getCell(0, 1)!.owner = null;
-
-        // Mock Math.random to return < 0.2 (hit)
-        const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.1);
 
         engine.pendingMoves = [{ r: 0, c: 1 }];
         engine.commitMoves();
@@ -46,14 +52,16 @@ describe('Gold Mine Feature', () => {
     });
 
     it('does NOT discover gold mine if chance fails', () => {
+        // Mock random to return > 0.2 (miss)
+        const randomSpy = vi.fn().mockReturnValue(0.5);
+        engine = new GameEngine(undefined, 'default', randomSpy);
+        resetGrid(engine);
+
         // Setup
         engine.state.setOwner(0, 0, 'P1');
         engine.state.players['P1'].gold = 100;
         engine.state.getCell(0, 1)!.type = 'hill';
         engine.state.getCell(0, 1)!.owner = null;
-
-        // Mock Math.random to return > 0.2 (miss)
-        vi.spyOn(Math, 'random').mockReturnValue(0.5);
 
         engine.pendingMoves = [{ r: 0, c: 1 }];
         engine.commitMoves();
@@ -63,12 +71,14 @@ describe('Gold Mine Feature', () => {
     });
 
     it('does NOT discover gold mine on non-hill', () => {
+        const randomSpy = vi.fn().mockReturnValue(0.1); // Would be a hit
+        engine = new GameEngine(undefined, 'default', randomSpy);
+        resetGrid(engine);
+
         engine.state.setOwner(0, 0, 'P1');
         engine.state.players['P1'].gold = 100;
         engine.state.getCell(0, 1)!.type = 'plain'; // Plain
         engine.state.getCell(0, 1)!.owner = null;
-
-        vi.spyOn(Math, 'random').mockReturnValue(0.1); // Would be a hit
 
         engine.pendingMoves = [{ r: 0, c: 1 }];
         engine.commitMoves();

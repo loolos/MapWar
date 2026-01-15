@@ -15,7 +15,7 @@ export class GameStateManager {
         if (!playerId) return;
         const player = this.state.players[playerId];
         if (player) {
-            player.gold = Math.max(0, player.gold - amount);
+            player.gold -= amount;
         }
     }
 
