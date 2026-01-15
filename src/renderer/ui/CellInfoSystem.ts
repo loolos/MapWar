@@ -307,30 +307,29 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
 
         this.drawBackground(width, height);
         this.updateMask(width, height);
-        this.updateTextStyles(width); // New: Update styles before layout
+        this.updateTextStyles(width, height); // New: Update styles before layout
         this.layout(width, height);
     }
 
-    private calculateFontSize(width: number, baseSize: number): string {
-        // Reference Width: 160px (allows standard phones to use base size in split layout)
-        const refWidth = 160;
-        const scale = width / refWidth;
+    private calculateFontSize(width: number, height: number, baseSize: number): string {
+        // Use the shorter side to scale fonts for small screens
+        const refSize = 160;
+        const scale = Math.min(width, height) / refSize;
 
         // Limits (Reduced by ~20% as requested)
         const minSize = 7.2; // Was 9
-        const maxSize = baseSize + 3; // Was +6. 20% scaling reduction roughly halves the growth range.
-
+        const maxSize = baseSize + 5;
         const newSize = baseSize * scale;
         const clamped = Phaser.Math.Clamp(newSize, minSize, maxSize);
         return `${clamped.toFixed(1)}px`;
     }
 
-    private updateTextStyles(width: number) {
+    private updateTextStyles(width: number, height: number) {
         // Base sizes (Reduced by ~30%)
         // Old: 18, 16, 14 -> New: 13, 11, 10
-        const headerSize = this.calculateFontSize(width, 13);
-        const standardSize = this.calculateFontSize(width, 11);
-        const smallSize = this.calculateFontSize(width, 10);
+        const headerSize = this.calculateFontSize(width, height, 13);
+        const standardSize = this.calculateFontSize(width, height, 11);
+        const smallSize = this.calculateFontSize(width, height, 10);
 
         // Apply
         this.headerText.setStyle({ fontSize: headerSize });

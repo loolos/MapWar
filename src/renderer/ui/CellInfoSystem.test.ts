@@ -98,30 +98,26 @@ describe('CellInfoSystem', () => {
         // Let's use standard resize values.
         system.resize(200, 400, 0, 0);
 
-        // Width 200 / Ref 160 = 1.25 scale.
+        // Min(200, 400) / Ref 160 = 1.25 scale.
         // Base: 13, 11, 10
-        // Header (13): 13 * 1.25 = 16.25. Clamped Max (13+3=16). -> 16.0
-        // Std (11): 11 * 1.25 = 13.75. Clamped Max (11+3=14). -> 13.8 (wait, 13.75 < 14)
-        // Small (10): 10 * 1.25 = 12.5. Clamped Max (10+3=13). -> 12.5
+        // Header: 13 * 1.25 = 16.25 -> 16.3
+        // Std: 11 * 1.25 = 13.75 -> 13.8
+        // Small: 10 * 1.25 = 12.5
 
-        // Wait, 13 * 1.25 = 16.25. Max is 16. So it should be 16.0.
-        // 11 * 1.25 = 13.75. Max is 14. So 13.8.
-        // 10 * 1.25 = 12.5. Max is 13. So 12.5.
-
-        expect(system.headerText.setStyle).toHaveBeenCalledWith(expect.objectContaining({ fontSize: '16.0px' }));
+        expect(system.headerText.setStyle).toHaveBeenCalledWith(expect.objectContaining({ fontSize: '16.3px' }));
         expect(system.typeText.setStyle).toHaveBeenCalledWith(expect.objectContaining({ fontSize: '13.8px' }));
         expect(system.descText.setStyle).toHaveBeenCalledWith(expect.objectContaining({ fontSize: '12.5px' }));
     });
 
     it('scales up when width increases (clamped)', () => {
-        // Resize to 300 (1.875x)
-        // Max: Base+3 (16, 14, 13)
+        // Resize to 300 (min side 300 -> 1.875x)
+        // Max: Base+5 (18, 16, 15)
         // All will hit max.
         system.resize(300, 400, 0, 0);
 
-        expect(system.headerText.setStyle).toHaveBeenCalledWith(expect.objectContaining({ fontSize: '16.0px' }));
-        expect(system.typeText.setStyle).toHaveBeenCalledWith(expect.objectContaining({ fontSize: '14.0px' }));
-        expect(system.descText.setStyle).toHaveBeenCalledWith(expect.objectContaining({ fontSize: '13.0px' }));
+        expect(system.headerText.setStyle).toHaveBeenCalledWith(expect.objectContaining({ fontSize: '18.0px' }));
+        expect(system.typeText.setStyle).toHaveBeenCalledWith(expect.objectContaining({ fontSize: '16.0px' }));
+        expect(system.descText.setStyle).toHaveBeenCalledWith(expect.objectContaining({ fontSize: '15.0px' }));
     });
 
     it('scales down when width decreases (clamped)', () => {
