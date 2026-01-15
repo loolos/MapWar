@@ -14,6 +14,28 @@ export class ActionButtonSystem {
     private gapX = 10;
     private gapY = 10;
 
+    private fitTextToButton(text: Phaser.GameObjects.Text) {
+        const maxW = this.buttonWidth - 16;
+        const maxH = this.buttonHeight - 10;
+        const textLen = text.text.length || 1;
+
+        let fSize = Math.floor(maxH * 0.5);
+        const widthLimitSize = Math.floor(maxW / (textLen * 0.55));
+        fSize = Math.min(fSize, widthLimitSize);
+        fSize = Math.max(6, Math.min(fSize, 18));
+
+        text.setScale(1);
+        text.setStyle({ fontSize: `${fSize}px` });
+
+        const bounds = text.getBounds();
+        if (bounds.width > maxW || bounds.height > maxH) {
+            const scale = Math.min(maxW / bounds.width, maxH / bounds.height);
+            if (scale < 1) {
+                text.setScale(scale);
+            }
+        }
+    }
+
     constructor(scene: Phaser.Scene, x: number, y: number) {
         this.scene = scene;
         this.container = scene.add.container(x, y);
@@ -58,12 +80,8 @@ export class ActionButtonSystem {
         this.buttons.push(btn);
 
         // Button Label
-        // Initial Font Size
-        const fontSize = Math.floor(Math.min(this.buttonWidth * 0.25, this.buttonHeight * 0.5));
-
         const text = this.scene.add.text(xPos + this.buttonWidth / 2, yPos + this.buttonHeight / 2, label, {
             fontFamily: 'Arial',
-            fontSize: `${fontSize}px`,
             color: '#ffffff',
             fontStyle: 'bold'
         }).setOrigin(0.5);
@@ -72,6 +90,7 @@ export class ActionButtonSystem {
 
         this.container.add(text);
         this.texts.push(text);
+        this.fitTextToButton(text);
     }
 
     public setGrid(rows: number, cols: number) {
@@ -106,26 +125,7 @@ export class ActionButtonSystem {
                 const y = pos.r * (this.buttonHeight + this.gapY) + this.buttonHeight / 2;
                 txt.setPosition(x, y);
 
-                // Font Sizing Logic: Ensure it fits in box
-                // Approx char width ~0.6 * fontSize
-                const textLen = txt.text.length;
-                const maxW = this.buttonWidth - 16; // Margin
-                const maxH = this.buttonHeight - 10;
-
-                // 1. By Height
-                let fSize = Math.floor(maxH * 0.5);
-
-                // 2. By Width
-                // width = len * fSize * 0.6 => fSize = width / (len * 0.6)
-                if (textLen > 0) {
-                    const widthLimitSize = Math.floor(maxW / (textLen * 0.6));
-                    fSize = Math.min(fSize, widthLimitSize);
-                }
-
-                // Clamp
-                fSize = Math.max(9, Math.min(fSize, 14)); // Cap at 14px
-
-                txt.setStyle({ fontSize: `${fSize}px` });
+                this.fitTextToButton(txt);
             }
         });
     }

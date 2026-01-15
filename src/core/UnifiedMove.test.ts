@@ -63,6 +63,7 @@ describe('Unified Move Interaction', () => {
         engine.state.grid[0][0].isConnected = true; // Force connected
         // Neighbor
         engine.state.setOwner(0, 1, null);
+        engine.state.getCell(0, 1)!.type = 'plain';
         engine.state.players['p1'].gold = 1000;
 
         expect(engine.pendingMoves).toHaveLength(0);
