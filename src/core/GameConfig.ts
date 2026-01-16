@@ -55,6 +55,41 @@ export const GameConfig = {
     // Global Cost Multipliers (System Parameters)
     COST_MULTIPLIER_NEUTRAL: 1.0,
     COST_MULTIPLIER_ATTACK: 1.2,
+    // Turn Event: Flood
+    FLOOD_CHANCE_BASE: 0.35,
+    FLOOD_CHANCE_WALL: 0.35 / 3,
+    // Turn Event: Trigger Chance
+    TURN_EVENT_TRIGGER_CHANCE: 0.05,
+    TURN_EVENT_FLOOD_RECEDE_CHANCE: 0.3,
+    TURN_EVENT_ENABLE_TEST_PLACEHOLDER: false,
+    TURN_EVENT_FLOOD_OCEAN_MIN_SIZE: 5,
+    TURN_EVENT_FLOOD_RECEDE_PERSISTENT_CHANCE: 1,
+    TURN_EVENT_FLOOD_NAME: 'Flood',
+    TURN_EVENT_FLOOD_MESSAGE: 'Flood waters rise across the land.',
+    TURN_EVENT_FLOOD_SFX: 'sfx:turn_event_flood',
+    TURN_EVENT_FLOOD_RECEDE_NAME: 'Flood Recedes',
+    TURN_EVENT_FLOOD_RECEDE_MESSAGE: 'The floodwaters begin to retreat.',
+    TURN_EVENT_FLOOD_RECEDE_SFX: 'sfx:turn_event_default',
+    TURN_EVENT_PLACEHOLDER_NAME: 'Mysterious Omen',
+    TURN_EVENT_PLACEHOLDER_MESSAGE_TEMPLATE: "A strange omen appears before {player}'s turn.",
+    TURN_EVENT_PLACEHOLDER_SFX: 'sfx:turn_event_default',
+    AI_TURN_DELAY_MS: 500,
+    PLAN_REVALIDATE_MAX_LOOPS: 20,
+    INTENSITY_TURN_CAP: 20,
+    INTENSITY_TURN_MAX: 0.5,
+    INTENSITY_UNIT_CAP: 20,
+    INTENSITY_UNIT_MAX: 0.5,
+    UI_MENU_PERSPECTIVE: 800,
+    UI_MENU_FADE_DURATION: 700,
+    UI_MENU_FANFARE_DELAY: 300,
+    UI_TILE_MIN_SIZE: 25,
+    UI_DEFAULT_VISIBLE_ROWS: 10,
+    UI_DEFAULT_VISIBLE_COLS: 10,
+    UI_SCENE_START_DELAY: 500,
+    UI_SCENE_RESIZE_RETRY_DELAY: 100,
+    UI_HEADER_HEIGHT_RATIO: 0.22,
+    UI_HEADER_HEIGHT_MIN: 160,
+    UI_HEADER_HEIGHT_MAX: 220,
     // Gold Mine Configs
     GOLD_MINE_CHANCE: 0.2, // 20%
     GOLD_MINE_INCOME: 5,
@@ -98,7 +133,12 @@ export const GameConfig = {
     UI: {
         TILE_SIZE: 64,
         SIDEBAR_WIDTH: 260,
-        ACTION_BAR_HEIGHT: 150
+        ACTION_BAR_HEIGHT: 150,
+        TURN_EVENT_TEXT_MIN_SIZE: 20,
+        TURN_EVENT_TEXT_SCALE: 0.08,
+        TURN_EVENT_TEXT_DEPTH: 999,
+        TURN_EVENT_TWEEN_FADE_DURATION: 300,
+        TURN_EVENT_TWEEN_HOLD_DURATION: 900
     },
     AI_DIFFICULTY: 'MEDIUM' as Difficulty,
     ENABLE_EXPERIMENTAL: false, // Set to true to enable experimental features

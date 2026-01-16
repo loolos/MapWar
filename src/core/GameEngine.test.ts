@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { GameEngine } from './GameEngine';
 import { GameConfig } from './GameConfig';
 
@@ -811,6 +811,183 @@ describe('GameEngine', () => {
                 throw new Error('Spy calls mismatch: ' + calls);
             }
         });
+
+    describe('Turn Event: Flood', () => {
+        const setupFloodMap = () => {
+            const height = engine.state.grid.length;
+            const width = height > 0 ? engine.state.grid[0].length : 0;
+            for (let r = 0; r < height; r++) {
+                for (let c = 0; c < width; c++) {
+                    const cell = engine.state.grid[r][c];
+                    cell.type = 'plain';
+                    cell.owner = null;
+                    cell.building = 'none';
+                    cell.isConnected = false;
+                }
+            }
+
+            // Large ocean cluster (size 5)
+            const waterCells = [
+                { r: 5, c: 5 },
+                { r: 5, c: 6 },
+                { r: 5, c: 7 },
+                { r: 6, c: 5 },
+                { r: 6, c: 6 }
+            ];
+            for (const { r, c } of waterCells) {
+                engine.state.grid[r][c].type = 'water';
+            }
+        };
+
+        const originalFloodBase = GameConfig.FLOOD_CHANCE_BASE;
+        const originalFloodWall = GameConfig.FLOOD_CHANCE_WALL;
+        const originalFloodRecede = GameConfig.TURN_EVENT_FLOOD_RECEDE_CHANCE;
+
+        afterEach(() => {
+            GameConfig.FLOOD_CHANCE_BASE = originalFloodBase;
+            GameConfig.FLOOD_CHANCE_WALL = originalFloodWall;
+            GameConfig.TURN_EVENT_FLOOD_RECEDE_CHANCE = originalFloodRecede;
+        });
+
+        it('floods adjacent tiles at 100% chance', () => {
+            setupFloodMap();
+            GameConfig.FLOOD_CHANCE_BASE = 1;
+            GameConfig.FLOOD_CHANCE_WALL = 1;
+
+            const target = engine.state.grid[5][4];
+            target.owner = 'P2';
+            target.building = 'farm';
+
+            const flooded = (engine as any).applyFloodEvent();
+
+            expect(flooded).toBeGreaterThan(0);
+            expect(target.type).toBe('water');
+            expect(target.owner).toBe(null);
+            expect(target.building).toBe('none');
+
+        });
+
+        it('respects wall flood chance', () => {
+            setupFloodMap();
+            GameConfig.FLOOD_CHANCE_BASE = 1;
+            GameConfig.FLOOD_CHANCE_WALL = 0;
+
+            const plainTarget = engine.state.grid[5][4];
+            plainTarget.owner = 'P2';
+            plainTarget.building = 'farm';
+
+            const wallTarget = engine.state.grid[6][4];
+            wallTarget.owner = 'P2';
+            wallTarget.building = 'wall';
+
+            const flooded = (engine as any).applyFloodEvent();
+
+            expect(flooded).toBeGreaterThan(0);
+            expect(plainTarget.type).toBe('water');
+            expect(wallTarget.type).toBe('plain');
+            expect(wallTarget.owner).toBe('P2');
+            expect(wallTarget.building).toBe('wall');
+
+        });
+
+        it('does not flood when chance is 0%', () => {
+            setupFloodMap();
+            GameConfig.FLOOD_CHANCE_BASE = 0;
+            GameConfig.FLOOD_CHANCE_WALL = 0;
+
+            const target = engine.state.grid[5][4];
+            target.owner = 'P2';
+            target.building = 'farm';
+
+            const flooded = (engine as any).applyFloodEvent();
+
+            expect(flooded).toBe(0);
+            expect(target.type).toBe('plain');
+            expect(target.owner).toBe('P2');
+            expect(target.building).toBe('farm');
+
+        });
+
+        it('recedes and restores original terrain on next round when forced', () => {
+            setupFloodMap();
+            GameConfig.FLOOD_CHANCE_BASE = 1;
+            GameConfig.FLOOD_CHANCE_WALL = 1;
+            GameConfig.TURN_EVENT_FLOOD_RECEDE_CHANCE = 1;
+
+            const target = engine.state.grid[5][4];
+            target.type = 'hill';
+            target.owner = 'P2';
+            target.building = 'farm';
+
+            const flooded = (engine as any).applyFloodEvent();
+            expect(flooded).toBeGreaterThan(0);
+            expect(target.type).toBe('water');
+
+            engine.setPersistentTurnEvent({
+                id: 'flood_recede',
+                name: 'Flood Recedes',
+                message: 'The floodwaters begin to retreat.',
+                sfxKey: 'sfx:turn_event_default'
+            }, 1);
+
+            const event = (engine as any).turnEventSystem.onTurnStart({
+                round: 2,
+                turnsTakenInRound: 0,
+                playerOrder: ['P1'],
+                currentPlayerId: 'P1'
+            });
+            expect(event?.eventId).toBe('flood_recede');
+
+            (engine as any).applyTurnEvent(event);
+            expect(target.type).toBe('hill');
+            expect(target.owner).toBe(null);
+            expect(target.building).toBe('none');
+        });
+
+        it('accumulates multiple floods and fully recedes', () => {
+            setupFloodMap();
+            GameConfig.FLOOD_CHANCE_BASE = 1;
+            GameConfig.FLOOD_CHANCE_WALL = 1;
+            GameConfig.TURN_EVENT_FLOOD_RECEDE_CHANCE = 1;
+
+            const firstTarget = engine.state.grid[5][4];
+            firstTarget.type = 'hill';
+            firstTarget.owner = 'P2';
+            firstTarget.building = 'farm';
+
+            const firstFlooded = (engine as any).applyFloodEvent();
+            expect(firstFlooded).toBeGreaterThan(0);
+            expect(firstTarget.type).toBe('water');
+
+            // Create a new adjacent land tile after the first flood.
+            const secondTarget = engine.state.grid[4][5];
+            secondTarget.type = 'water';
+
+            secondTarget.type = 'plain';
+            secondTarget.owner = 'P3';
+            secondTarget.building = 'wall';
+
+            const secondFlooded = (engine as any).applyFloodEvent();
+            expect(secondFlooded).toBeGreaterThan(0);
+            expect(secondTarget.type).toBe('water');
+
+            const event = (engine as any).turnEventSystem.onTurnStart({
+                round: 2,
+                turnsTakenInRound: 0,
+                playerOrder: ['P1'],
+                currentPlayerId: 'P1'
+            });
+            expect(event?.eventId).toBe('flood_recede');
+
+            (engine as any).applyTurnEvent(event);
+            expect(firstTarget.type).toBe('hill');
+            expect(secondTarget.type).toBe('plain');
+            expect(firstTarget.owner).toBe(null);
+            expect(secondTarget.owner).toBe(null);
+            expect(firstTarget.building).toBe('none');
+            expect(secondTarget.building).toBe('none');
+        });
+    });
     });
 
     describe('Audio / Tension System', () => {

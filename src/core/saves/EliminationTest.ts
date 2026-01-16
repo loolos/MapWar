@@ -27,6 +27,11 @@ export const EliminationTest: SaveScenario = {
                 let isConnected = false;
                 let type = 'plain';
 
+                // --- Center Ocean (Event Test) ---
+                if ((r === 4 && (c >= 4 && c <= 6)) || (r === 5 && (c >= 4 && c <= 6))) {
+                    type = 'water';
+                }
+
                 // --- P1 (Strong) ---
                 // Top Left Block (0,0 to 3,3)
                 if (r <= 3 && c <= 3) {
@@ -81,6 +86,19 @@ export const EliminationTest: SaveScenario = {
             playerOrder: playerOrder,
             turnCount: 10,
             currentPlayerId: 'P1',
+            events: {
+                forced: [
+                    {
+                        round: 13,
+                        event: {
+                            id: 'flood',
+                            name: 'Flood',
+                            message: 'Flood waters rise across the land.',
+                            sfxKey: 'sfx:turn_event_flood'
+                        }
+                    }
+                ]
+            },
             grid: grid
         });
     }

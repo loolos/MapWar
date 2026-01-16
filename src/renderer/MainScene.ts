@@ -19,7 +19,7 @@ import { AuraVisualizer } from './AuraVisualizer';
 
 export class MainScene extends Phaser.Scene {
     engine!: GameEngine;
-    tileSize: number = 64;
+    tileSize: number = GameConfig.UI.TILE_SIZE;
     // Graphical Layers
     gridGraphics!: Phaser.GameObjects.Graphics;
     terrainGraphics!: Phaser.GameObjects.Graphics;
@@ -33,6 +33,8 @@ export class MainScene extends Phaser.Scene {
     playerStatusSystem!: PlayerStatusSystem;
     infoSystem!: CellInfoSystem;
     logSystem!: LogSystem;
+    private turnEventText?: Phaser.GameObjects.Text;
+    private activeTurnEvent?: { name: string; message: string; sfxKey?: string };
 
     soundManager!: SoundManager; // NEW
     interactionMenu!: InteractionMenu; // NEW
@@ -51,7 +53,7 @@ export class MainScene extends Phaser.Scene {
     mapOffsetY: number = 0;
 
     // Camera Controls
-    minTileSize: number = 25; // Minimum playable tile size (0.5x scale)
+    minTileSize: number = GameConfig.UI_TILE_MIN_SIZE; // Minimum playable tile size (0.5x scale)
     isMapScrollable: boolean = false;
     scrollKeys!: {
         up: Phaser.Input.Keyboard.Key,
@@ -70,8 +72,8 @@ export class MainScene extends Phaser.Scene {
     // Viewport State
     viewRow: number = 0;
     viewCol: number = 0;
-    visibleRows: number = 10;
-    visibleCols: number = 10;
+    visibleRows: number = GameConfig.UI_DEFAULT_VISIBLE_ROWS;
+    visibleCols: number = GameConfig.UI_DEFAULT_VISIBLE_COLS;
     isViewportMode: boolean = false;
 
     constructor() {
@@ -124,12 +126,12 @@ export class MainScene extends Phaser.Scene {
                 this.engine.loadState(presetJson);
 
                 // Notification
-                this.time.delayedCall(500, () => {
+                this.time.delayedCall(GameConfig.UI_SCENE_START_DELAY, () => {
                     this.logSystem.addLog(`Loaded: ${save.name}`, 'info');
                 });
 
                 // Force Resize to Center Map on new Dimensions
-                this.time.delayedCall(100, () => {
+                this.time.delayedCall(GameConfig.UI_SCENE_RESIZE_RETRY_DELAY, () => {
                     this.resize(this.scale.gameSize);
                 });
             }
@@ -334,6 +336,14 @@ export class MainScene extends Phaser.Scene {
             this.logSystem.addLog(msg, 'info');
         });
 
+        this.engine.on('turnEvent', (event) => {
+            this.activeTurnEvent = { name: event.name, message: event.message, sfxKey: event.sfxKey };
+            this.showTurnEventOverlay(event.name, event.message);
+            if (event.sfxKey) {
+                this.soundManager.playSfx(event.sfxKey);
+            }
+        });
+
         // Initialize Cursor Keys
         if (this.input.keyboard) {
             this.cursors = this.input.keyboard.createCursorKeys();
@@ -349,7 +359,7 @@ export class MainScene extends Phaser.Scene {
         // Trigger Initial Layout
         this.resize(this.scale.gameSize);
         // Safety: Reprocess layout after short delay to ensure UI updates are caught
-        this.time.delayedCall(100, () => {
+        this.time.delayedCall(GameConfig.UI_SCENE_RESIZE_RETRY_DELAY, () => {
             this.resize(this.scale.gameSize);
         });
 
@@ -362,6 +372,57 @@ export class MainScene extends Phaser.Scene {
         });
 
         this.engine.startGame();
+    }
+
+    private showTurnEventOverlay(title: string, logMessage: string) {
+        if (this.turnEventText) {
+            this.turnEventText.destroy();
+            this.turnEventText = undefined;
+        }
+
+        const w = this.scale.width;
+        const h = this.scale.height;
+        const fontSize = Math.max(
+            GameConfig.UI.TURN_EVENT_TEXT_MIN_SIZE,
+            Math.floor(Math.min(w, h) * GameConfig.UI.TURN_EVENT_TEXT_SCALE)
+        );
+        this.turnEventText = this.add.text(w / 2, h / 2, title, {
+            fontSize: `${fontSize}px`,
+            color: '#ffffff',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 6
+        }).setOrigin(0.5);
+
+        const canAnimate = typeof (this.turnEventText as any).setAlpha === 'function'
+            && typeof (this.turnEventText as any).setDepth === 'function'
+            && typeof this.tweens?.add === 'function';
+
+        if (!canAnimate) {
+            this.turnEventText?.destroy?.();
+            this.turnEventText = undefined;
+            this.activeTurnEvent = undefined;
+            this.logSystem.addLog(logMessage, 'info');
+            return;
+        }
+
+        this.turnEventText.setAlpha(0);
+        this.turnEventText.setDepth(GameConfig.UI.TURN_EVENT_TEXT_DEPTH);
+
+        this.tweens.add({
+            targets: this.turnEventText,
+            alpha: 1,
+            duration: GameConfig.UI.TURN_EVENT_TWEEN_FADE_DURATION,
+            yoyo: true,
+            hold: GameConfig.UI.TURN_EVENT_TWEEN_HOLD_DURATION,
+            ease: 'Sine.Out',
+            onComplete: () => {
+                this.turnEventText?.destroy();
+                this.turnEventText = undefined;
+                this.activeTurnEvent = undefined;
+                this.logSystem.addLog(logMessage, 'info');
+            }
+        });
     }
 
     private createProceduralTextures() {
@@ -588,7 +649,11 @@ export class MainScene extends Phaser.Scene {
                 // --- PORTRAIT MODE (4-Corner Layout) ---
                 // Header (Status + Info): Top 15% (min 120px)
                 // Footer (Log + Buttons + Menu): Bottom (min 160px for Menu+Buttons)
-                const barHeight = Phaser.Math.Clamp(height * 0.22, 160, 220);
+                const barHeight = Phaser.Math.Clamp(
+                    height * GameConfig.UI_HEADER_HEIGHT_RATIO,
+                    GameConfig.UI_HEADER_HEIGHT_MIN,
+                    GameConfig.UI_HEADER_HEIGHT_MAX
+                );
 
                 // Map fills the middle
                 mapX = 0;
@@ -857,6 +922,12 @@ export class MainScene extends Phaser.Scene {
 
             this.drawMap();
             this.setupButtons();
+
+            if (this.turnEventText && this.activeTurnEvent) {
+                const fontSize = Math.max(20, Math.floor(Math.min(width, height) * 0.08));
+                this.turnEventText.setStyle({ fontSize: `${fontSize}px` });
+                this.turnEventText.setPosition(width / 2, height / 2);
+            }
 
         } catch (err) {
             console.error("MainScene.resize CRASHED:", err);

@@ -13,6 +13,7 @@ export interface GameEventMap {
     'logMessage': { text: string, type?: LogType };
     'incomeReport': { total: number, base: number, land: number, landCount: number, depletedMines: { r: number, c: number }[] };
     'gameOver': string; // winnerId
+    'turnEvent': { eventId: string, playerId: string, round: number, name: string, message: string, sfxKey?: string };
 
     // SFX
     'sfx:select': void;
@@ -37,6 +38,7 @@ export interface GameEventMap {
     'sfx:farm_upgrade': void;
     'sfx:base_upgrade_income': void;
     'sfx:base_upgrade_defense': void;
+    'sfx:turn_event_default': void;
     'sfx:gold_found': void;
     'sfx:gold_depleted': void;
     'sfx:cancel': void;

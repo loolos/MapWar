@@ -230,7 +230,7 @@ export class MenuScene extends Phaser.Scene {
         this.domElement = this.add.dom(0, 0)
             .createFromHTML(uiHTML)
             .setOrigin(0, 0); // Use top-left to align with full-screen container
-        this.domElement.setPerspective(800);
+        this.domElement.setPerspective(GameConfig.UI_MENU_PERSPECTIVE);
         const domNode = this.domElement.node as HTMLElement | null;
         if (domNode) {
             domNode.style.width = `${this.scale.width}px`;
@@ -242,7 +242,7 @@ export class MenuScene extends Phaser.Scene {
         this.tweens.add({
             targets: this.domElement,
             alpha: 1,
-            duration: 700,
+            duration: GameConfig.UI_MENU_FADE_DURATION,
             ease: 'Sine.Out'
         });
 
@@ -253,7 +253,7 @@ export class MenuScene extends Phaser.Scene {
         // Note: Browser autoplay policies may require user interaction first
         this.soundManager.startContext().then(() => {
             // Small delay to ensure audio context is fully ready
-            this.time.delayedCall(300, () => {
+            this.time.delayedCall(GameConfig.UI_MENU_FANFARE_DELAY, () => {
                 this.soundManager.playStartFanfare();
             });
         }).catch((err) => {

@@ -8,6 +8,7 @@ import type { MapType } from './map/MapGenerator';
 
 import { GameStateManager } from './GameStateManager';
 import { TypedEventEmitter } from './GameEvents';
+import { TurnEventSystem, type TurnEventPayload, type TurnEventDefinition } from './events/TurnEventSystem';
 
 export class GameEngine {
     stateManager: GameStateManager;
@@ -38,7 +39,9 @@ export class GameEngine {
     // Tutorial State
     hasTriggeredEnclaveTutorial: boolean = false;
 
+    private turnEventSystem: TurnEventSystem;
     private random: () => number;
+    private floodedCells: Map<string, { r: number; c: number; type: 'plain' | 'hill' | 'bridge' }> = new Map();
 
     constructor(
         playerConfigs: { id: string, isAI: boolean, color: number }[] = [],
@@ -51,6 +54,12 @@ export class GameEngine {
         this.interactionRegistry = new InteractionRegistry();
         this.ai = new AIController(this);
         this.random = randomFn;
+        this.turnEventSystem = new TurnEventSystem(this.random);
+        this.turnEventSystem.setEventPrecheck('flood', () => this.hasLargeOcean());
+        this.turnEventSystem.setEventPrecheck('flood_recede', () => ({
+            ok: this.random() < GameConfig.TURN_EVENT_FLOOD_RECEDE_CHANCE,
+            onFail: 'defer'
+        }));
     }
 
     private shouldPlayPlanningSfx(): boolean {
@@ -66,6 +75,7 @@ export class GameEngine {
         }
 
         this.emit('gameStart');
+        this.maybeTriggerTurnEvent();
 
         if (firstPlayer && this.state.players[firstPlayer].isAI) {
             this.triggerAiTurn();
@@ -137,6 +147,26 @@ export class GameEngine {
         if (this.state.grid.length > 0) {
             (GameConfig as any).GRID_HEIGHT = this.state.grid.length;
             (GameConfig as any).GRID_WIDTH = this.state.grid[0].length;
+        }
+
+        try {
+            const data = JSON.parse(json);
+            const events = data?.events;
+            if (events) {
+                this.clearForcedTurnEvent();
+                this.clearPersistentTurnEvent();
+                if (Array.isArray(events.forced)) {
+                    for (const item of events.forced) {
+                        if (!item || typeof item.round !== 'number' || !item.event) continue;
+                        this.forceTurnEventAtRound(item.round, item.event);
+                    }
+                }
+                if (events.persistent?.event) {
+                    this.setPersistentTurnEvent(events.persistent.event, events.persistent.chancePerRound);
+                }
+            }
+        } catch {
+            // Ignore invalid preset event metadata.
         }
 
         this.emit('mapUpdate');
@@ -220,9 +250,227 @@ export class GameEngine {
         if (nextPlayerId) {
             this.checkForEnclaves(nextPlayerId);
         }
+        this.maybeTriggerTurnEvent();
         if (nextPlayer.isAI) {
             this.triggerAiTurn();
         }
+    }
+
+    private maybeTriggerTurnEvent() {
+        const event = this.turnEventSystem.onTurnStart({
+            round: this.state.turnCount,
+            turnsTakenInRound: this.state.turnsTakenInRound,
+            playerOrder: this.state.playerOrder,
+            currentPlayerId: this.state.currentPlayerId
+        });
+        if (event) {
+            const resolved = this.applyTurnEvent(event);
+            this.emit('turnEvent', resolved);
+        }
+    }
+
+    public forceTurnEventAtRound(round: number, event: TurnEventDefinition) {
+        this.turnEventSystem.forceEventAtRound(round, event);
+    }
+
+    public clearForcedTurnEvent(round?: number) {
+        this.turnEventSystem.clearForcedEvent(round);
+    }
+
+    public setPersistentTurnEvent(event: TurnEventDefinition, chancePerRound?: number) {
+        this.turnEventSystem.setPersistentEvent(event, chancePerRound);
+    }
+
+    public clearPersistentTurnEvent() {
+        this.turnEventSystem.clearPersistentEvent();
+    }
+
+    private applyTurnEvent(event: TurnEventPayload): TurnEventPayload {
+        if (event.eventId === 'flood') {
+            const flooded = this.applyFloodEvent();
+            return {
+                ...event,
+                message: flooded > 0
+                    ? `Floodwaters engulf ${flooded} tiles near the sea.`
+                    : 'Floodwaters surge but the land holds.'
+            };
+        }
+        if (event.eventId === 'flood_recede') {
+            const restored = this.applyFloodRecedeEvent();
+            return {
+                ...event,
+                message: restored > 0
+                    ? `Floodwaters recede from ${restored} tiles.`
+                    : 'The floodwaters linger.'
+            };
+        }
+        return event;
+    }
+
+    private applyFloodEvent(): number {
+        const grid = this.state.grid;
+        const height = grid.length;
+        const width = height > 0 ? grid[0].length : 0;
+        if (height === 0 || width === 0) return 0;
+
+        const floodChanceBase = GameConfig.FLOOD_CHANCE_BASE;
+        const floodChanceWall = GameConfig.FLOOD_CHANCE_WALL;
+        const oceanMinSize = GameConfig.TURN_EVENT_FLOOD_OCEAN_MIN_SIZE;
+        const visited = Array.from({ length: height }, () => Array(width).fill(false));
+        const oceanId = Array.from({ length: height }, () => Array(width).fill(-1));
+        const oceanSizes: number[] = [];
+
+        const bfs = (sr: number, sc: number, id: number) => {
+            const queue: { r: number; c: number }[] = [{ r: sr, c: sc }];
+            visited[sr][sc] = true;
+            oceanId[sr][sc] = id;
+            let size = 0;
+            let head = 0;
+            while (head < queue.length) {
+                const curr = queue[head++];
+                size++;
+                const neighbors = [
+                    { r: curr.r + 1, c: curr.c },
+                    { r: curr.r - 1, c: curr.c },
+                    { r: curr.r, c: curr.c + 1 },
+                    { r: curr.r, c: curr.c - 1 }
+                ];
+                for (const n of neighbors) {
+                    if (n.r < 0 || n.r >= height || n.c < 0 || n.c >= width) continue;
+                    if (visited[n.r][n.c]) continue;
+                    if (grid[n.r][n.c].type !== 'water') continue;
+                    visited[n.r][n.c] = true;
+                    oceanId[n.r][n.c] = id;
+                    queue.push(n);
+                }
+            }
+            oceanSizes[id] = size;
+        };
+
+        let oceanCount = 0;
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
+                if (!visited[r][c] && grid[r][c].type === 'water') {
+                    bfs(r, c, oceanCount);
+                    oceanCount++;
+                }
+            }
+        }
+
+        const isLargeOcean = (r: number, c: number) => {
+            const id = oceanId[r][c];
+            return id >= 0 && (oceanSizes[id] || 0) >= oceanMinSize;
+        };
+        const candidates: { r: number; c: number }[] = [];
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
+                const cell = grid[r][c];
+                if (cell.type === 'water' || cell.type === 'bridge') continue;
+                if (cell.building === 'base') continue;
+                const neighbors = [
+                    { r: r + 1, c },
+                    { r: r - 1, c },
+                    { r, c: c + 1 },
+                    { r, c: c - 1 }
+                ];
+                if (neighbors.some(n => n.r >= 0 && n.r < height && n.c >= 0 && n.c < width && isLargeOcean(n.r, n.c))) {
+                    candidates.push({ r, c });
+                }
+            }
+        }
+
+        if (candidates.length === 0) return 0;
+
+        let flooded = 0;
+        for (const { r, c } of candidates) {
+            const cell = grid[r][c];
+            if (cell.type === 'water' || cell.building === 'base') continue;
+            const chance = cell.building === 'wall' ? floodChanceWall : floodChanceBase;
+            if (this.random() > chance) continue;
+            this.floodedCells.set(`${r},${c}`, { r, c, type: cell.type });
+            cell.owner = null;
+            cell.building = 'none';
+            cell.defenseLevel = 0;
+            cell.incomeLevel = 0;
+            cell.watchtowerLevel = 0;
+            cell.farmLevel = 0;
+            cell.unit = null;
+            cell.isConnected = false;
+            cell.type = 'water';
+            flooded++;
+        }
+
+        if (flooded > 0) {
+            this.turnEventSystem.setPersistentEvent({
+                id: 'flood_recede',
+                name: GameConfig.TURN_EVENT_FLOOD_RECEDE_NAME,
+                message: GameConfig.TURN_EVENT_FLOOD_RECEDE_MESSAGE,
+                sfxKey: GameConfig.TURN_EVENT_FLOOD_RECEDE_SFX
+            }, GameConfig.TURN_EVENT_FLOOD_RECEDE_PERSISTENT_CHANCE);
+            this.emit('mapUpdate');
+        }
+        return flooded;
+    }
+
+    private applyFloodRecedeEvent(): number {
+        if (this.floodedCells.size === 0) return 0;
+        let restored = 0;
+        for (const entry of this.floodedCells.values()) {
+            const cell = this.state.getCell(entry.r, entry.c);
+            if (!cell) continue;
+            if (cell.type === 'water') {
+                cell.type = entry.type;
+                restored++;
+            }
+        }
+        this.floodedCells.clear();
+        if (restored > 0) {
+            this.emit('mapUpdate');
+        }
+        return restored;
+    }
+
+    private hasLargeOcean(minSize: number = GameConfig.TURN_EVENT_FLOOD_OCEAN_MIN_SIZE): boolean {
+        const grid = this.state.grid;
+        const height = grid.length;
+        const width = height > 0 ? grid[0].length : 0;
+        if (height === 0 || width === 0) return false;
+
+        const visited = Array.from({ length: height }, () => Array(width).fill(false));
+        const queue: { r: number; c: number }[] = [];
+
+        const enqueue = (r: number, c: number) => {
+            visited[r][c] = true;
+            queue.push({ r, c });
+        };
+
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
+                if (visited[r][c] || grid[r][c].type !== 'water') continue;
+                enqueue(r, c);
+                let size = 0;
+                let head = 0;
+                while (head < queue.length) {
+                    const curr = queue[head++];
+                    size++;
+                    const neighbors = [
+                        { r: curr.r + 1, c: curr.c },
+                        { r: curr.r - 1, c: curr.c },
+                        { r: curr.r, c: curr.c + 1 },
+                        { r: curr.r, c: curr.c - 1 }
+                    ];
+                    for (const n of neighbors) {
+                        if (n.r < 0 || n.r >= height || n.c < 0 || n.c >= width) continue;
+                        if (visited[n.r][n.c]) continue;
+                        if (grid[n.r][n.c].type !== 'water') continue;
+                        enqueue(n.r, n.c);
+                    }
+                }
+                queue.length = 0;
+                if (size >= minSize) return true;
+            }
+        }
+        return false;
     }
 
     private triggerAiTurn() {
@@ -236,7 +484,7 @@ export class GameEngine {
                     this.endTurn();
                 }
             }
-        }, 500);
+        }, GameConfig.AI_TURN_DELAY_MS);
     }
 
     // Interaction System
@@ -408,7 +656,7 @@ export class GameEngine {
     revalidatePendingPlan() {
         let changed = true;
         let loops = 0;
-        while (changed && loops < 20) { // Safety break
+        while (changed && loops < GameConfig.PLAN_REVALIDATE_MAX_LOOPS) { // Safety break
             changed = false;
             loops++;
 
@@ -1028,7 +1276,7 @@ export class GameEngine {
         // 1. Progression: Turn Number (Cap at turn 20) -> 0.0 to 0.5
         // 2. Army Size: Total Units (Cap at 20 units) -> 0.0 to 0.5
 
-        const turnComponent = Math.min(this.state.turnCount / 20, 0.5);
+        const turnComponent = Math.min(this.state.turnCount / GameConfig.INTENSITY_TURN_CAP, GameConfig.INTENSITY_TURN_MAX);
 
         let totalUnits = 0;
         this.state.grid.forEach(row => {
@@ -1037,7 +1285,7 @@ export class GameEngine {
             });
         });
 
-        const unitComponent = Math.min(totalUnits / 20, 0.5);
+        const unitComponent = Math.min(totalUnits / GameConfig.INTENSITY_UNIT_CAP, GameConfig.INTENSITY_UNIT_MAX);
 
         return turnComponent + unitComponent;
     }

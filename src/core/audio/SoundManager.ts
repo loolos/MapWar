@@ -162,6 +162,13 @@ export class SoundManager {
             else if (key.includes('base_upgrade_defense')) {
                 this.polySynth.triggerAttackRelease(["C3", "G3"], "8n");
             }
+            else if (key.includes('turn_event_default')) {
+                this.polySynth.triggerAttackRelease(["C4", "D4", "G4"], "8n");
+            }
+            else if (key.includes('turn_event_flood')) {
+                this.noiseSynth.triggerAttackRelease("8n");
+                this.membraneSynth.triggerAttackRelease("C1", "8n");
+            }
             // 5. Victory
             else if (key.includes('victory')) {
                 // Fanfare
