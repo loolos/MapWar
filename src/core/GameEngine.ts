@@ -166,22 +166,36 @@ export class GameEngine {
         }
 
         // Validate payload moves against current rules to avoid bypass
-        const validatedMoves: { r: number; c: number }[] = [];
+        const uniqueMoves: { r: number; c: number }[] = [];
         const seen = new Set<string>();
-        this.pendingMoves = [];
         for (const move of action.payload.moves) {
             const key = `${move.r},${move.c}`;
             if (seen.has(key)) continue;
-            this.pendingMoves = validatedMoves;
-            const rules = this.validateMove(move.r, move.c, false);
-            if (rules.valid) {
-                validatedMoves.push({ r: move.r, c: move.c });
-                seen.add(key);
-            } else {
-                this.emit('logMessage', { text: `Invalid move in payload at (${move.r}, ${move.c}) skipped.`, type: 'warning' });
-            }
+            seen.add(key);
+            uniqueMoves.push({ r: move.r, c: move.c });
         }
+
+        // Validate without relying on payload order
+        this.pendingMoves = uniqueMoves;
+        const validatedMoves = this.pendingMoves.filter(move => {
+            if (!this.isValidCell(move.r, move.c)) {
+                this.emit('logMessage', { text: `Invalid move in payload at (${move.r}, ${move.c}) skipped.`, type: 'warning' });
+                return false;
+            }
+            const cell = this.state.getCell(move.r, move.c);
+            if (cell && cell.owner === this.state.currentPlayerId) {
+                this.emit('logMessage', { text: `Invalid move in payload at (${move.r}, ${move.c}) skipped.`, type: 'warning' });
+                return false;
+            }
+            const rules = this.validateMove(move.r, move.c, false);
+            if (!rules.valid) {
+                this.emit('logMessage', { text: `Invalid move in payload at (${move.r}, ${move.c}) skipped.`, type: 'warning' });
+                return false;
+            }
+            return true;
+        });
         this.pendingMoves = validatedMoves;
+        this.revalidatePendingPlan();
         this.commitMoves();
         if (this.isGameOver) return;
 

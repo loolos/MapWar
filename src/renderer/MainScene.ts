@@ -215,8 +215,6 @@ export class MainScene extends Phaser.Scene {
 
         this.drawMap(); // Initial draw of grid/units
 
-        this.scale.on('resize', this.resize, this);
-
         // Initialize Procedural Textures
         this.createProceduralTextures();
 

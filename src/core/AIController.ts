@@ -257,7 +257,6 @@ export class AIController {
     private scoreTactical(cell: Cell): number {
         let score = 0;
         if (cell.type === 'hill') score += AIConfig.SCORE_HILL;
-        if (cell.type === 'hill') score += AIConfig.SCORE_HILL;
         else if (cell.type === 'bridge') score += AIConfig.SCORE_BRIDGE;
         else if (cell.type === 'water') {
             // New Mechanic: Build Bridge

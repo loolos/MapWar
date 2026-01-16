@@ -148,12 +148,20 @@ export class GameState {
                     const cell = this.grid[r][c];
                     cell.owner = null;
                     cell.isConnected = false;
+                    cell.unit = null;
 
                     // Reset Buildings but KEEP TOWNS (and potentially other map features)
                     // If it was a base, remove it (setupBases will restore).
                     // If it was a town, keep it.
-                    if (cell.building === 'base') {
+                    if (cell.building !== 'town') {
                         cell.building = 'none';
+                        cell.defenseLevel = 0;
+                        cell.incomeLevel = 0;
+                        cell.watchtowerLevel = 0;
+                        cell.farmLevel = 0;
+                    } else {
+                        cell.townIncome = GameConfig.TOWN_INCOME_BASE;
+                        cell.townTurnCount = 0;
                     }
                     // If building is town, leave it.
 

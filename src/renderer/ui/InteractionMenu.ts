@@ -70,8 +70,13 @@ export class InteractionMenu extends Phaser.GameObjects.Container {
     }
 
     public hide() {
-        // We act like show(null, null) which clears options
-        this.show(null, null);
+        this.currentOptions = [];
+        this.currentR = null;
+        this.currentC = null;
+        this.pageOffset = 0;
+        this.buttonGroup.removeAll(true);
+        this.bg.clear();
+        this.setVisible(false);
     }
 
     /* Internals */

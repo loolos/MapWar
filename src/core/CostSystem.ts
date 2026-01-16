@@ -36,7 +36,8 @@ export class CostSystem {
         if (cell.owner !== null && cell.owner !== curr) {
             isAttack = true;
             // Overwrite base with Attack Base
-            if (cell.building === 'base') {
+            const isBase = cell.building === 'base';
+            if (isBase) {
                 baseCost = GameConfig.COST_CAPTURE_BASE;
                 breakdownParts = [`Attack Base(${baseCost})`];
             } else {
@@ -45,11 +46,13 @@ export class CostSystem {
             }
 
             // Adjust for Terrain in Attack
-            if (cell.type === 'hill' || cell.type === 'bridge') {
-                baseCost = GameConfig.COST_ATTACK * 2;
-                breakdownParts = [`Attack Hill/Bridge(${baseCost})`];
-            } else {
-                breakdownParts = [`Attack(${baseCost})`];
+            if (!isBase) {
+                if (cell.type === 'hill' || cell.type === 'bridge') {
+                    baseCost = GameConfig.COST_ATTACK * 2;
+                    breakdownParts = [`Attack Hill/Bridge(${baseCost})`];
+                } else {
+                    breakdownParts = [`Attack(${baseCost})`];
+                }
             }
 
             // Defenses
