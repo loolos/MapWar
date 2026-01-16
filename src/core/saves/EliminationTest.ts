@@ -9,7 +9,7 @@ export const EliminationTest: SaveScenario = {
         const height = 10;
 
         // Players
-        const p1 = { id: 'P1', color: GameConfig.COLORS.P1, gold: 200, isAI: false };
+        const p1 = { id: 'P1', color: GameConfig.COLORS.P1, gold: 1000, isAI: false };
         const p2 = { id: 'P2', color: GameConfig.COLORS.P2, gold: 0, isAI: true }; // Eliminated
         const p3 = { id: 'P3', color: GameConfig.COLORS.P3, gold: 50, isAI: true }; // Critical
         const p4 = { id: 'P4', color: GameConfig.COLORS.P4, gold: 100, isAI: true }; // Observer

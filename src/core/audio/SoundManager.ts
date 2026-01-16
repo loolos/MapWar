@@ -91,7 +91,17 @@ export class SoundManager {
 
         try {
             // 1. Attack / Combat
-            if (key.includes('attack')) {
+            if (key.includes('base_capture')) {
+                const now = Tone.now();
+                this.membraneSynth.triggerAttackRelease("C1", "8n", now);
+                this.polySynth.triggerAttackRelease(["C3", "G3", "C4"], "4n", now + 0.05);
+                this.metalSynth.triggerAttackRelease(220, "16n");
+            }
+            else if (key.includes('conquer_large')) {
+                this.polySynth.triggerAttackRelease(["C3", "Eb3", "G3", "Bb3"], "2n");
+                this.metalSynth.triggerAttackRelease(180, "16n");
+            }
+            else if (key.includes('attack')) {
                 // Sharp Metallic Clang
                 this.metalSynth.triggerAttackRelease(200, "32n");
                 this.noiseSynth.triggerAttackRelease("8n"); // Impact thud
@@ -100,6 +110,15 @@ export class SoundManager {
             else if (key.includes('capture_town')) {
                 // Bell / Chime
                 this.polySynth.triggerAttackRelease(["C5", "E5", "G5"], "8n");
+            }
+            else if (key.includes('capture_large')) {
+                this.polySynth.triggerAttackRelease(["C3", "G3", "C4"], "4n");
+            }
+            else if (key.includes('capture_medium')) {
+                this.polySynth.triggerAttackRelease(["C4", "E4", "G4"], "8n");
+            }
+            else if (key.includes('capture_small')) {
+                this.polySynth.triggerAttackRelease(["C4"], "16n");
             }
             else if (key.includes('capture')) {
                 // Land Claim - Ascending
@@ -114,6 +133,34 @@ export class SoundManager {
             else if (key.includes('conquer')) {
                 // Heavy cord
                 this.polySynth.triggerAttackRelease(["C3", "Eb3", "G3"], "4n");
+            }
+            else if (key.includes('bridge_build')) {
+                this.noiseSynth.triggerAttackRelease("16n");
+                this.membraneSynth.triggerAttackRelease("C2", "16n");
+            }
+            else if (key.includes('wall_build')) {
+                this.membraneSynth.triggerAttackRelease("G1", "8n");
+            }
+            else if (key.includes('wall_upgrade')) {
+                this.membraneSynth.triggerAttackRelease("C2", "16n");
+            }
+            else if (key.includes('watchtower_build')) {
+                this.metalSynth.triggerAttackRelease(600, "32n");
+            }
+            else if (key.includes('watchtower_upgrade')) {
+                this.metalSynth.triggerAttackRelease(900, "32n");
+            }
+            else if (key.includes('farm_build')) {
+                this.polySynth.triggerAttackRelease(["E4", "G4"], "16n");
+            }
+            else if (key.includes('farm_upgrade')) {
+                this.polySynth.triggerAttackRelease(["C4", "E4", "G4"], "16n");
+            }
+            else if (key.includes('base_upgrade_income')) {
+                this.polySynth.triggerAttackRelease(["C4", "E4", "A4"], "8n");
+            }
+            else if (key.includes('base_upgrade_defense')) {
+                this.polySynth.triggerAttackRelease(["C3", "G3"], "8n");
             }
             // 5. Victory
             else if (key.includes('victory')) {

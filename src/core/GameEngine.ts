@@ -737,9 +737,12 @@ export class GameEngine {
         let gameWon = false;
 
         let hasCombat = false;
-        let hasCapture = false;
         let hasTownCapture = false;
         let hasConquer = false;
+        let hasBaseCapture = false;
+        let captureCount = 0;
+        let conquerCount = 0;
+        let bridgeBuiltCount = 0;
 
 
         // Snapshot costs BEFORE execution to ensure consistency with the Plan
@@ -759,6 +762,7 @@ export class GameEngine {
             if (cell.building === 'base' && cell.owner !== pid) {
                 // ELIMINATION LOGIC
                 const loserId = cell.owner;
+                hasBaseCapture = true;
                 this.emit('sfx:eliminate');
                 if (loserId) {
                     this.emit('logMessage', { text: `${loserId} has been eliminated by ${pid}!`, type: 'combat' });
@@ -783,8 +787,10 @@ export class GameEngine {
             if (cell.owner && cell.owner !== pid) {
                 hasCombat = true;
                 hasConquer = true; // Capturing enemy land
+                conquerCount++;
+                captureCount++;
             } else if (cell.owner === null) {
-                hasCapture = true;
+                captureCount++;
             }
 
             // Check for Town Capture
@@ -807,6 +813,7 @@ export class GameEngine {
 
             // Transformation: Water -> Bridge
             if (cell && cell.type === 'water') {
+                bridgeBuiltCount++;
                 cell.type = 'bridge';
             }
 
@@ -849,11 +856,21 @@ export class GameEngine {
         }
 
         // Emit SFX based on priority (Highest impact first)
-        if (hasTownCapture) this.emit('sfx:capture_town');
-        else if (hasConquer) this.emit('sfx:conquer'); // Epic Capture
-        else if (hasCombat) this.emit('sfx:attack');
-        else if (hasCapture) this.emit('sfx:capture');
-        else if (this.pendingMoves.length > 0) this.emit('sfx:move');
+        const captureTier = captureCount >= 5 ? 'large' : captureCount >= 3 ? 'medium' : captureCount >= 1 ? 'small' : null;
+        if (hasBaseCapture) {
+            this.emit('sfx:base_capture');
+        } else if (hasTownCapture) {
+            this.emit('sfx:capture_town');
+        } else if (hasConquer) {
+            if (captureTier === 'large' && conquerCount >= 3) this.emit('sfx:conquer_large');
+            else this.emit('sfx:conquer'); // Epic Capture
+        } else if (hasCombat) {
+            this.emit('sfx:attack');
+        } else if (captureTier) {
+            this.emit(`sfx:capture_${captureTier}` as any);
+        } else if (this.pendingMoves.length > 0) {
+            this.emit('sfx:move');
+        }
 
 
         // Process Interactions
@@ -865,6 +882,15 @@ export class GameEngine {
         // copy pending
         const interactionsToRun = [...this.pendingInteractions];
 
+        let baseIncomeUpgrades = 0;
+        let baseDefenseUpgrades = 0;
+        let wallBuilds = 0;
+        let wallUpgrades = 0;
+        let watchtowerBuilds = 0;
+        let watchtowerUpgrades = 0;
+        let farmBuilds = 0;
+        let farmUpgrades = 0;
+
         interactionsToRun.forEach(interaction => {
             const action = this.interactionRegistry.get(interaction.actionId);
             if (action) {
@@ -872,6 +898,17 @@ export class GameEngine {
                 if (action.isAvailable(this, interaction.r, interaction.c)) {
                     const c = typeof action.cost === 'function' ? action.cost(this, interaction.r, interaction.c) : action.cost;
                     action.execute(this, interaction.r, interaction.c);
+                    if (interaction.actionId === 'BUILD_WALL') wallBuilds++;
+                    if (interaction.actionId === 'BUILD_WATCHTOWER') watchtowerBuilds++;
+                    if (interaction.actionId === 'UPGRADE_WATCHTOWER') watchtowerUpgrades++;
+                    if (interaction.actionId === 'BUILD_FARM') farmBuilds++;
+                    if (interaction.actionId === 'UPGRADE_FARM') farmUpgrades++;
+                    if (interaction.actionId === 'UPGRADE_INCOME') baseIncomeUpgrades++;
+                    if (interaction.actionId === 'UPGRADE_DEFENSE') {
+                        const cell = this.state.getCell(interaction.r, interaction.c);
+                        if (cell?.building === 'wall') wallUpgrades++;
+                        else if (cell?.building === 'base') baseDefenseUpgrades++;
+                    }
                     this.stateManager.spendGold(pid, c); // Deduct immediately (can go negative)
                     totalCost += c;
                 } else {
@@ -879,6 +916,16 @@ export class GameEngine {
                 }
             }
         });
+
+        if (bridgeBuiltCount > 0) this.emit('sfx:bridge_build');
+        if (farmBuilds > 0) this.emit('sfx:farm_build');
+        if (farmUpgrades > 0) this.emit('sfx:farm_upgrade');
+        if (wallBuilds > 0) this.emit('sfx:wall_build');
+        if (wallUpgrades > 0) this.emit('sfx:wall_upgrade');
+        if (watchtowerBuilds > 0) this.emit('sfx:watchtower_build');
+        if (watchtowerUpgrades > 0) this.emit('sfx:watchtower_upgrade');
+        if (baseIncomeUpgrades > 0) this.emit('sfx:base_upgrade_income');
+        if (baseDefenseUpgrades > 0) this.emit('sfx:base_upgrade_defense');
 
         // Reset pending
         this.pendingMoves = [];

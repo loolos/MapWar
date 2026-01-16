@@ -285,10 +285,24 @@ export class MainScene extends Phaser.Scene {
         this.engine.on('sfx:move', () => this.soundManager.playSfx('sfx_move'));
         this.engine.on('sfx:attack', () => this.soundManager.playSfx('sfx_attack'));
         this.engine.on('sfx:conquer', () => this.soundManager.playSfx('sfx_conquer')); // Epic
+        this.engine.on('sfx:conquer_large', () => this.soundManager.playSfx('sfx_conquer_large'));
+        this.engine.on('sfx:capture_small', () => this.soundManager.playSfx('sfx_capture_small'));
+        this.engine.on('sfx:capture_medium', () => this.soundManager.playSfx('sfx_capture_medium'));
+        this.engine.on('sfx:capture_large', () => this.soundManager.playSfx('sfx_capture_large'));
         this.engine.on('sfx:capture', () => this.soundManager.playSfx('sfx_capture'));
+        this.engine.on('sfx:base_capture', () => this.soundManager.playSfx('sfx_base_capture'));
         this.engine.on('sfx:capture_town', () => this.soundManager.playSfx('sfx_capture_town')); // Bell
         this.engine.on('sfx:eliminate', () => this.soundManager.playSfx('sfx_eliminate'));
         this.engine.on('sfx:victory', () => this.soundManager.playSfx('sfx_victory'));
+        this.engine.on('sfx:bridge_build', () => this.soundManager.playSfx('sfx:bridge_build'));
+        this.engine.on('sfx:wall_build', () => this.soundManager.playSfx('sfx:wall_build'));
+        this.engine.on('sfx:wall_upgrade', () => this.soundManager.playSfx('sfx:wall_upgrade'));
+        this.engine.on('sfx:watchtower_build', () => this.soundManager.playSfx('sfx:watchtower_build'));
+        this.engine.on('sfx:watchtower_upgrade', () => this.soundManager.playSfx('sfx:watchtower_upgrade'));
+        this.engine.on('sfx:farm_build', () => this.soundManager.playSfx('sfx:farm_build'));
+        this.engine.on('sfx:farm_upgrade', () => this.soundManager.playSfx('sfx:farm_upgrade'));
+        this.engine.on('sfx:base_upgrade_income', () => this.soundManager.playSfx('sfx:base_upgrade_income'));
+        this.engine.on('sfx:base_upgrade_defense', () => this.soundManager.playSfx('sfx:base_upgrade_defense'));
 
         // Start BGM
         this.soundManager.playBgm('bgm_main');
