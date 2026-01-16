@@ -84,6 +84,19 @@ export const NearVictory = {
             players: { 'P1': p1, 'P2': p2 },
             turnCount: 25,
             currentPlayerId: 'P1',
+            events: {
+                forced: [
+                    {
+                        round: 27,
+                        event: {
+                            id: 'peace_day',
+                            name: GameConfig.TURN_EVENT_PEACE_DAY_NAME,
+                            message: GameConfig.TURN_EVENT_PEACE_DAY_MESSAGE,
+                            sfxKey: GameConfig.TURN_EVENT_PEACE_DAY_SFX
+                        }
+                    }
+                ]
+            },
             grid: grid
         });
     }

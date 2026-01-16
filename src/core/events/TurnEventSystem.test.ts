@@ -6,7 +6,11 @@ describe('TurnEventSystem', () => {
     it('does not force events by default', () => {
         const originalChance = GameConfig.TURN_EVENT_TRIGGER_CHANCE;
         const originalPlaceholder = GameConfig.TURN_EVENT_ENABLE_TEST_PLACEHOLDER;
+        const originalFloodChance = GameConfig.TURN_EVENT_FLOOD_RANDOM_CHANCE;
+        const originalPeaceChance = GameConfig.TURN_EVENT_PEACE_DAY_RANDOM_CHANCE;
         GameConfig.TURN_EVENT_TRIGGER_CHANCE = 0;
+        GameConfig.TURN_EVENT_FLOOD_RANDOM_CHANCE = 0;
+        GameConfig.TURN_EVENT_PEACE_DAY_RANDOM_CHANCE = 0;
         GameConfig.TURN_EVENT_ENABLE_TEST_PLACEHOLDER = true;
         const rng = vi.fn().mockReturnValue(0);
         const system = new TurnEventSystem(rng);
@@ -19,6 +23,8 @@ describe('TurnEventSystem', () => {
 
         expect(event).toBeNull();
         GameConfig.TURN_EVENT_TRIGGER_CHANCE = originalChance;
+        GameConfig.TURN_EVENT_FLOOD_RANDOM_CHANCE = originalFloodChance;
+        GameConfig.TURN_EVENT_PEACE_DAY_RANDOM_CHANCE = originalPeaceChance;
         GameConfig.TURN_EVENT_ENABLE_TEST_PLACEHOLDER = originalPlaceholder;
     });
 

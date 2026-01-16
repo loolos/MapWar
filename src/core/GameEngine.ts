@@ -42,6 +42,9 @@ export class GameEngine {
     private turnEventSystem: TurnEventSystem;
     private random: () => number;
     private floodedCells: Map<string, { r: number; c: number; type: 'plain' | 'hill' | 'bridge' }> = new Map();
+    private peaceDayActive = false;
+    private peaceDayEndRound: number | null = null;
+    private readonly baseAttackMultiplier = GameConfig.COST_MULTIPLIER_ATTACK;
 
     constructor(
         playerConfigs: { id: string, isAI: boolean, color: number }[] = [],
@@ -257,6 +260,7 @@ export class GameEngine {
     }
 
     private maybeTriggerTurnEvent() {
+        this.checkPeaceDayExpiry();
         const event = this.turnEventSystem.onTurnStart({
             round: this.state.turnCount,
             turnsTakenInRound: this.state.turnsTakenInRound,
@@ -303,6 +307,19 @@ export class GameEngine {
                     ? `Floodwaters recede from ${restored} tiles.`
                     : 'The floodwaters linger.'
             };
+        }
+        if (event.eventId === 'peace_day') {
+            const duration = this.randomInt(
+                GameConfig.TURN_EVENT_PEACE_DAY_DURATION_MIN,
+                GameConfig.TURN_EVENT_PEACE_DAY_DURATION_MAX
+            );
+            const rawMultiplier = this.randomRange(
+                GameConfig.TURN_EVENT_PEACE_DAY_ATTACK_MULTIPLIER_MIN,
+                GameConfig.TURN_EVENT_PEACE_DAY_ATTACK_MULTIPLIER_MAX
+            );
+            const multiplier = Math.round(rawMultiplier * 10) / 10;
+            this.startPeaceDay(duration, multiplier);
+            return event;
         }
         return event;
     }
@@ -407,6 +424,7 @@ export class GameEngine {
                 message: GameConfig.TURN_EVENT_FLOOD_RECEDE_MESSAGE,
                 sfxKey: GameConfig.TURN_EVENT_FLOOD_RECEDE_SFX
             }, GameConfig.TURN_EVENT_FLOOD_RECEDE_PERSISTENT_CHANCE);
+            this.revalidateAllConnectivity();
             this.emit('mapUpdate');
         }
         return flooded;
@@ -425,9 +443,51 @@ export class GameEngine {
         }
         this.floodedCells.clear();
         if (restored > 0) {
+            this.revalidateAllConnectivity();
             this.emit('mapUpdate');
         }
         return restored;
+    }
+
+    private startPeaceDay(durationRounds: number, attackMultiplier: number) {
+        this.peaceDayActive = true;
+        this.peaceDayEndRound = this.state.turnCount + Math.max(1, durationRounds);
+        GameConfig.COST_MULTIPLIER_ATTACK = attackMultiplier;
+        this.emit('peaceDayState', { active: true });
+        this.emit('musicState', 'PEACE_DAY');
+    }
+
+    private endPeaceDay() {
+        if (!this.peaceDayActive) return;
+        this.peaceDayActive = false;
+        this.peaceDayEndRound = null;
+        GameConfig.COST_MULTIPLIER_ATTACK = this.baseAttackMultiplier;
+        this.emit('peaceDayState', { active: false });
+        this.checkAudioState();
+    }
+
+    private checkPeaceDayExpiry() {
+        if (!this.peaceDayActive || this.peaceDayEndRound === null) return;
+        if (this.state.turnsTakenInRound === 0 && this.state.turnCount >= this.peaceDayEndRound) {
+            this.endPeaceDay();
+        }
+    }
+
+    private randomRange(min: number, max: number): number {
+        return min + (this.random() * (max - min));
+    }
+
+    private randomInt(min: number, max: number): number {
+        const low = Math.min(min, max);
+        const high = Math.max(min, max);
+        return Math.floor(this.random() * (high - low + 1)) + low;
+    }
+
+    private revalidateAllConnectivity() {
+        const playerIds = this.state.allPlayerIds?.length ? this.state.allPlayerIds : this.state.playerOrder;
+        for (const playerId of playerIds) {
+            this.state.updateConnectivity(playerId);
+        }
     }
 
     private hasLargeOcean(minSize: number = GameConfig.TURN_EVENT_FLOOD_OCEAN_MIN_SIZE): boolean {
@@ -904,6 +964,10 @@ export class GameEngine {
     // --- Audio / Tension System ---
 
     private updateMusicState() {
+        if (this.peaceDayActive) {
+            this.emit('musicState', 'PEACE_DAY');
+            return;
+        }
         const tensionState = this.calculateTensionState();
         this.emit('musicState', tensionState);
     }

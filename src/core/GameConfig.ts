@@ -60,6 +60,9 @@ export const GameConfig = {
     FLOOD_CHANCE_WALL: 0.35 / 3,
     // Turn Event: Trigger Chance
     TURN_EVENT_TRIGGER_CHANCE: 0.05,
+    TURN_EVENT_FLOOD_RANDOM_CHANCE: 0.05,
+    TURN_EVENT_PEACE_DAY_RANDOM_CHANCE: 0.05,
+    TURN_EVENT_RANDOM_MIN_ROUND: 11,
     TURN_EVENT_FLOOD_RECEDE_CHANCE: 0.3,
     TURN_EVENT_ENABLE_TEST_PLACEHOLDER: false,
     TURN_EVENT_FLOOD_OCEAN_MIN_SIZE: 5,
@@ -67,6 +70,14 @@ export const GameConfig = {
     TURN_EVENT_FLOOD_NAME: 'Flood',
     TURN_EVENT_FLOOD_MESSAGE: 'Flood waters rise across the land.',
     TURN_EVENT_FLOOD_SFX: 'sfx:turn_event_flood',
+    TURN_EVENT_PEACE_DAY_NAME: 'Peace Day',
+    TURN_EVENT_PEACE_DAY_MESSAGE: 'A holy stillness falls across the land.',
+    TURN_EVENT_PEACE_DAY_SFX: 'sfx:turn_event_default',
+    TURN_EVENT_PEACE_DAY_CHANCE: 0.5,
+    TURN_EVENT_PEACE_DAY_ATTACK_MULTIPLIER_MIN: 2,
+    TURN_EVENT_PEACE_DAY_ATTACK_MULTIPLIER_MAX: 4,
+    TURN_EVENT_PEACE_DAY_DURATION_MIN: 2,
+    TURN_EVENT_PEACE_DAY_DURATION_MAX: 4,
     TURN_EVENT_FLOOD_RECEDE_NAME: 'Flood Recedes',
     TURN_EVENT_FLOOD_RECEDE_MESSAGE: 'The floodwaters begin to retreat.',
     TURN_EVENT_FLOOD_RECEDE_SFX: 'sfx:turn_event_default',
@@ -138,7 +149,11 @@ export const GameConfig = {
         TURN_EVENT_TEXT_SCALE: 0.08,
         TURN_EVENT_TEXT_DEPTH: 999,
         TURN_EVENT_TWEEN_FADE_DURATION: 300,
-        TURN_EVENT_TWEEN_HOLD_DURATION: 900
+        TURN_EVENT_TWEEN_HOLD_DURATION: 900,
+        PEACE_DAY_GLOW_ALPHA: 0.6,
+        PEACE_DAY_GLOW_THICKNESS: 32,
+        PEACE_DAY_GLOW_INSET: 6,
+        PEACE_DAY_GLOW_GRADIENT_STEPS: 20
     },
     AI_DIFFICULTY: 'MEDIUM' as Difficulty,
     ENABLE_EXPERIMENTAL: false, // Set to true to enable experimental features

@@ -35,6 +35,8 @@ export class MainScene extends Phaser.Scene {
     logSystem!: LogSystem;
     private turnEventText?: Phaser.GameObjects.Text;
     private activeTurnEvent?: { name: string; message: string; sfxKey?: string };
+    private peaceDayGlow?: Phaser.GameObjects.Graphics;
+    private peaceDayActive: boolean = false;
 
     soundManager!: SoundManager; // NEW
     interactionMenu!: InteractionMenu; // NEW
@@ -344,13 +346,18 @@ export class MainScene extends Phaser.Scene {
             }
         });
 
+        this.engine.on('peaceDayState', (state) => {
+            this.peaceDayActive = state.active;
+            this.updatePeaceDayGlow();
+        });
+
         // Initialize Cursor Keys
         if (this.input.keyboard) {
             this.cursors = this.input.keyboard.createCursorKeys();
         }
 
         // Music State Listener
-        this.engine.on('musicState', (state: 'PEACE' | 'TENSION' | 'CONFLICT' | 'DOOM') => {
+        this.engine.on('musicState', (state: 'PEACE' | 'TENSION' | 'CONFLICT' | 'DOOM' | 'PEACE_DAY') => {
             if (this.soundManager) {
                 this.soundManager.setBgmState(state);
             }
@@ -372,6 +379,42 @@ export class MainScene extends Phaser.Scene {
         });
 
         this.engine.startGame();
+    }
+
+    private updatePeaceDayGlow() {
+        if (!this.peaceDayGlow) {
+            this.peaceDayGlow = this.add.graphics();
+            this.peaceDayGlow.setDepth(GameConfig.UI.TURN_EVENT_TEXT_DEPTH - 1);
+        }
+
+        this.peaceDayGlow.clear();
+        if (!this.peaceDayActive) {
+            this.peaceDayGlow.setVisible(false);
+            return;
+        }
+
+        const bounds = this.mapBounds;
+        if (!bounds) {
+            this.peaceDayGlow.setVisible(false);
+            return;
+        }
+
+        const inset = GameConfig.UI.PEACE_DAY_GLOW_INSET;
+        const thickness = GameConfig.UI.PEACE_DAY_GLOW_THICKNESS;
+        const steps = Math.max(1, Math.floor(GameConfig.UI.PEACE_DAY_GLOW_GRADIENT_STEPS));
+        const baseAlpha = GameConfig.UI.PEACE_DAY_GLOW_ALPHA;
+        const stepThickness = thickness / steps;
+
+        this.peaceDayGlow.setVisible(true);
+        for (let i = 0; i < steps; i++) {
+            const alpha = baseAlpha * (1 - (i / steps));
+            const insetStep = inset + (i * stepThickness);
+            const w = Math.max(0, bounds.width - (insetStep * 2));
+            const h = Math.max(0, bounds.height - (insetStep * 2));
+            if (w <= 0 || h <= 0) break;
+            this.peaceDayGlow.lineStyle(stepThickness, 0xffffff, alpha);
+            this.peaceDayGlow.strokeRect(bounds.x + insetStep, bounds.y + insetStep, w, h);
+        }
     }
 
     private showTurnEventOverlay(title: string, logMessage: string) {
@@ -924,9 +967,16 @@ export class MainScene extends Phaser.Scene {
             this.setupButtons();
 
             if (this.turnEventText && this.activeTurnEvent) {
-                const fontSize = Math.max(20, Math.floor(Math.min(width, height) * 0.08));
+                const fontSize = Math.max(
+                    GameConfig.UI.TURN_EVENT_TEXT_MIN_SIZE,
+                    Math.floor(Math.min(width, height) * GameConfig.UI.TURN_EVENT_TEXT_SCALE)
+                );
                 this.turnEventText.setStyle({ fontSize: `${fontSize}px` });
                 this.turnEventText.setPosition(width / 2, height / 2);
+            }
+
+            if (this.peaceDayActive) {
+                this.updatePeaceDayGlow();
             }
 
         } catch (err) {

@@ -20,7 +20,7 @@ export class SoundManager {
     private isInitialized = false;
 
     // BGM State
-    public bgmState: 'PEACE' | 'TENSION' | 'CONFLICT' | 'DOOM' = 'PEACE';
+    public bgmState: 'PEACE' | 'TENSION' | 'CONFLICT' | 'DOOM' | 'PEACE_DAY' = 'PEACE';
     private bgmLoop: Tone.Loop | null = null;
     private drumLoop: Tone.Loop | null = null;
 
@@ -236,7 +236,7 @@ export class SoundManager {
         }
     }
 
-    public setBgmState(state: 'PEACE' | 'TENSION' | 'CONFLICT' | 'DOOM') {
+    public setBgmState(state: 'PEACE' | 'TENSION' | 'CONFLICT' | 'DOOM' | 'PEACE_DAY') {
         if (this.bgmState !== state) {
             console.log(`[Audio] Switching Music State: ${this.bgmState} -> ${state}`);
             this.bgmState = state;
@@ -304,6 +304,13 @@ export class SoundManager {
                 this.bgmSynth.set({ oscillator: { type: "fmsawtooth" } });
                 prob = 0.85;
                 break;
+            case 'PEACE_DAY':
+                bpm = 55;
+                scale = ["C3", "E3", "G3", "B3", "D4"]; // Soft major
+                BassScale = ["C1", "G1"];
+                this.bgmSynth.set({ oscillator: { type: "sine" } });
+                prob = 0.2;
+                break;
         }
 
         Tone.Transport.bpm.value = bpm;
@@ -326,9 +333,9 @@ export class SoundManager {
         // 2. Bass / Pad
         new Tone.Loop((time) => {
             const note = BassScale[Math.floor(Math.random() * BassScale.length)];
-            const dur = this.bgmState === 'PEACE' ? "2m" : "1m";
+        const dur = (this.bgmState === 'PEACE' || this.bgmState === 'PEACE_DAY') ? "2m" : "1m";
             this.bassSynth.triggerAttackRelease(note, dur, time);
-        }, this.bgmState === 'PEACE' ? "2m" : "1m").start(0);
+        }, (this.bgmState === 'PEACE' || this.bgmState === 'PEACE_DAY') ? "2m" : "1m").start(0);
 
         // 3. Drums
         this.drumLoop = new Tone.Loop((time) => {
@@ -336,12 +343,12 @@ export class SoundManager {
             const kickNote = this.bgmState === 'PEACE' ? "C1" : "C0";
             this.membraneSynth.triggerAttackRelease(kickNote, "16n", time);
 
-            if (this.bgmState !== 'PEACE') {
+            if (this.bgmState !== 'PEACE' && this.bgmState !== 'PEACE_DAY') {
                 // Snare/Offbeat
                 this.noiseSynth.triggerAttackRelease("16n", time + Tone.Time("4n").toSeconds());
                 // Extra Kick
                 this.membraneSynth.triggerAttackRelease(kickNote, "16n", time + Tone.Time("8n").toSeconds() * 3);
             }
-        }, this.bgmState === 'PEACE' ? "1m" : "2n").start(0);
+        }, (this.bgmState === 'PEACE' || this.bgmState === 'PEACE_DAY') ? "1m" : "2n").start(0);
     }
 }
