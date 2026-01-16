@@ -102,16 +102,16 @@ export class MainScene extends Phaser.Scene {
         this.load.image('tile_water', 'assets/tile_water.png');
 
         // Tactical UI Assets (Load as Raw)
-        this.load.image('raw_icon_gold', 'assets/icon_gold_blackbg_1767659375024.png');
+        this.load.image('icon_gold_3d', 'assets/icon_gold.png'); // Updated to new transparent asset
         // this.load.image('ui_icon_warrior', 'assets/ui_icon_warrior.png'); // Unused
         // this.load.image('ui_icon_robot', 'assets/ui_icon_robot.png'); // Unused
 
         // Gold Mine Asset
         this.load.image('gold_mine', 'assets/gold_mine.png');
 
-        // Avatar Assets (Raw)
-        this.load.image('raw_icon_human', 'assets/cartoon_human.png');
-        this.load.image('raw_icon_robot', 'assets/cartoon_robot.png');
+        // Avatar Assets (Direct Load)
+        this.load.image('icon_human_cartoon', 'assets/cartoon_human.png');
+        this.load.image('icon_robot_cartoon', 'assets/cartoon_robot.png');
 
         // Audio Assets (Commented out as files are missing in repository. SoundManager uses synth fallbacks.)
         /*
@@ -150,32 +150,8 @@ export class MainScene extends Phaser.Scene {
             }
         }
 
-        // Process Textures (Runtime Transparency)
-        // TextureUtils.makeTransparent(this, 'raw_icon_gold', 'icon_gold_3d', 40); // Now transparent
-        // TextureUtils.makeTransparent(this, 'raw_icon_human', 'icon_human_cartoon', 30, 'white'); // Now transparent
-        // TextureUtils.makeTransparent(this, 'raw_icon_robot', 'icon_robot_cartoon', 30, 'black'); // Now transparent
-
-        // Use raw keys as the textures are now correct
-        // Or if we want to keep the keys consistent, we can add alias or just change usages.
-        // Let's just create textures with the expected keys from the raw images if necessary,
-        // or rely on 'raw_icon_X' being used.
-        // Wait, the code later uses 'icon_human_cartoon' etc?
-        // Let's check where they are used.
-        // If I comment out makeTransparent, the keys 'icon_gold_3d', 'icon_human_cartoon', 'icon_robot_cartoon' won't exist.
-        // I should just add the images with the keys the game expects, or update usage.
-        // The load statements are:
-        // this.load.image('raw_icon_gold', ...);
-        // this.load.image('raw_icon_human', ...);
-        // this.load.image('raw_icon_robot', ...);
-
-        // I will copy the textures to the keys expected by the game logic.
-        // Actually, let's see where they are used.
-        // grep_search "icon_human_cartoon"
-
-        // Assuming they are used elsewhere, I will create the texture keys from the raw images.
-        if (!this.textures.exists('icon_gold_3d')) this.textures.addGLTexture('icon_gold_3d', this.textures.get('raw_icon_gold').getSourceImage() as any);
-        if (!this.textures.exists('icon_human_cartoon')) this.textures.addGLTexture('icon_human_cartoon', this.textures.get('raw_icon_human').getSourceImage() as any);
-        if (!this.textures.exists('icon_robot_cartoon')) this.textures.addGLTexture('icon_robot_cartoon', this.textures.get('raw_icon_robot').getSourceImage() as any);
+        // TextureUtils usage removed: Assets are now pre-processed transparent PNGs.
+        // The keys 'icon_gold_3d', 'icon_human_cartoon', and 'icon_robot_cartoon' are loaded directly in preload.
 
         this.cameras.main.setBackgroundColor(GameConfig.COLORS.BG);
 
