@@ -10,10 +10,12 @@
     "test": "vitest",
     "test:run": "vitest run",
     "check": "tsc --noEmit && vitest run",
+    "ai:selfplay": "tsx scripts/ai_selfplay.ts",
     "prepare": "husky"
   },
   "devDependencies": {
     "husky": "^9.1.7",
+    "tsx": "^4.21.0",
     "typescript": "~5.9.3",
     "vite": "^7.2.4",
     "vitest": "^4.0.16"

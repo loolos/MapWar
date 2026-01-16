@@ -2,13 +2,23 @@ import { Cell } from './Cell';
 import { GameEngine } from './GameEngine';
 import { GameConfig } from './GameConfig';
 import { AuraSystem } from './AuraSystem';
-import { AIConfig } from './AIConfig';
+import { DefaultAIProfile, mergeAIWeights, type AIProfile, type AIWeights } from './ai/AIProfile';
 
 export class AIController {
     engine: GameEngine;
+    private profileByPlayerId: Map<string, AIProfile> = new Map();
 
     constructor(engine: GameEngine) {
         this.engine = engine;
+    }
+
+    public setProfileForPlayer(playerId: string, profile: AIProfile) {
+        this.profileByPlayerId.set(playerId, profile);
+    }
+
+    private getWeightsForPlayer(playerId: string): AIWeights {
+        const profile = this.profileByPlayerId.get(playerId);
+        return mergeAIWeights(profile?.weights ?? DefaultAIProfile.weights);
     }
 
     // AI Logic (Robust & Strategic)
@@ -24,6 +34,8 @@ export class AIController {
 
             // Clear previous stats
             this.engine.lastAiMoves = [];
+
+            const weights = this.getWeightsForPlayer(aiPlayer.id as string);
 
             // Helper: Refresh Valid Moves
             const getValidMoves = () => {
@@ -52,31 +64,31 @@ export class AIController {
                             const cost = this.engine.getMoveCost(r, c);
 
                             // HEURISTIC SCORING
-                            let score = AIConfig.SCORE_BASE_VALUE;
+                            let score = weights.SCORE_BASE_VALUE;
 
                             // 1. Objectives
-                            score += this.scoreObjectives(cell, aiPlayer.id as string);
+                            score += this.scoreObjectives(cell, aiPlayer.id as string, weights);
 
                             // 2. Aggression
-                            score += this.scoreAggression(cell, r, c, aiPlayer.id as string, myBases);
+                            score += this.scoreAggression(cell, r, c, aiPlayer.id as string, myBases, weights);
 
                             // 3. Tactical
-                            score += this.scoreTactical(cell);
+                            score += this.scoreTactical(cell, weights);
 
                             // 4. Expansion
-                            score += this.scoreExpansion(cell);
+                            score += this.scoreExpansion(cell, weights);
 
                             // 5. Aura Support
-                            score += this.scoreAura(r, c, aiPlayer.id as string);
+                            score += this.scoreAura(r, c, aiPlayer.id as string, weights);
 
                             // 6. Look-Ahead
-                            score += this.scoreLookAhead(r, c, aiPlayer.id as string, grid);
+                            score += this.scoreLookAhead(r, c, aiPlayer.id as string, grid, weights);
 
                             // 7. Cost Penalty
-                            score -= (cost * AIConfig.COST_PENALTY_MULTIPLIER);
+                            score -= (cost * weights.COST_PENALTY_MULTIPLIER);
 
                             // Random noise
-                            score += Math.random() * 10;
+                            score += Math.random() * weights.RANDOM_NOISE;
 
                             moves.push({ r, c, score, cell, cost });
                         }
@@ -90,7 +102,7 @@ export class AIController {
 
             // PASS 1: EXECUTION LOOP
             let safetyCounter = 0;
-            const MAX_MOVES = AIConfig.MAX_MOVES_PER_TURN;
+            const MAX_MOVES = weights.MAX_MOVES_PER_TURN;
             const skippedMoves = new Set<string>();
 
             while (safetyCounter < MAX_MOVES) {
@@ -125,9 +137,29 @@ export class AIController {
             if (playerAfterMoves.gold > 0) {
                 let simulatedGold = playerAfterMoves.gold;
 
-                // 1. Identify Key Assets
+                type UpgradeCandidate = {
+                    score: number;
+                    cost: number;
+                    execute: () => boolean;
+                };
+
+                const candidates: UpgradeCandidate[] = [];
+                const threatByKey = new Map<string, number>();
                 const myBases: { r: number, c: number, cell: any }[] = [];
+                const myFarms: { r: number, c: number, cell: any }[] = [];
                 const myFrontLines: { r: number, c: number, cell: any, threat: number }[] = [];
+                const farmSpots: { r: number, c: number, auraBonus: number }[] = [];
+
+                const tryPlan = (r: number, c: number, actionId: string) => {
+                    const before = this.engine.pendingInteractions.length;
+                    this.engine.planInteraction(r, c, actionId);
+                    return this.engine.pendingInteractions.length > before;
+                };
+
+                const addCandidate = (score: number, cost: number, execute: () => boolean) => {
+                    if (score <= 0) return;
+                    candidates.push({ score, cost, execute });
+                };
 
                 for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
                     for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
@@ -138,7 +170,10 @@ export class AIController {
                             myBases.push({ r, c, cell });
                         }
 
-                        // Check for Front Line (Adjacent to Enemy)
+                        if (cell.building === 'farm') {
+                            myFarms.push({ r, c, cell });
+                        }
+
                         const neighbors = [
                             { r: r + 1, c: c }, { r: r - 1, c: c },
                             { r: r, c: c + 1 }, { r: r, c: c - 1 }
@@ -153,72 +188,75 @@ export class AIController {
                         }
 
                         if (threat > 0) {
+                            const key = `${r},${c}`;
+                            threatByKey.set(key, threat);
                             myFrontLines.push({ r, c, cell, threat });
                         }
-                    }
-                }
 
-                // Priority 1: Base Income
-                for (const base of myBases) {
-                    const { r, c, cell } = base;
-                    const incomeCost = GameConfig.UPGRADE_INCOME_COST;
-                    if (cell.incomeLevel < GameConfig.UPGRADE_INCOME_MAX && simulatedGold >= incomeCost) {
-                        this.engine.planInteraction(r, c, 'UPGRADE_INCOME');
-                        simulatedGold -= incomeCost;
-                    }
-                }
-
-                // Priority 2: Base Defense
-                for (const base of myBases) {
-                    const { r, c, cell } = base;
-                    const defenseCost = GameConfig.UPGRADE_DEFENSE_COST;
-                    if (cell.defenseLevel < GameConfig.UPGRADE_DEFENSE_MAX && simulatedGold >= defenseCost) {
-                        const isThreatened = myFrontLines.some(f => f.r === r && f.c === c);
-                        if (isThreatened || simulatedGold > 50) {
-                            this.engine.planInteraction(r, c, 'UPGRADE_DEFENSE');
-                            simulatedGold -= defenseCost;
+                        if (cell.building === 'none' && cell.type === 'plain' && cell.isConnected) {
+                            const auraBonus = AuraSystem.getIncomeAuraBonus(this.engine.state, r, c, aiPlayer.id as string);
+                            if (auraBonus > 0) {
+                                farmSpots.push({ r, c, auraBonus });
+                            }
                         }
                     }
                 }
 
-                // Priority 3: Wall Construction / Upgrades / Watchtowers
-                myFrontLines.sort((a, b) => b.threat - a.threat);
+                for (const base of myBases) {
+                    const { r, c, cell } = base;
+                    if (cell.incomeLevel < GameConfig.UPGRADE_INCOME_MAX) {
+                        const score = weights.ECONOMY_BASE_INCOME + (cell.incomeLevel * weights.ECONOMY_BASE_INCOME_LEVEL);
+                        addCandidate(score, GameConfig.UPGRADE_INCOME_COST, () => tryPlan(r, c, 'UPGRADE_INCOME'));
+                    }
+
+                    if (cell.defenseLevel < GameConfig.UPGRADE_DEFENSE_MAX) {
+                        const threat = threatByKey.get(`${r},${c}`) || 0;
+                        const score = weights.DEFENSE_BASE_UPGRADE + (threat * weights.DEFENSE_THREAT_MULT);
+                        addCandidate(score, GameConfig.UPGRADE_DEFENSE_COST, () => tryPlan(r, c, 'UPGRADE_DEFENSE'));
+                    }
+                }
+
+                for (const farm of myFarms) {
+                    const { r, c, cell } = farm;
+                    if (cell.farmLevel < GameConfig.FARM_MAX_LEVEL) {
+                        const score = weights.ECONOMY_FARM_UPGRADE + (cell.farmLevel * weights.ECONOMY_FARM_LEVEL);
+                        addCandidate(score, GameConfig.COST_UPGRADE_FARM, () => tryPlan(r, c, 'UPGRADE_FARM'));
+                    }
+                }
+
+                for (const spot of farmSpots) {
+                    const score = weights.ECONOMY_FARM_BUILD + (spot.auraBonus * weights.ECONOMY_AURA_BONUS_MULT);
+                    addCandidate(score, GameConfig.COST_BUILD_FARM, () => tryPlan(spot.r, spot.c, 'BUILD_FARM'));
+                }
 
                 for (const spot of myFrontLines) {
-                    const { r, c, cell } = spot;
+                    const { r, c, cell, threat } = spot;
+                    const threatScore = threat * weights.DEFENSE_THREAT_MULT;
 
-                    // A. Build New Wall
                     if (cell.building === 'none' && cell.type === 'plain') {
-                        const buildCost = GameConfig.COST_BUILD_WALL;
-                        if (simulatedGold >= buildCost + 10) {
-                            this.engine.planInteraction(r, c, 'BUILD_WALL');
-                            simulatedGold -= buildCost;
+                        addCandidate(weights.DEFENSE_WALL_BUILD + threatScore, GameConfig.COST_BUILD_WALL, () => tryPlan(r, c, 'BUILD_WALL'));
+                    } else if (cell.building === 'wall') {
+                        if (cell.watchtowerLevel === 0) {
+                            addCandidate(weights.DEFENSE_WATCHTOWER_BUILD + threatScore, GameConfig.COST_BUILD_WATCHTOWER, () => tryPlan(r, c, 'BUILD_WATCHTOWER'));
+                        } else if (cell.watchtowerLevel < GameConfig.WATCHTOWER_MAX_LEVEL) {
+                            addCandidate(weights.DEFENSE_WATCHTOWER_UPGRADE + threatScore, GameConfig.COST_UPGRADE_WATCHTOWER, () => tryPlan(r, c, 'UPGRADE_WATCHTOWER'));
                         }
-                    }
-                    // B. Existing Wall Assets
-                    else if (cell.building === 'wall') {
-                        const upgCost = GameConfig.UPGRADE_WALL_COST;
-                        const wtCost = GameConfig.COST_BUILD_WATCHTOWER;
 
-                        // 1. Build Watchtower if missing
-                        if (cell.watchtowerLevel === 0 && simulatedGold >= wtCost + 20) {
-                            this.engine.planInteraction(r, c, 'BUILD_WATCHTOWER');
-                            simulatedGold -= wtCost;
-                        }
-                        // 2. Upgrade Watchtower if exists
-                        else if (cell.watchtowerLevel > 0 && cell.watchtowerLevel < GameConfig.WATCHTOWER_MAX_LEVEL && simulatedGold >= GameConfig.COST_UPGRADE_WATCHTOWER + 30) {
-                            this.engine.planInteraction(r, c, 'UPGRADE_WATCHTOWER');
-                            simulatedGold -= GameConfig.COST_UPGRADE_WATCHTOWER;
-                        }
-                        // 3. Upgrade Wall Defense
-                        else if (cell.defenseLevel < GameConfig.UPGRADE_WALL_MAX && simulatedGold >= upgCost + 10) {
-                            this.engine.planInteraction(r, c, 'UPGRADE_DEFENSE');
-                            simulatedGold -= upgCost;
+                        if (cell.defenseLevel < GameConfig.UPGRADE_WALL_MAX) {
+                            addCandidate(weights.DEFENSE_WALL_UPGRADE + threatScore, GameConfig.UPGRADE_WALL_COST, () => tryPlan(r, c, 'UPGRADE_DEFENSE'));
                         }
                     }
                 }
 
-                // Commit Post-Move Upgrades
+                candidates.sort((a, b) => b.score - a.score);
+
+                for (const candidate of candidates) {
+                    if (simulatedGold < candidate.cost) continue;
+                    if (candidate.execute()) {
+                        simulatedGold -= candidate.cost;
+                    }
+                }
+
                 if (this.engine.pendingInteractions.length > 0) {
                     this.engine.commitMoves();
                 }
@@ -231,33 +269,33 @@ export class AIController {
         }
     }
 
-    private scoreObjectives(cell: Cell, aiPlayerId: string): number {
+    private scoreObjectives(cell: Cell, aiPlayerId: string, weights: AIWeights): number {
         let score = 0;
-        if (cell.building === 'base' && cell.owner !== aiPlayerId) score += AIConfig.SCORE_WIN_CONDITION;
-        else if (cell.building === 'town' && cell.owner !== aiPlayerId) score += AIConfig.SCORE_TOWN;
+        if (cell.building === 'base' && cell.owner !== aiPlayerId) score += weights.SCORE_WIN_CONDITION;
+        else if (cell.building === 'town' && cell.owner !== aiPlayerId) score += weights.SCORE_TOWN;
         return score;
     }
 
-    private scoreAggression(cell: Cell, r: number, c: number, aiPlayerId: string, myBases: { r: number, c: number }[]): number {
+    private scoreAggression(cell: Cell, r: number, c: number, aiPlayerId: string, myBases: { r: number, c: number }[], weights: AIWeights): number {
         let score = 0;
         if (cell.owner && cell.owner !== aiPlayerId) {
-            score += AIConfig.SCORE_ENEMY_LAND;
-            if (!cell.isConnected) score += AIConfig.SCORE_DISCONNECT_ENEMY;
+            score += weights.SCORE_ENEMY_LAND;
+            if (!cell.isConnected) score += weights.SCORE_DISCONNECT_ENEMY;
 
             for (const base of myBases) {
                 const dist = Math.abs(r - base.r) + Math.abs(c - base.c);
                 if (dist <= 2) {
-                    score += AIConfig.SCORE_DEFEND_BASE;
+                    score += weights.SCORE_DEFEND_BASE;
                 }
             }
         }
         return score;
     }
 
-    private scoreTactical(cell: Cell): number {
+    private scoreTactical(cell: Cell, weights: AIWeights): number {
         let score = 0;
-        if (cell.type === 'hill') score += AIConfig.SCORE_HILL;
-        else if (cell.type === 'bridge') score += AIConfig.SCORE_BRIDGE;
+        if (cell.type === 'hill') score += weights.SCORE_HILL;
+        else if (cell.type === 'bridge') score += weights.SCORE_BRIDGE;
         else if (cell.type === 'water') {
             // New Mechanic: Build Bridge
             // Heuristic: If this water tile is adjacent to valid unowned land (Expansion) or Enemy (Attack), boost it.
@@ -281,20 +319,20 @@ export class AIController {
         return score;
     }
 
-    private scoreExpansion(cell: Cell): number {
-        if (cell.owner === null) return AIConfig.SCORE_EXPANSION;
+    private scoreExpansion(cell: Cell, weights: AIWeights): number {
+        if (cell.owner === null) return weights.SCORE_EXPANSION;
         return 0;
     }
 
-    private scoreAura(r: number, c: number, aiPlayerId: string): number {
+    private scoreAura(r: number, c: number, aiPlayerId: string, weights: AIWeights): number {
         const { discount } = AuraSystem.getSupportDiscount(this.engine.state, r, c, aiPlayerId);
         if (discount > 0) {
-            return discount * AIConfig.SCORE_AURA_MULTIPLIER;
+            return discount * weights.SCORE_AURA_MULTIPLIER;
         }
         return 0;
     }
 
-    private scoreLookAhead(r: number, c: number, aiPlayerId: string, grid: Cell[][]): number {
+    private scoreLookAhead(r: number, c: number, aiPlayerId: string, grid: Cell[][], weights: AIWeights): number {
         let score = 0;
         const neighbors = [
             { r: r + 1, c: c }, { r: r - 1, c: c },
@@ -305,8 +343,8 @@ export class AIController {
             if (n.r >= 0 && n.r < GameConfig.GRID_HEIGHT && n.c >= 0 && n.c < GameConfig.GRID_WIDTH) {
                 const nCell = grid[n.r][n.c];
                 if (nCell.owner !== aiPlayerId) {
-                    if (nCell.building === 'town') score += AIConfig.SCORE_LOOKAHEAD_TOWN;
-                    if (nCell.building === 'base') score += AIConfig.SCORE_LOOKAHEAD_BASE;
+                    if (nCell.building === 'town') score += weights.SCORE_LOOKAHEAD_TOWN;
+                    if (nCell.building === 'base') score += weights.SCORE_LOOKAHEAD_BASE;
                 }
             }
         }
