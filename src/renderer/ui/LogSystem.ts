@@ -120,9 +120,11 @@ export class LogSystem {
         }
     }
 
+    private lastWidth: number = 300;
     private lastHeight: number = 300;
 
     public resize(width: number, height: number) {
+        this.lastWidth = width;
         this.lastHeight = height;
 
         this.background.clear();
@@ -156,5 +158,16 @@ export class LogSystem {
 
     public setVisible(visible: boolean) {
         this.container.setVisible(visible);
+    }
+
+    public getBounds(): Phaser.Geom.Rectangle {
+        const scaleX = this.container.scaleX || 1;
+        const scaleY = this.container.scaleY || 1;
+        return new Phaser.Geom.Rectangle(
+            this.container.x,
+            this.container.y,
+            this.lastWidth * scaleX,
+            this.lastHeight * scaleY
+        );
     }
 }

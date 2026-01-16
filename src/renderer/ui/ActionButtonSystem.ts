@@ -145,4 +145,13 @@ export class ActionButtonSystem {
     public setScale(scale: number) {
         this.container.setScale(scale);
     }
+
+    public getBounds(): Phaser.Geom.Rectangle {
+        return this.container.getBounds();
+    }
+
+    public getButtonBounds(index: number): Phaser.Geom.Rectangle | null {
+        const btn = this.buttons[index];
+        return btn ? btn.getBounds() : null;
+    }
 }

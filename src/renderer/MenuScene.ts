@@ -201,6 +201,12 @@ export class MenuScene extends Phaser.Scene {
                             <span>Count:</span>
                             <input type="number" id="playerCountInput" min="2" max="8" value="2" style="width:4em;">
                         </div>
+                        <div class="control-row" style="margin-top: 5px;">
+                            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                                <input type="checkbox" id="tutorialToggle">
+                                <span>Enable Tutorial</span>
+                            </label>
+                        </div>
                     </div>
 
                     <div class="preset-section">
@@ -324,10 +330,30 @@ export class MenuScene extends Phaser.Scene {
             btn.addEventListener('click', () => {
                 // Start game without playing fanfare (already played on menu load)
                 const presetVal = (this.domElement.getChildByID('presetSelect') as HTMLSelectElement).value;
+                const tutorialChecked = (this.domElement.getChildByID('tutorialToggle') as HTMLInputElement)?.checked;
 
-                if (presetVal) {
+                if (!tutorialChecked && presetVal) {
                     this.scene.start('MainScene', { loadPreset: presetVal });
                 } else {
+                    if (tutorialChecked) {
+                        const defaultWidth = 10;
+                        const defaultHeight = 10;
+                        (GameConfig as any).GRID_WIDTH = defaultWidth;
+                        (GameConfig as any).GRID_HEIGHT = defaultHeight;
+
+                        const tutorialPlayers = [
+                            { id: 'P1', isAI: false, color: GameConfig.COLORS.P1 },
+                            { id: 'P2', isAI: true, color: GameConfig.COLORS.P2 }
+                        ];
+
+                        this.scene.start('MainScene', {
+                            playerConfigs: tutorialPlayers,
+                            mapType: 'default',
+                            tutorial: true
+                        });
+                        return;
+                    }
+
                     // New Game
                     const wInput = this.domElement.getChildByID('mapWidthInput') as HTMLInputElement;
                     const hInput = this.domElement.getChildByID('mapHeightInput') as HTMLInputElement;

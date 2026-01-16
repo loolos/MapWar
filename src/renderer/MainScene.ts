@@ -37,6 +37,17 @@ export class MainScene extends Phaser.Scene {
     private activeTurnEvent?: { name: string; message: string; sfxKey?: string };
     private peaceDayGlow?: Phaser.GameObjects.Graphics;
     private peaceDayActive: boolean = false;
+    private tutorialActive: boolean = false;
+    private tutorialStepIndex: number = 0;
+    private tutorialSteps: {
+        message: string;
+        getTargetRect: () => Phaser.Geom.Rectangle | null;
+    }[] = [];
+    private tutorialOverlay?: Phaser.GameObjects.Graphics;
+    private tutorialHighlight?: Phaser.GameObjects.Graphics;
+    private tutorialTextBg?: Phaser.GameObjects.Graphics;
+    private tutorialText?: Phaser.GameObjects.Text;
+    private tutorialBlocker?: Phaser.GameObjects.Zone;
 
     soundManager!: SoundManager; // NEW
     interactionMenu!: InteractionMenu; // NEW
@@ -150,6 +161,9 @@ export class MainScene extends Phaser.Scene {
 
         // Input
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+            if (this.tutorialActive) {
+                return;
+            }
             this.handleInput(pointer);
         });
 
@@ -157,6 +171,7 @@ export class MainScene extends Phaser.Scene {
         if (this.input.keyboard) {
             this.input.keyboard.addCapture('SPACE'); // Prevent scrolling
             this.input.keyboard.on('keydown-SPACE', () => {
+                if (this.tutorialActive) return;
                 this.engine.endTurn();
             });
             // Setup Arrow Keys for Map Scroll
@@ -379,6 +394,12 @@ export class MainScene extends Phaser.Scene {
         });
 
         this.engine.startGame();
+
+        if (data && data.tutorial) {
+            this.time.delayedCall(GameConfig.UI_SCENE_START_DELAY, () => {
+                this.beginTutorial();
+            });
+        }
     }
 
     private updatePeaceDayGlow() {
@@ -979,6 +1000,10 @@ export class MainScene extends Phaser.Scene {
                 this.updatePeaceDayGlow();
             }
 
+            if (this.tutorialActive) {
+                this.updateTutorialOverlay();
+            }
+
         } catch (err) {
             console.error("MainScene.resize CRASHED:", err);
         }
@@ -1007,6 +1032,232 @@ export class MainScene extends Phaser.Scene {
             // Re-render buttons to update label
             this.setupButtons();
         });
+    }
+
+    private beginTutorial() {
+        this.tutorialActive = true;
+        this.tutorialStepIndex = 0;
+        this.tutorialSteps = this.buildTutorialSteps();
+        this.updateTutorialOverlay();
+    }
+
+    private buildTutorialSteps() {
+        return [
+            {
+                message: 'This is the map. Click tiles to capture and expand territory.',
+                getTargetRect: () => this.mapBounds
+                    ? new Phaser.Geom.Rectangle(
+                        this.mapBounds.x,
+                        this.mapBounds.y,
+                        this.mapBounds.width,
+                        this.mapBounds.height
+                    )
+                    : null
+            },
+            {
+                message: 'This is your base. Click it to upgrade defense or income.',
+                getTargetRect: () => this.getBaseCellRect('P1')
+            },
+            {
+                message: 'This is the enemy base. The ultimate goal is to eliminate it.',
+                getTargetRect: () => this.getEnemyBaseCellRect('P1')
+            },
+            {
+                message: 'Click a nearby tile to capture it. Cost is shown in the left panel.',
+                getTargetRect: () => this.getAdjacentCaptureRect('P1')
+            },
+            {
+                message: 'This is the log. It shows events and combat messages.',
+                getTargetRect: () => this.logSystem.getBounds()
+            },
+            {
+                message: 'This is the status panel showing turns and player resources.',
+                getTargetRect: () => this.playerStatusSystem.getBounds()
+            },
+            {
+                message: 'This is the Cell Info panel showing details and costs.',
+                getTargetRect: () => this.infoSystem.getBounds()
+            },
+            {
+                message: 'Click here to end your turn and let others act.',
+                getTargetRect: () => this.buttonSystem.getButtonBounds(0)
+            },
+            {
+                message: 'Tutorial complete. Click to continue.',
+                getTargetRect: () => null
+            }
+        ];
+    }
+
+    private advanceTutorial() {
+        this.tutorialStepIndex += 1;
+        if (this.tutorialStepIndex >= this.tutorialSteps.length) {
+            this.endTutorial();
+            return;
+        }
+        this.updateTutorialOverlay();
+    }
+
+    private endTutorial() {
+        this.tutorialActive = false;
+        this.tutorialStepIndex = 0;
+        this.tutorialSteps = [];
+        this.tutorialOverlay?.destroy();
+        this.tutorialHighlight?.destroy();
+        this.tutorialTextBg?.destroy();
+        this.tutorialText?.destroy();
+        this.tutorialBlocker?.destroy();
+        this.tutorialOverlay = undefined;
+        this.tutorialHighlight = undefined;
+        this.tutorialTextBg = undefined;
+        this.tutorialText = undefined;
+        this.tutorialBlocker = undefined;
+        this.logSystem.addLog('Tutorial finished. Enjoy the game!', 'info');
+    }
+
+    private updateTutorialOverlay() {
+        if (!this.tutorialActive) return;
+        const step = this.tutorialSteps[this.tutorialStepIndex];
+        if (!step) return;
+
+        const w = this.scale.width;
+        const h = this.scale.height;
+
+        if (!this.tutorialOverlay) {
+            this.tutorialOverlay = this.add.graphics();
+            this.tutorialOverlay.setDepth(GameConfig.UI.TUTORIAL_OVERLAY_DEPTH);
+        }
+        if (!this.tutorialHighlight) {
+            this.tutorialHighlight = this.add.graphics();
+            this.tutorialHighlight.setDepth(GameConfig.UI.TUTORIAL_OVERLAY_DEPTH + 1);
+        }
+        if (!this.tutorialTextBg) {
+            this.tutorialTextBg = this.add.graphics();
+            this.tutorialTextBg.setDepth(GameConfig.UI.TUTORIAL_OVERLAY_DEPTH + 2);
+        }
+        if (!this.tutorialText) {
+            this.tutorialText = this.add.text(0, 0, '', {
+                fontSize: `${GameConfig.UI.TUTORIAL_TEXT_FONT_SIZE}px`,
+                color: '#ffffff',
+                wordWrap: { width: 400, useAdvancedWrap: true }
+            }).setOrigin(0.5);
+            this.tutorialText.setDepth(GameConfig.UI.TUTORIAL_OVERLAY_DEPTH + 3);
+        }
+        if (!this.tutorialBlocker) {
+            this.tutorialBlocker = this.add.zone(0, 0, w, h).setOrigin(0);
+            this.tutorialBlocker.setInteractive({ useHandCursor: true });
+            this.tutorialBlocker.on('pointerdown', () => this.advanceTutorial());
+            this.tutorialBlocker.setDepth(GameConfig.UI.TUTORIAL_OVERLAY_DEPTH + 4);
+        } else {
+            this.tutorialBlocker.setSize(w, h);
+        }
+
+        const targetRect = step.getTargetRect();
+        const padding = GameConfig.UI.TUTORIAL_HIGHLIGHT_PADDING;
+        const thickness = GameConfig.UI.TUTORIAL_HIGHLIGHT_THICKNESS;
+
+        this.tutorialOverlay.clear();
+        this.tutorialOverlay.fillStyle(0x000000, GameConfig.UI.TUTORIAL_OVERLAY_ALPHA);
+        this.tutorialOverlay.fillRect(0, 0, w, h);
+
+        this.tutorialHighlight.clear();
+        if (targetRect) {
+            const rectX = Math.max(0, targetRect.x - padding);
+            const rectY = Math.max(0, targetRect.y - padding);
+            const rectW = Math.min(w - rectX, targetRect.width + padding * 2);
+            const rectH = Math.min(h - rectY, targetRect.height + padding * 2);
+            const rect = new Phaser.Geom.Rectangle(rectX, rectY, rectW, rectH);
+            this.tutorialHighlight.fillStyle(0xffffff, 0.08);
+            this.tutorialHighlight.fillRect(rect.x, rect.y, rect.width, rect.height);
+            this.tutorialHighlight.lineStyle(thickness, 0xffffff, 0.9);
+            this.tutorialHighlight.strokeRect(rect.x, rect.y, rect.width, rect.height);
+        }
+
+        const message = `${step.message}\n(Click to continue)`;
+        const textMaxWidth = Phaser.Math.Clamp(
+            Math.floor(w * GameConfig.UI.TUTORIAL_TEXT_WIDTH_RATIO),
+            GameConfig.UI.TUTORIAL_TEXT_MIN_WIDTH,
+            GameConfig.UI.TUTORIAL_TEXT_MAX_WIDTH
+        );
+        const paddingText = GameConfig.UI.TUTORIAL_TEXT_PADDING;
+        this.tutorialText.setText(message);
+        this.tutorialText.setWordWrapWidth(textMaxWidth - paddingText * 2);
+        this.tutorialText.setPosition(w / 2, h - GameConfig.UI.TUTORIAL_TEXT_OFFSET_Y);
+        this.tutorialText.setStyle({ fontSize: `${GameConfig.UI.TUTORIAL_TEXT_FONT_SIZE}px` });
+        this.tutorialText.updateText();
+
+        const bounds = this.tutorialText.getBounds();
+        const bgX = bounds.x - paddingText;
+        const bgY = bounds.y - paddingText;
+        const bgW = bounds.width + paddingText * 2;
+        const bgH = bounds.height + paddingText * 2;
+
+        this.tutorialTextBg.clear();
+        this.tutorialTextBg.fillStyle(0x000000, 0.75);
+        this.tutorialTextBg.fillRoundedRect(bgX, bgY, bgW, bgH, 8);
+        this.tutorialTextBg.lineStyle(2, 0xffffff, 0.2);
+        this.tutorialTextBg.strokeRoundedRect(bgX, bgY, bgW, bgH, 8);
+    }
+
+    private getBaseCellRect(playerId: string): Phaser.Geom.Rectangle | null {
+        const grid = this.engine?.state?.grid;
+        if (!grid) return null;
+        for (let r = 0; r < grid.length; r++) {
+            for (let c = 0; c < grid[r].length; c++) {
+                const cell = grid[r][c];
+                if (cell.building === 'base' && cell.owner === playerId) {
+                    return this.getCellScreenRect(r, c);
+                }
+            }
+        }
+        return null;
+    }
+
+    private getAdjacentCaptureRect(playerId: string): Phaser.Geom.Rectangle | null {
+        const grid = this.engine?.state?.grid;
+        if (!grid) return null;
+        for (let r = 0; r < grid.length; r++) {
+            for (let c = 0; c < grid[r].length; c++) {
+                const cell = grid[r][c];
+                if (cell.building === 'base' && cell.owner === playerId) {
+                    const candidates = [
+                        { r: r + 1, c },
+                        { r: r - 1, c },
+                        { r, c: c + 1 },
+                        { r, c: c - 1 }
+                    ];
+                    for (const n of candidates) {
+                        if (!this.engine.isValidCell(n.r, n.c)) continue;
+                        const neighbor = grid[n.r][n.c];
+                        if (neighbor.type === 'water') continue;
+                        return this.getCellScreenRect(n.r, n.c);
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private getEnemyBaseCellRect(playerId: string): Phaser.Geom.Rectangle | null {
+        const grid = this.engine?.state?.grid;
+        if (!grid) return null;
+        for (let r = 0; r < grid.length; r++) {
+            for (let c = 0; c < grid[r].length; c++) {
+                const cell = grid[r][c];
+                if (cell.building === 'base' && cell.owner && cell.owner !== playerId) {
+                    return this.getCellScreenRect(r, c);
+                }
+            }
+        }
+        return null;
+    }
+
+    private getCellScreenRect(r: number, c: number): Phaser.Geom.Rectangle | null {
+        const scale = this.mapContainer?.scaleX ?? 1;
+        const x = this.mapContainer.x + (c * this.tileSize * scale);
+        const y = this.mapContainer.y + (r * this.tileSize * scale);
+        const size = this.tileSize * scale;
+        return new Phaser.Geom.Rectangle(x, y, size, size);
     }
 
     handleInput(pointer: Phaser.Input.Pointer) {

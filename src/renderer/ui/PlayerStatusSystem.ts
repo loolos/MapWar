@@ -317,6 +317,10 @@ export class PlayerStatusSystem {
         this.container.setVisible(visible);
     }
 
+    public getBounds(): Phaser.Geom.Rectangle {
+        return this.container.getBounds();
+    }
+
     private drawPanel(graphics: Phaser.GameObjects.Graphics, width: number, height: number) {
         const radius = 16;
         const color = 0x1a1a1a;
