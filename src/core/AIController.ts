@@ -44,10 +44,15 @@ export class AIController {
 
                 // Pre-calc: Find MY bases to defend
                 const myBases: { r: number, c: number }[] = [];
+                const disconnectedOwned = new Set<string>();
                 for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
                     for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
-                        if (grid[r][c].owner === aiPlayer.id && grid[r][c].building === 'base') {
+                        const cell = grid[r][c];
+                        if (cell.owner === aiPlayer.id && cell.building === 'base') {
                             myBases.push({ r, c });
+                        }
+                        if (cell.owner === aiPlayer.id && !cell.isConnected) {
+                            disconnectedOwned.add(`${r},${c}`);
                         }
                     }
                 }
@@ -84,7 +89,10 @@ export class AIController {
                             // 6. Look-Ahead
                             score += this.scoreLookAhead(r, c, aiPlayer.id as string, grid, weights);
 
-                            // 7. Cost Penalty
+                            // 7. Reconnect Cut-Off Territory
+                            score += this.scoreReconnect(r, c, disconnectedOwned, weights);
+
+                            // 8. Cost Penalty
                             score -= (cost * weights.COST_PENALTY_MULTIPLIER);
 
                             // Random noise
@@ -284,8 +292,9 @@ export class AIController {
 
             for (const base of myBases) {
                 const dist = Math.abs(r - base.r) + Math.abs(c - base.c);
-                if (dist <= 2) {
-                    score += weights.SCORE_DEFEND_BASE;
+                if (dist <= weights.DEFENSE_BASE_THREAT_RADIUS) {
+                    const urgency = (weights.DEFENSE_BASE_THREAT_RADIUS - dist + 1);
+                    score += (weights.SCORE_DEFEND_BASE + weights.DEFENSE_BASE_THREAT_SCORE) * urgency;
                 }
             }
         }
@@ -349,5 +358,23 @@ export class AIController {
             }
         }
         return score;
+    }
+
+    private scoreReconnect(r: number, c: number, disconnectedOwned: Set<string>, weights: AIWeights): number {
+        if (disconnectedOwned.size === 0) return 0;
+        let adjacentDisconnected = 0;
+        const neighbors = [
+            { r: r + 1, c: c },
+            { r: r - 1, c: c },
+            { r: r, c: c + 1 },
+            { r: r, c: c - 1 }
+        ];
+        for (const n of neighbors) {
+            if (!this.engine.isValidCell(n.r, n.c)) continue;
+            if (disconnectedOwned.has(`${n.r},${n.c}`)) {
+                adjacentDisconnected++;
+            }
+        }
+        return adjacentDisconnected * weights.RECONNECT_DISCONNECTED_SCORE;
     }
 }
