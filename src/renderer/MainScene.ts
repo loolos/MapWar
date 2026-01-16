@@ -216,6 +216,12 @@ export class MainScene extends Phaser.Scene {
         // this.notificationSystem = new NotificationSystem(this, 0, 0, 100, 100);
         this.logSystem = new LogSystem(this, 0, 0, 200, 100);
         this.interactionMenu = new InteractionMenu(this, this.engine); // NEW
+        if (typeof (this.interactionMenu as any).setActionSelectHandler === 'function') {
+            this.interactionMenu.setActionSelectHandler(({ description, r, c }) => {
+                this.setInfoActionDescription(description);
+                this.infoSystem.update(this.engine, r, c);
+            });
+        }
 
         // Initialize Sound Manager
         this.soundManager = new SoundManager();
@@ -294,6 +300,7 @@ export class MainScene extends Phaser.Scene {
             this.selectedRow = null;
             this.selectedCol = null;
             this.drawMap();
+            this.setInfoActionDescription(null);
             this.infoSystem.update(this.engine, null, null);
             this.interactionMenu.hide();
         });
@@ -1306,8 +1313,8 @@ export class MainScene extends Phaser.Scene {
 
             // 2. Check Pending Move
             // If we click a tile that is already scheduled for a move, we cancel it.
-            const pendingMove = this.engine.pendingMoves.find(m => m.r === row && m.c === col);
-            if (pendingMove) {
+            const pendingMoveAtTile = this.engine.pendingMoves.find(m => m.r === row && m.c === col);
+            if (pendingMoveAtTile) {
                 // Cancel Move
                 this.engine.togglePlan(row, col);
                 return;
@@ -1316,7 +1323,6 @@ export class MainScene extends Phaser.Scene {
             // Update Selection
             this.selectedRow = row;
             this.selectedCol = col;
-            this.infoSystem.update(this.engine, row, col);
             this.drawMap(); // Refresh aura visualization
 
             // Auto-Select Logic
@@ -1327,28 +1333,52 @@ export class MainScene extends Phaser.Scene {
             const isPlanned = this.engine.pendingInteractions.some(i => i.r === row && i.c === col) ||
                 this.engine.pendingMoves.some(m => m.r === row && m.c === col);
 
-            if (options.length === 1 && !isPlanned) {
-                // Auto-Plan (Try to execute)
-                // We call planInteraction regardless of cost. 
-                // If affordable, it keeps the plan.
-                // If NOT affordable, it logs the error (via GameEngine logic) and rejects the plan.
-                const opt = options[0];
-                this.engine.planInteraction(row, col, opt.id);
+            const pendingAction = this.engine.pendingInteractions.find(i => i.r === row && i.c === col);
+            const pendingMove = this.engine.pendingMoves.find(m => m.r === row && m.c === col);
 
-                // ALWAYS Show Menu to reflect state (Green Highlight if planned, Red if not affordable)
+            if (options.length === 1 && !isPlanned) {
+                const opt = options[0];
+                const def = this.engine.interactionRegistry.get(opt.id);
+                if (def) {
+                    const desc = typeof def.description === 'function' ? def.description(this.engine, row, col) : def.description;
+                    this.setInfoActionDescription(desc);
+                    const costVal = typeof def.cost === 'function' ? def.cost(this.engine, row, col) : def.cost;
+                    const canAfford = this.engine.state.getCurrentPlayer().gold >= costVal;
+                    if (canAfford) {
+                        this.engine.planInteraction(row, col, opt.id);
+                    }
+                }
                 this.interactionMenu.show(row, col);
             } else if (options.length > 0) {
+                if (pendingAction) {
+                    const def = this.engine.interactionRegistry.get(pendingAction.actionId);
+                    if (def) {
+                        const desc = typeof def.description === 'function' ? def.description(this.engine, row, col) : def.description;
+                        this.setInfoActionDescription(desc);
+                    }
+                } else if (pendingMove) {
+                    const def = this.engine.interactionRegistry.get('MOVE');
+                    if (def) {
+                        const desc = typeof def.description === 'function' ? def.description(this.engine, row, col) : def.description;
+                        this.setInfoActionDescription(desc);
+                    }
+                } else {
+                    this.setInfoActionDescription(null);
+                }
                 // Multiple options or already planned: Show Menu to see status
                 this.interactionMenu.show(row, col);
             } else {
                 // No options
+                this.setInfoActionDescription(null);
                 this.interactionMenu.hide();
             }
+            this.infoSystem.update(this.engine, row, col);
 
         } else {
             // Deselect
             this.selectedRow = null;
             this.selectedCol = null;
+            this.setInfoActionDescription(null);
             // Update Menu to empty state (Persistent)
             this.interactionMenu.show(null as any, null as any); // Will need Update in InteractionMenu to handle null
             this.interactionMenu.hide();
@@ -1666,6 +1696,13 @@ export class MainScene extends Phaser.Scene {
             // this.logSystem.addLog(`Need ${ totalCost } G`, 'warning');
         } else {
             // Default
+        }
+    }
+
+    private setInfoActionDescription(description: string | null) {
+        const info = this.infoSystem as any;
+        if (info && typeof info.setActionDescription === 'function') {
+            info.setActionDescription(description);
         }
     }
 

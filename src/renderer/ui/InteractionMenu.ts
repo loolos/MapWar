@@ -1,11 +1,21 @@
 
 import Phaser from 'phaser';
 import { GameEngine } from '../../core/GameEngine';
+import type { InteractionDefinition } from '../../core/interaction/InteractionTypes';
 
 export class InteractionMenu extends Phaser.GameObjects.Container {
     private bg: Phaser.GameObjects.Graphics;
     private buttonGroup: Phaser.GameObjects.Container;
     private engine: GameEngine;
+    private onActionSelect?: (payload: {
+        action: InteractionDefinition;
+        r: number;
+        c: number;
+        description: string;
+        canAfford: boolean;
+        cost: number;
+        label: string;
+    }) => void;
 
     // State
     private currentOptions: any[] = [];
@@ -67,6 +77,18 @@ export class InteractionMenu extends Phaser.GameObjects.Container {
         if (this.visible) {
             this.render();
         }
+    }
+
+    public setActionSelectHandler(handler: (payload: {
+        action: InteractionDefinition;
+        r: number;
+        c: number;
+        description: string;
+        canAfford: boolean;
+        cost: number;
+        label: string;
+    }) => void) {
+        this.onActionSelect = handler;
     }
 
     public hide() {
@@ -172,6 +194,7 @@ export class InteractionMenu extends Phaser.GameObjects.Container {
         const def = this.engine.interactionRegistry.get(opt.id)!;
         const costVal = typeof def.cost === 'function' ? def.cost(this.engine, this.currentR!, this.currentC!) : def.cost;
         const labelVal = typeof def.label === 'function' ? def.label(this.engine, this.currentR!, this.currentC!) : def.label;
+        const descVal = typeof def.description === 'function' ? def.description(this.engine, this.currentR!, this.currentC!) : def.description;
         const canAfford = this.engine.state.getCurrentPlayer().gold >= costVal;
 
         // Planning State
@@ -208,10 +231,21 @@ export class InteractionMenu extends Phaser.GameObjects.Container {
         const zone = this.scene.add.zone(w / 2, h / 2, w, h).setInteractive({ useHandCursor: true });
 
         zone.on('pointerdown', () => {
-            // Always allow click to trigger Engine validation/logging
-            this.engine.planInteraction(this.currentR!, this.currentC!, opt.id);
-            // Re-render to update active state
-            this.render();
+            if (this.onActionSelect) {
+                this.onActionSelect({
+                    action: def,
+                    r: this.currentR!,
+                    c: this.currentC!,
+                    description: descVal,
+                    canAfford,
+                    cost: costVal,
+                    label: labelVal
+                });
+            }
+            if (canAfford) {
+                this.engine.planInteraction(this.currentR!, this.currentC!, opt.id);
+                this.render();
+            }
         });
 
         // Hover

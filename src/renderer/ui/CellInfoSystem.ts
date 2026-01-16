@@ -19,6 +19,7 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
     divider!: Phaser.GameObjects.Graphics;
     descText!: Phaser.GameObjects.Text;
     planDetailsText!: Phaser.GameObjects.Text;
+    private actionDescription: string | null = null;
 
     // Arrows
     upArrow!: Phaser.GameObjects.Container;
@@ -96,7 +97,7 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
         // Create all text elements and add to contentContainer
         const baseStyle = { fontSize: '16px', color: '#ffffff' };
 
-        this.headerText = this.scene.add.text(0, 0, 'CELL INFO', { fontSize: '18px', color: '#aaaaaa', fontStyle: 'bold' });
+        this.headerText = this.scene.add.text(0, 0, 'INFO', { fontSize: '18px', color: '#aaaaaa', fontStyle: 'bold' });
         // this.coordsText = this.scene.add.text(0, 0, 'Pos: --', baseStyle);
         this.typeText = this.scene.add.text(0, 0, 'Type: --', baseStyle);
         this.ownerText = this.scene.add.text(0, 0, 'Owner: --', baseStyle);
@@ -260,16 +261,7 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
                 this.descText.setText(desc);
 
                 // Plan Details
-                const pending = engine.pendingInteractions.find(i => i.r === selectedRow && i.c === selectedCol);
-                let planStr = "";
-                if (pending) {
-                    const action = engine.interactionRegistry.get(pending.actionId);
-                    if (action) {
-                        const d = typeof action.description === 'function' ? action.description(engine, selectedRow, selectedCol) : action.description;
-                        planStr = `PLAN: ${d}`;
-                    }
-                }
-                this.planDetailsText.setText(planStr);
+                this.planDetailsText.setText(this.actionDescription || '');
             }
         }
         // Force relayout after text updates
@@ -291,6 +283,10 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
             // Simplify text to avoid clutter
         }
         return desc;
+    }
+
+    public setActionDescription(description: string | null) {
+        this.actionDescription = description;
     }
 
     public resize(width: number, height: number, x: number, y: number) {

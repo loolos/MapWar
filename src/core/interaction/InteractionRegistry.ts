@@ -81,7 +81,7 @@ export class InteractionRegistry {
         this.register({
             id: 'BUILD_WALL',
             label: 'Build Wall',
-            description: `Fortify land. +${GameConfig.WALL_DEFENSE_BONUS} Capture Cost.`,
+            description: `Fortify land. +${GameConfig.WALL_DEFENSE_BONUS} Capture Cost and grants adjacent defense aura.`,
             cost: GameConfig.COST_BUILD_WALL, // 10
             isAvailable: (engine, r, c) => {
                 const cell = engine.state.getCell(r, c);
@@ -113,8 +113,10 @@ export class InteractionRegistry {
             },
             description: (engine, r, c) => {
                 const cell = engine.state.getCell(r, c);
-                if (cell?.building === 'wall') return `Add +${GameConfig.WALL_DEFENSE_BONUS} Cost`;
-                return `Add +${GameConfig.UPGRADE_DEFENSE_BONUS} Cost`;
+                if (cell?.building === 'wall') {
+                    return `Add +${GameConfig.WALL_DEFENSE_BONUS} Capture Cost and improve adjacent defense aura.`;
+                }
+                return `Add +${GameConfig.UPGRADE_DEFENSE_BONUS} Capture Cost and boost nearby defense aura and support discount.`;
             },
             cost: (engine, r, c) => {
                 const cell = engine.state.getCell(r, c);
@@ -168,7 +170,7 @@ export class InteractionRegistry {
         this.register({
             id: 'BUILD_WATCHTOWER',
             label: 'Construct Watchtower',
-            description: 'Build a Watchtower on top of the Wall to reduce enemy attack costs.',
+            description: 'Build a Watchtower on a Wall to reduce your attack costs within range.',
             cost: GameConfig.COST_BUILD_WATCHTOWER,
             isAvailable: (engine, r, c) => {
                 const cell = engine.state.getCell(r, c);
@@ -189,7 +191,7 @@ export class InteractionRegistry {
         this.register({
             id: 'UPGRADE_WATCHTOWER',
             label: 'Upgrade Watchtower',
-            description: 'Increase Watchtower range and effect.',
+            description: 'Increase Watchtower range and attack cost discount.',
             cost: GameConfig.COST_UPGRADE_WATCHTOWER,
             isAvailable: (engine, r, c) => {
                 const cell = engine.state.getCell(r, c);
@@ -221,7 +223,15 @@ export class InteractionRegistry {
 
                 return 'Move';
             },
-            description: 'Move units to target tile.',
+            description: (engine: GameEngine, r: number, c: number) => {
+                const cell = engine.state.getCell(r, c);
+                if (!cell) return 'Move units to the selected tile.';
+                const pid = engine.state.currentPlayerId;
+                if (cell.owner && cell.owner !== pid) return 'Attack this tile.';
+                if (!cell.owner && cell.building === 'town') return 'Capture this town.';
+                if (!cell.owner) return 'Capture this tile.';
+                return 'Move units to the selected tile.';
+            },
             cost: (engine: GameEngine, r: number, c: number) => {
                 return engine.getMoveCost(r, c);
             },
