@@ -10,6 +10,7 @@ export class GameState {
     allPlayerIds: string[]; // Persist full roster including eliminated players
     currentPlayerId: PlayerID;
     turnCount: number;
+    turnsTakenInRound: number;
     currentMapType: MapType = 'default';
 
     constructor(playerConfigs: { id: string, isAI: boolean, color: number }[] = [], mapType: MapType = 'default') {
@@ -41,6 +42,7 @@ export class GameState {
 
         this.currentPlayerId = this.playerOrder[0];
         this.turnCount = 1;
+        this.turnsTakenInRound = 0;
         this.initializeGrid();
     }
 
@@ -140,6 +142,7 @@ export class GameState {
 
         this.currentPlayerId = this.playerOrder[0];
         this.turnCount = 1;
+        this.turnsTakenInRound = 0;
 
         if (keepMap) {
             // Preserve Terrain Types, Reset Ownership/Buildings
@@ -222,10 +225,12 @@ export class GameState {
         this.currentPlayerId = this.playerOrder[nextIndex];
 
         // Resource Accrual
-        // Increment turn count only when cycling back to first player? 
-        // Or just global turn count? Usually "Day 1" implies everyone moves once.
-        if (nextIndex === 0) {
+        // Increment turn count after all alive players act once.
+        const roundSize = Math.max(1, this.playerOrder.length);
+        this.turnsTakenInRound = Math.min(this.turnsTakenInRound + 1, roundSize);
+        if (this.turnsTakenInRound >= roundSize) {
             this.turnCount++;
+            this.turnsTakenInRound = 0;
         }
         return this.accrueResources(this.currentPlayerId!);
     }
@@ -465,6 +470,7 @@ export class GameState {
             playerOrder: this.playerOrder,
             allPlayerIds: this.allPlayerIds, // Save persistence list
             turnCount: this.turnCount,
+            turnsTakenInRound: this.turnsTakenInRound,
             currentPlayerId: this.currentPlayerId
         });
     }
@@ -520,6 +526,7 @@ export class GameState {
         this.players = data.players;
         this.turnCount = data.turnCount;
         this.currentPlayerId = data.currentPlayerId;
+        this.turnsTakenInRound = data.turnsTakenInRound ?? 0;
 
         // Restore persistent list or fallback to players keys
         this.allPlayerIds = data.allPlayerIds || Object.keys(this.players);

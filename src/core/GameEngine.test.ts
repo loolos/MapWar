@@ -274,6 +274,46 @@ describe('GameEngine', () => {
             expect(engine.state.turnCount).toBe(initialTurn);
         });
 
+    it('increments turn count after all alive players act', () => {
+        engine.state.turnCount = 1;
+        engine.state.turnsTakenInRound = 0;
+
+        // P1 -> P2 (round not complete yet)
+        engine.endTurn();
+        expect(engine.state.currentPlayerId).toBe('P2');
+        expect(engine.state.turnCount).toBe(1);
+
+        // P2 -> P1 (round complete)
+        engine.endTurn();
+        expect(engine.state.currentPlayerId).toBe('P1');
+        expect(engine.state.turnCount).toBe(2);
+        expect(engine.state.turnsTakenInRound).toBe(0);
+    });
+
+    it('increments turn count with eliminated players removed', () => {
+        engine.state.players['P3'] = {
+            id: 'P3',
+            color: GameConfig.COLORS.P3,
+            gold: 0,
+            isAI: true
+        };
+        engine.state.playerOrder = ['P1', 'P3'];
+        engine.state.currentPlayerId = 'P1';
+        engine.state.turnCount = 3;
+        engine.state.turnsTakenInRound = 0;
+
+        // P1 -> P3
+        engine.endTurn();
+        expect(engine.state.currentPlayerId).toBe('P3');
+        expect(engine.state.turnCount).toBe(3);
+
+        // P3 -> P1 (round complete)
+        engine.endTurn();
+        expect(engine.state.currentPlayerId).toBe('P1');
+        expect(engine.state.turnCount).toBe(4);
+        expect(engine.state.turnsTakenInRound).toBe(0);
+    });
+
         it('blocks planning when game is over', () => {
             engine.isGameOver = true;
             engine.togglePlan(5, 5);

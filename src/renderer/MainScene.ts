@@ -1433,9 +1433,14 @@ export class MainScene extends Phaser.Scene {
         bg.fillRect(0, 0, w, h);
         this.overlayContainer.add(bg);
 
-        const title = this.add.text(w / 2, h / 2 - 50, `${winner === 'P1' ? 'PLAYER 1' : 'PLAYER 2'} WINS!`, {
+        const winnerInfo = this.engine?.state?.players?.[winner];
+        const winnerLabel = winner?.startsWith('P') ? `PLAYER ${winner.slice(1)}` : winner;
+        const winnerColor = winnerInfo?.color ?? 0xffffff;
+        const winnerColorHex = `#${winnerColor.toString(16).padStart(6, '0')}`;
+
+        const title = this.add.text(w / 2, h / 2 - 50, `${winnerLabel} WINS!`, {
             fontSize: '64px',
-            color: winner === 'P1' ? '#ff4444' : '#4444ff',
+            color: winnerColorHex,
             fontStyle: 'bold',
             stroke: '#ffffff',
             strokeThickness: 6
