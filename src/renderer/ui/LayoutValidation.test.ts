@@ -9,7 +9,8 @@ vi.mock('../../utils/TextureUtils', () => ({
         makeTransparent: vi.fn(),
         create: vi.fn(),
         exists: vi.fn().mockReturnValue(true),
-        get: vi.fn().mockReturnValue({ destroy: vi.fn() })
+        addGLTexture: vi.fn(),
+        get: vi.fn().mockReturnValue({ destroy: vi.fn(), getSourceImage: vi.fn() })
     }
 }));
 
@@ -262,7 +263,7 @@ vi.mock('phaser', () => {
                     };
                     this.make = { graphics: vi.fn(() => new MockGraphics()) };
                     this.time = { delayedCall: vi.fn((_delay, callback) => callback()) };
-                    this.textures = { exists: vi.fn(() => false) };
+                    this.textures = { exists: vi.fn(() => false), addGLTexture: vi.fn(), get: vi.fn(() => ({ getSourceImage: vi.fn() })) };
                     this.sound = { get: vi.fn(), add: vi.fn(() => ({ play: vi.fn(), stop: vi.fn(), pause: vi.fn(), resume: vi.fn() })), play: vi.fn() };
                     this.events = { on: vi.fn(), once: vi.fn(), off: vi.fn(), emit: vi.fn() };
                 }

@@ -213,7 +213,9 @@ vi.mock('phaser', () => {
                 delayedCall: vi.fn((_delay, callback) => callback())
             };
             this.textures = {
-                exists: vi.fn(() => false)
+                exists: vi.fn(() => false),
+                addGLTexture: vi.fn(),
+                get: vi.fn(() => ({ getSourceImage: vi.fn() }))
             };
         }
     }
