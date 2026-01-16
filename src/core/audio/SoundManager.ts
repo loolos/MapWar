@@ -136,9 +136,49 @@ export class SoundManager {
                 this.noiseSynth.triggerAttackRelease("64n");
                 this.noiseSynth.volume.value = SoundManager.VOL_SFX - 10; // Reset
             }
+            else if (key.includes('cancel')) {
+                // Soft cancel thud
+                this.membraneSynth.triggerAttackRelease("C2", "16n");
+                this.noiseSynth.triggerAttackRelease("64n");
+            }
 
         } catch (e) {
             console.warn("Tone.js SFX Error:", e);
+        }
+    }
+
+    public playStartFanfare() {
+        if (this.isMuted) return;
+        this.startContext();
+
+        try {
+            const now = Tone.now();
+            
+            // Deep, powerful drum hits for majestic and grand feel
+            // Lower octave and longer duration for more impact
+            this.membraneSynth.triggerAttackRelease("C0", "4n", now);
+            this.membraneSynth.triggerAttackRelease("C0", "4n", now + 0.4);
+            this.membraneSynth.triggerAttackRelease("C0", "4n", now + 0.8);
+            
+            // Deep bass foundation - adds weight and grandeur
+            this.bassSynth.triggerAttackRelease("C1", "2n", now + 0.1);
+            this.bassSynth.triggerAttackRelease("G1", "2n", now + 0.7);
+            this.bassSynth.triggerAttackRelease("C1", "2n", now + 1.3);
+            this.bassSynth.triggerAttackRelease("F1", "2n", now + 1.9);
+            this.bassSynth.triggerAttackRelease("C1", "1n", now + 2.5);
+
+            // Lower, more powerful chord progression - shifted down an octave
+            // Using lower register for deeper, more majestic sound
+            this.polySynth.triggerAttackRelease(["C3", "G3", "C4"], "2n", now + 0.15);
+            this.polySynth.triggerAttackRelease(["F3", "A3", "C4"], "2n", now + 0.75);
+            this.polySynth.triggerAttackRelease(["G3", "B3", "D4"], "2n", now + 1.35);
+            this.polySynth.triggerAttackRelease(["C3", "G3", "C4", "E4"], "1n", now + 1.95);
+            
+            // Final powerful chord
+            this.polySynth.triggerAttackRelease(["C3", "G3", "C4", "E4", "G4"], "2n", now + 3.0);
+            this.membraneSynth.triggerAttackRelease("C0", "1n", now + 3.0);
+        } catch (e) {
+            console.warn("Tone.js Fanfare Error:", e);
         }
     }
 
@@ -178,35 +218,37 @@ export class SoundManager {
 
         // Config based on State
         let bpm = 60;
-        let scale = ["C4", "D4", "E4", "G4", "A4"]; // Major Pentatonic
-        let BassScale = ["C2", "G2"];
-        let prob = 0.3;
+        // Use lower registers for a more grand, powerful feel
+        let scale = ["C3", "D3", "E3", "G3", "A3"]; // Major Pentatonic (lower)
+        let BassScale = ["C1", "G1"];
+        let prob = 0.35;
 
         switch (this.bgmState) {
             case 'PEACE':
                 bpm = 70;
-                scale = ["C4", "D4", "E4", "G4", "A4"]; // Major
+                scale = ["C3", "D3", "E3", "G3", "A3"]; // Major (lower)
                 this.bgmSynth.set({ oscillator: { type: "fatsine" } });
+                prob = 0.35;
                 break;
             case 'TENSION':
                 bpm = 90;
-                scale = ["C4", "Eb4", "F4", "G4", "Bb4"]; // Minor Pentatonic
-                BassScale = ["C2", "G2", "Bb2"];
+                scale = ["C3", "Eb3", "F3", "G3", "Bb3"]; // Minor Pentatonic (lower)
+                BassScale = ["C1", "G1", "Bb1"];
                 this.bgmSynth.set({ oscillator: { type: "triangle" } });
-                prob = 0.5;
+                prob = 0.55;
                 break;
             case 'CONFLICT':
                 bpm = 110;
-                scale = ["C4", "Eb4", "G4", "Ab4", "B3"]; // Harmonic Minorish
-                BassScale = ["C2", "C2", "G1", "Ab1"];
+                scale = ["C3", "Eb3", "G3", "Ab3", "B2"]; // Harmonic Minorish (lower)
+                BassScale = ["C1", "C1", "G1", "Ab1"];
                 this.bgmSynth.set({ oscillator: { type: "sawtooth" } });
-                prob = 0.6;
+                prob = 0.65;
                 break;
             case 'DOOM':
                 bpm = 140;
-                scale = ["C4", "Db4", "E4", "G4", "Bb4"]; // Diminished / Phrygian
+                scale = ["C3", "Db3", "E3", "G3", "Bb3"]; // Diminished / Phrygian (lower)
                 this.bgmSynth.set({ oscillator: { type: "fmsawtooth" } });
-                prob = 0.8;
+                prob = 0.85;
                 break;
         }
 
@@ -216,33 +258,36 @@ export class SoundManager {
         this.bgmLoop = new Tone.Loop((time) => {
             if (Math.random() < prob) {
                 const note = scale[Math.floor(Math.random() * scale.length)];
-                // Randomize duration
                 const dur = Math.random() > 0.7 ? "2n" : "4n";
-                this.bgmSynth.triggerAttackRelease(note, dur, time);
+                const usePowerChord = Math.random() < 0.35;
+                if (usePowerChord) {
+                    const lowerOctave = note.replace(/\d/, (n) => String(Math.max(1, Number(n) - 1)));
+                    this.bgmSynth.triggerAttackRelease([note, lowerOctave], dur, time);
+                } else {
+                    this.bgmSynth.triggerAttackRelease(note, dur, time);
+                }
             }
         }, "4n").start(0);
 
         // 2. Bass / Pad
-        if (this.bgmState !== 'PEACE') {
-            new Tone.Loop((time) => {
-                const note = BassScale[Math.floor(Math.random() * BassScale.length)];
-                this.bassSynth.triggerAttackRelease(note, "1m", time);
-            }, "1m").start(0);
-        }
+        new Tone.Loop((time) => {
+            const note = BassScale[Math.floor(Math.random() * BassScale.length)];
+            const dur = this.bgmState === 'PEACE' ? "2m" : "1m";
+            this.bassSynth.triggerAttackRelease(note, dur, time);
+        }, this.bgmState === 'PEACE' ? "2m" : "1m").start(0);
 
         // 3. Drums
-        if (this.bgmState !== 'PEACE') {
-            this.drumLoop = new Tone.Loop((time) => {
-                // Simple Kick pattern
-                this.membraneSynth.triggerAttackRelease("C1", "16n", time);
+        this.drumLoop = new Tone.Loop((time) => {
+            // Simple Kick pattern (deeper for grandeur)
+            const kickNote = this.bgmState === 'PEACE' ? "C1" : "C0";
+            this.membraneSynth.triggerAttackRelease(kickNote, "16n", time);
 
-                if (this.bgmState === 'CONFLICT' || this.bgmState === 'DOOM') {
-                    // Snare/Offbeat
-                    this.noiseSynth.triggerAttackRelease("16n", time + Tone.Time("4n").toSeconds());
-                    // Extra Kick
-                    this.membraneSynth.triggerAttackRelease("C1", "16n", time + Tone.Time("8n").toSeconds() * 3);
-                }
-            }, "2n").start(0);
-        }
+            if (this.bgmState !== 'PEACE') {
+                // Snare/Offbeat
+                this.noiseSynth.triggerAttackRelease("16n", time + Tone.Time("4n").toSeconds());
+                // Extra Kick
+                this.membraneSynth.triggerAttackRelease(kickNote, "16n", time + Tone.Time("8n").toSeconds() * 3);
+            }
+        }, this.bgmState === 'PEACE' ? "1m" : "2n").start(0);
     }
 }

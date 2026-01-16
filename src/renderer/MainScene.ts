@@ -283,6 +283,7 @@ export class MainScene extends Phaser.Scene {
 
         // Audio Bindings
         this.engine.on('sfx:select', () => this.soundManager.playSfx('sfx_select'));
+        this.engine.on('sfx:cancel', () => this.soundManager.playSfx('sfx_cancel'));
         this.engine.on('sfx:move', () => this.soundManager.playSfx('sfx_move'));
         this.engine.on('sfx:attack', () => this.soundManager.playSfx('sfx_attack'));
         this.engine.on('sfx:conquer', () => this.soundManager.playSfx('sfx_conquer')); // Epic

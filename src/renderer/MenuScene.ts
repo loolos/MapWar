@@ -2,6 +2,7 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../core/GameConfig';
 import { SaveRegistry } from '../core/saves/SaveRegistry';
+import { SoundManager } from '../core/audio/SoundManager';
 
 export class MenuScene extends Phaser.Scene {
     constructor() {
@@ -10,6 +11,7 @@ export class MenuScene extends Phaser.Scene {
 
     private domElement!: Phaser.GameObjects.DOMElement;
     private background!: Phaser.GameObjects.Image;
+    private soundManager!: SoundManager;
 
     preload() {
         this.load.image('war_map_bg', 'assets/war_map_background.png');
@@ -235,6 +237,38 @@ export class MenuScene extends Phaser.Scene {
             domNode.style.height = `${this.scale.height}px`;
         }
 
+        // Fade-in for menu on start
+        this.domElement.setAlpha(0);
+        this.tweens.add({
+            targets: this.domElement,
+            alpha: 1,
+            duration: 700,
+            ease: 'Sine.Out'
+        });
+
+        // Audio: majestic start fanfare on scene load
+        this.soundManager = new SoundManager();
+        
+        // Try to auto-play start fanfare
+        // Note: Browser autoplay policies may require user interaction first
+        this.soundManager.startContext().then(() => {
+            // Small delay to ensure audio context is fully ready
+            this.time.delayedCall(300, () => {
+                this.soundManager.playStartFanfare();
+            });
+        }).catch((err) => {
+            console.warn("Could not auto-play start fanfare:", err);
+            // Fallback: play on first user interaction
+            const playOnInteraction = () => {
+                this.soundManager.playStartFanfare();
+                // Remove listener after first play
+                document.removeEventListener('click', playOnInteraction);
+                document.removeEventListener('touchstart', playOnInteraction);
+            };
+            document.addEventListener('click', playOnInteraction, { once: true });
+            document.addEventListener('touchstart', playOnInteraction, { once: true });
+        });
+
         // --- Logic Binding ---
 
         // 1. Populate Presets
@@ -288,6 +322,7 @@ export class MenuScene extends Phaser.Scene {
         const btn = this.domElement.getChildByID('startGameBtn');
         if (btn) {
             btn.addEventListener('click', () => {
+                // Start game without playing fanfare (already played on menu load)
                 const presetVal = (this.domElement.getChildByID('presetSelect') as HTMLSelectElement).value;
 
                 if (presetVal) {

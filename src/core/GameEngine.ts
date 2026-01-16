@@ -53,6 +53,11 @@ export class GameEngine {
         this.random = randomFn;
     }
 
+    private shouldPlayPlanningSfx(): boolean {
+        const player = this.state.getCurrentPlayer();
+        return !!player && !player.isAI;
+    }
+
     startGame() {
         // Initial Income for first player
         const firstPlayer = this.state.playerOrder[0];
@@ -312,7 +317,9 @@ export class GameEngine {
         this.revalidatePendingPlan();
 
         this.emit('planUpdate');
-        this.emit('sfx:select'); // Feedback
+        if (this.shouldPlayPlanningSfx()) {
+            this.emit('sfx:select'); // Feedback
+        }
     }
 
     // Helper to calculate TOTAL cost including moves and interactions
@@ -341,7 +348,9 @@ export class GameEngine {
             // Remove (only this one, let revalidate handle dependencies)
             this.pendingMoves.splice(existingIndex, 1);
             this.lastError = null;
-            this.emit('sfx:cancel');
+            if (this.shouldPlayPlanningSfx()) {
+                this.emit('sfx:cancel');
+            }
         } else {
             // Try to Add (Pass isAction = true)
             const ruleValidation = this.validateMove(row, col, true);
@@ -351,7 +360,9 @@ export class GameEngine {
                 if (costValidation.valid) {
                     this.pendingMoves.push({ r: row, c: col });
                     this.lastError = null;
-                    this.emit('sfx:select');
+                    if (this.shouldPlayPlanningSfx()) {
+                        this.emit('sfx:select');
+                    }
                     // ... reminders ...
                     // Reminder Log (Yellow) - Distance Multiplier
                     const details = this.getCostDetails(row, col);
@@ -361,12 +372,16 @@ export class GameEngine {
                 } else {
                     // Rules passed, but Cost failed
                     this.lastError = costValidation.reason || "Insufficient funds";
-                    this.emit('sfx:cancel');
+                    if (this.shouldPlayPlanningSfx()) {
+                        this.emit('sfx:cancel');
+                    }
                 }
 
             } else {
                 this.lastError = ruleValidation.reason || "Invalid move";
-                this.emit('sfx:cancel');
+                if (this.shouldPlayPlanningSfx()) {
+                    this.emit('sfx:cancel');
+                }
             }
         }
 
@@ -455,7 +470,9 @@ export class GameEngine {
                 const removedCount = this.pendingMoves.length - newMoves.length;
                 this.pendingMoves = newMoves;
                 changed = true;
-                this.emit('sfx:cancel'); // Feedback for auto-cancel?
+                if (this.shouldPlayPlanningSfx()) {
+                    this.emit('sfx:cancel'); // Feedback for auto-cancel?
+                }
                 // Warning Log (Yellow) - Cascade Cancellation
                 this.emit('logMessage', { text: `Dependent moves cancelled (${removedCount} items).`, type: 'warning' });
             }
