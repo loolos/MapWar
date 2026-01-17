@@ -3,7 +3,7 @@ import Phaser from 'phaser';
 export class ActionButtonSystem {
     private scene: Phaser.Scene;
     private container: Phaser.GameObjects.Container;
-    private buttons: Phaser.GameObjects.Image[] = [];
+    private buttons: Phaser.GameObjects.Graphics[] = [];
     private texts: Phaser.GameObjects.Text[] = [];
 
     // Grid config
@@ -13,6 +13,52 @@ export class ActionButtonSystem {
     private buttonHeight = 50;
     private gapX = 10;
     private gapY = 10;
+
+    private drawButton(graphics: Phaser.GameObjects.Graphics, w: number, h: number, state: 'idle' | 'hover' | 'down') {
+        graphics.clear();
+        const r = 10; // Corner Radius
+
+        // Palette: Modern Slate Blue Theme
+        let fillColor = 0x334e68; // Base Slate
+        let strokeColor = 0x627d98;
+        let shadowAlpha = 0.4;
+        let offsetY = 0;
+
+        if (state === 'hover') {
+            fillColor = 0x486a8b; // Lighter
+            strokeColor = 0x829ab1;
+        } else if (state === 'down') {
+            fillColor = 0x102a43; // Darker
+            strokeColor = 0x243b53;
+            offsetY = 2;
+            shadowAlpha = 0.1; // Reduced shadow
+        }
+
+        // Drop Shadow
+        if (state !== 'down') {
+            graphics.fillStyle(0x000000, shadowAlpha);
+            graphics.fillRoundedRect(3, 3, w, h, r);
+        }
+
+        // Button Body
+        graphics.fillStyle(fillColor, 1);
+        graphics.fillRoundedRect(0, offsetY, w, h, r);
+
+        // Border/Stroke
+        graphics.lineStyle(2, strokeColor, 1);
+        graphics.strokeRoundedRect(0, offsetY, w, h, r);
+
+        // Highlight (Top shimmer)
+        if (state !== 'down') {
+            graphics.lineStyle(1, 0xffffff, 0.1);
+            graphics.beginPath();
+            graphics.moveTo(r, offsetY + 1);
+            graphics.lineTo(w - r, offsetY + 1);
+            graphics.strokePath();
+        }
+    }
+
+
 
     private fitTextToButton(text: Phaser.GameObjects.Text) {
         const maxW = this.buttonWidth - 16;
@@ -47,9 +93,9 @@ export class ActionButtonSystem {
      * @param c Column index (0 to 3)
      * @param label Button text label
      * @param callback Function to call on click
-     * @param texture Texture key for the button background
+     * @param texture (Unused now) Texture key for the button background
      */
-    public addButton(r: number, c: number, label: string, callback: () => void, texture: string = 'ui_button') {
+    public addButton(r: number, c: number, label: string, callback: () => void) {
         if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) {
             console.warn(`Button slot [${r}, ${c}] is out of bounds.`);
             return;
@@ -58,23 +104,36 @@ export class ActionButtonSystem {
         const xPos = c * (this.buttonWidth + this.gapX);
         const yPos = r * (this.buttonHeight + this.gapY);
 
-        // Button Background
-        const btn = this.scene.add.image(xPos, yPos, texture)
-            .setOrigin(0, 0)
-            .setDisplaySize(this.buttonWidth, this.buttonHeight)
-            .setInteractive({ useHandCursor: true });
+        // Button Graphics
+        const btn = this.scene.add.graphics({ x: xPos, y: yPos });
 
-        // Store Grid Pos for Resize
+        // Initial Draw
+        this.drawButton(btn, this.buttonWidth, this.buttonHeight, 'idle');
+
+        // Interactive
+        btn.setInteractive(new Phaser.Geom.Rectangle(0, 0, this.buttonWidth, this.buttonHeight), Phaser.Geom.Rectangle.Contains);
         btn.setData('gridPos', { r, c });
+        btn.setData('state', 'idle');
 
         // Button Interactions
-        btn.on('pointerover', () => btn.setTint(0xdddddd));
-        btn.on('pointerout', () => btn.clearTint());
+        btn.on('pointerover', () => {
+            btn.setData('state', 'hover');
+            this.drawButton(btn, this.buttonWidth, this.buttonHeight, 'hover');
+            // Tint? No, logic handled by drawButton
+        });
+        btn.on('pointerout', () => {
+            btn.setData('state', 'idle');
+            this.drawButton(btn, this.buttonWidth, this.buttonHeight, 'idle');
+        });
         btn.on('pointerdown', () => {
-            btn.setTint(0x888888);
+            btn.setData('state', 'down');
+            this.drawButton(btn, this.buttonWidth, this.buttonHeight, 'down');
             callback();
         });
-        btn.on('pointerup', () => btn.setTint(0xdddddd));
+        btn.on('pointerup', () => {
+            btn.setData('state', 'hover'); // Return to hover on release if still over
+            this.drawButton(btn, this.buttonWidth, this.buttonHeight, 'hover');
+        });
 
         this.container.add(btn);
         this.buttons.push(btn);
@@ -82,8 +141,9 @@ export class ActionButtonSystem {
         // Button Label
         const text = this.scene.add.text(xPos + this.buttonWidth / 2, yPos + this.buttonHeight / 2, label, {
             fontFamily: 'Arial',
-            color: '#ffffff',
-            fontStyle: 'bold'
+            color: '#e0e6ed', // Softer white
+            fontStyle: 'bold',
+            shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 0, stroke: false, fill: true }
         }).setOrigin(0.5);
 
         text.setData('gridPos', { r, c });
@@ -113,7 +173,15 @@ export class ActionButtonSystem {
                 const x = pos.c * (this.buttonWidth + this.gapX);
                 const y = pos.r * (this.buttonHeight + this.gapY);
                 btn.setPosition(x, y);
-                btn.setDisplaySize(this.buttonWidth, this.buttonHeight);
+
+                // Redraw
+                this.drawButton(btn, this.buttonWidth, this.buttonHeight, btn.getData('state') || 'idle');
+
+                // Update Hit Area
+                const hitArea = btn.input?.hitArea as Phaser.Geom.Rectangle;
+                if (hitArea) {
+                    hitArea.setSize(this.buttonWidth, this.buttonHeight);
+                }
             }
         });
 
@@ -152,6 +220,6 @@ export class ActionButtonSystem {
 
     public getButtonBounds(index: number): Phaser.Geom.Rectangle | null {
         const btn = this.buttons[index];
-        return btn ? btn.getBounds() : null;
+        return btn ? (btn as any).getBounds() : null;
     }
 }
