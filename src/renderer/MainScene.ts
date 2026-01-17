@@ -113,6 +113,11 @@ export class MainScene extends Phaser.Scene {
         this.load.image('icon_human_cartoon', 'assets/cartoon_human.png');
         this.load.image('icon_robot_cartoon', 'assets/cartoon_robot.png');
 
+        // Town Assets
+        this.load.image('town_level_1', 'assets/town_level_1.png');
+        this.load.image('town_level_2', 'assets/town_level_2.png');
+        this.load.image('town_level_3', 'assets/town_level_3.png');
+
         // Audio Assets (Commented out as files are missing in repository. SoundManager uses synth fallbacks.)
         /*
         this.load.audio('sfx_select', 'assets/audio/sfx_select.mp3');
@@ -150,8 +155,55 @@ export class MainScene extends Phaser.Scene {
             }
         }
 
-        // TextureUtils usage removed: Assets are now pre-processed transparent PNGs.
-        // The keys 'icon_gold_3d', 'icon_human_cartoon', and 'icon_robot_cartoon' are loaded directly in preload.
+        // Runtime Transparency Processing
+        const processTransparency = (key: string) => {
+            if (typeof document === 'undefined') return;
+            if (!this.textures.exists(key)) return;
+
+            const texture = this.textures.get(key);
+            const src = texture.getSourceImage();
+
+            if (src instanceof Image) {
+                const canvas = document.createElement('canvas');
+                canvas.width = src.width;
+                canvas.height = src.height;
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    ctx.drawImage(src, 0, 0);
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const data = imageData.data;
+
+                    for (let i = 0; i < data.length; i += 4) {
+                        const r = data[i];
+                        const g = data[i + 1];
+                        const b = data[i + 2];
+
+                        // Black Tolerance
+                        if (r < 20 && g < 20 && b < 20) {
+                            data[i + 3] = 0;
+                        }
+                        // White Tolerance
+                        else if (r > 230 && g > 230 && b > 230) {
+                            data[i + 3] = 0;
+                        }
+                    }
+                    ctx.putImageData(imageData, 0, 0);
+                    this.textures.addCanvas(key + '_transparent', canvas);
+                }
+            }
+        };
+
+        // Process Town Assets on Load
+        this.textures.on('onload', () => {
+            processTransparency('town_level_1');
+            processTransparency('town_level_2');
+            processTransparency('town_level_3');
+        });
+
+        // Trigger manual check if already loaded
+        if (this.textures.exists('town_level_1')) processTransparency('town_level_1');
+        if (this.textures.exists('town_level_2')) processTransparency('town_level_2');
+        if (this.textures.exists('town_level_3')) processTransparency('town_level_3');
 
         this.cameras.main.setBackgroundColor(GameConfig.COLORS.BG);
 
@@ -1500,17 +1552,18 @@ export class MainScene extends Phaser.Scene {
                     const baseText = this.add.text(x + this.tileSize / 2, y + this.tileSize / 2, '🏰', { fontSize: '32px' }).setOrigin(0.5);
                     this.mapContainer.add(baseText);
                 } else if (cell.building === 'town') {
-                    let icon = '🏠'; // Level 1 (Income < 4)
-                    let size = '28px';
+                    let key = 'town_level_1';
                     if (cell.townIncome >= 8) {
-                        icon = '🏘️'; // Level 3 (City)
-                        size = '32px';
+                        key = 'town_level_3';
                     } else if (cell.townIncome >= 4) {
-                        icon = '🏡'; // Level 2 (Town)
-                        size = '30px';
+                        key = 'town_level_2';
                     }
-                    const townText = this.add.text(x + this.tileSize / 2, y + this.tileSize / 2, icon, { fontSize: size }).setOrigin(0.5);
-                    this.mapContainer.add(townText);
+                    // Use transparent version if available
+                    const finalKey = this.textures.exists(key + '_transparent') ? key + '_transparent' : key;
+
+                    const townSprite = this.add.image(x + this.tileSize / 2, y + this.tileSize / 2, finalKey);
+                    townSprite.setDisplaySize(this.tileSize * 0.9, this.tileSize * 0.9); // Slight padding
+                    this.mapContainer.add(townSprite);
                 } else if (cell.building === 'farm') {
                     // Farm Visuals
                     const level = cell.farmLevel || 1;

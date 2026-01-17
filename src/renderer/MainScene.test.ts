@@ -215,7 +215,9 @@ vi.mock('phaser', () => {
             this.textures = {
                 exists: vi.fn(() => false),
                 addGLTexture: vi.fn(),
-                get: vi.fn(() => ({ getSourceImage: vi.fn() }))
+                get: vi.fn(() => ({ getSourceImage: vi.fn() })),
+                on: vi.fn(), // Added
+                addCanvas: vi.fn() // Added for processTransparency
             };
         }
     }
