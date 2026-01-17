@@ -201,12 +201,6 @@ export class MenuScene extends Phaser.Scene {
                             <span>Count:</span>
                             <input type="number" id="playerCountInput" min="2" max="8" value="2" style="width:4em;">
                         </div>
-                        <div class="control-row" style="margin-top: 5px;">
-                            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-                                <input type="checkbox" id="tutorialToggle">
-                                <span>Enable Tutorial</span>
-                            </label>
-                        </div>
                     </div>
 
                     <div class="preset-section">
@@ -218,6 +212,7 @@ export class MenuScene extends Phaser.Scene {
                     </div>
 
                     <button id="startGameBtn" class="btn-start">START GAME</button>
+                    <button id="tutorialGameBtn" class="btn-start" style="background:#2f8f4e; box-shadow:0 4px 0 #1e5f34; margin-top:8px;">START TUTORIAL</button>
                     <!-- Spacer for scroll -->
                     <div style="height:10px;"></div>
                 </div>
@@ -332,56 +327,59 @@ export class MenuScene extends Phaser.Scene {
             btn.addEventListener('click', () => {
                 // Start game without playing fanfare (already played on menu load)
                 const presetVal = (this.domElement.getChildByID('presetSelect') as HTMLSelectElement).value;
-                const tutorialChecked = (this.domElement.getChildByID('tutorialToggle') as HTMLInputElement)?.checked;
 
-                if (!tutorialChecked && presetVal) {
+                if (presetVal) {
                     this.scene.start('MainScene', { loadPreset: presetVal });
-                } else {
-                    if (tutorialChecked) {
-                        const defaultWidth = 10;
-                        const defaultHeight = 10;
-                        (GameConfig as any).GRID_WIDTH = defaultWidth;
-                        (GameConfig as any).GRID_HEIGHT = defaultHeight;
-
-                        const tutorialPlayers = [
-                            { id: 'P1', isAI: false, color: GameConfig.COLORS.P1 },
-                            { id: 'P2', isAI: true, color: GameConfig.COLORS.P2 }
-                        ];
-
-                        this.scene.start('MainScene', {
-                            playerConfigs: tutorialPlayers,
-                            mapType: 'default',
-                            tutorial: true
-                        });
-                        return;
-                    }
-
-                    // New Game
-                    const wInput = this.domElement.getChildByID('mapWidthInput') as HTMLInputElement;
-                    const hInput = this.domElement.getChildByID('mapHeightInput') as HTMLInputElement;
-                    const cInput = this.domElement.getChildByID('playerCountInput') as HTMLInputElement;
-                    const typeInput = this.domElement.getChildByID('mapTypeSelect') as HTMLSelectElement;
-
-                    const width = Phaser.Math.Clamp(parseInt(wInput.value) || 10, 10, 40);
-                    const height = Phaser.Math.Clamp(parseInt(hInput.value) || 10, 10, 40);
-                    const count = parseInt(cInput.value);
-                    const mapType = typeInput ? typeInput.value : 'default';
-
-                    // Update Global
-                    (GameConfig as any).GRID_WIDTH = width;
-                    (GameConfig as any).GRID_HEIGHT = height;
-
-                    // Gather Configs
-                    const configs: any[] = [];
-                    for (let i = 1; i <= count; i++) {
-                        const typeSelect = this.domElement.getChildByID(`type_P${i}`) as HTMLSelectElement;
-                        const isAI = typeSelect.value === 'ai';
-                        const color = GameConfig.COLORS['P' + i as keyof typeof GameConfig.COLORS];
-                        configs.push({ id: `P${i}`, isAI, color });
-                    }
-
-                    this.scene.start('MainScene', { playerConfigs: configs, mapType: mapType });
+                    return;
                 }
+
+                // New Game
+                const wInput = this.domElement.getChildByID('mapWidthInput') as HTMLInputElement;
+                const hInput = this.domElement.getChildByID('mapHeightInput') as HTMLInputElement;
+                const cInput = this.domElement.getChildByID('playerCountInput') as HTMLInputElement;
+                const typeInput = this.domElement.getChildByID('mapTypeSelect') as HTMLSelectElement;
+
+                const width = Phaser.Math.Clamp(parseInt(wInput.value) || 10, 10, 40);
+                const height = Phaser.Math.Clamp(parseInt(hInput.value) || 10, 10, 40);
+                const count = parseInt(cInput.value);
+                const mapType = typeInput ? typeInput.value : 'default';
+
+                // Update Global
+                (GameConfig as any).GRID_WIDTH = width;
+                (GameConfig as any).GRID_HEIGHT = height;
+
+                // Gather Configs
+                const configs: any[] = [];
+                for (let i = 1; i <= count; i++) {
+                    const typeSelect = this.domElement.getChildByID(`type_P${i}`) as HTMLSelectElement;
+                    const isAI = typeSelect.value === 'ai';
+                    const color = GameConfig.COLORS['P' + i as keyof typeof GameConfig.COLORS];
+                    configs.push({ id: `P${i}`, isAI, color });
+                }
+
+                this.scene.start('MainScene', { playerConfigs: configs, mapType: mapType });
+            });
+        }
+
+        // 4. Tutorial Mode Button
+        const tutorialBtn = this.domElement.getChildByID('tutorialGameBtn');
+        if (tutorialBtn) {
+            tutorialBtn.addEventListener('click', () => {
+                const defaultWidth = 10;
+                const defaultHeight = 10;
+                (GameConfig as any).GRID_WIDTH = defaultWidth;
+                (GameConfig as any).GRID_HEIGHT = defaultHeight;
+
+                const tutorialPlayers = [
+                    { id: 'P1', isAI: false, color: GameConfig.COLORS.P1 },
+                    { id: 'P2', isAI: true, color: GameConfig.COLORS.P2 }
+                ];
+
+                this.scene.start('MainScene', {
+                    playerConfigs: tutorialPlayers,
+                    mapType: 'default',
+                    tutorial: true
+                });
             });
         }
 
