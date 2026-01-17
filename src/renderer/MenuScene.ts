@@ -243,13 +243,15 @@ export class MenuScene extends Phaser.Scene {
             domNode.style.height = `${this.scale.height}px`;
         }
 
-        // Fade-in for menu on start
+        // Fade-in for menu on start (with initial delay)
         this.domElement.setAlpha(0);
-        this.tweens.add({
-            targets: this.domElement,
-            alpha: 1,
-            duration: GameConfig.UI_MENU_FADE_DURATION,
-            ease: 'Sine.Out'
+        this.time.delayedCall(500, () => {
+            this.tweens.add({
+                targets: this.domElement,
+                alpha: 1,
+                duration: GameConfig.UI_MENU_FADE_DURATION,
+                ease: 'Sine.Out'
+            });
         });
 
         // Audio: majestic start fanfare on scene load

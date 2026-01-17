@@ -274,7 +274,25 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
         else if (cell.building === 'town') desc = `Generates +${cell.townIncome} G.`;
         else if (cell.building === 'base') desc = "Main Base.";
         else if (cell.building === 'wall') desc = `Wall (Lv ${cell.defenseLevel}).`;
-        else desc = cell.type; // Basic
+        else {
+            switch (cell.type) {
+                case 'plain':
+                    desc = "Plains: standard terrain for expansion and building.";
+                    break;
+                case 'hill':
+                    desc = "Hills: rugged terrain. Mines may be discovered here.";
+                    break;
+                case 'water':
+                    desc = "Water: impassable without building a bridge.";
+                    break;
+                case 'bridge':
+                    desc = "Bridge: allows crossing water.";
+                    break;
+                default:
+                    desc = cell.type;
+                    break;
+            }
+        }
 
         // Add Range info
         if (cell.watchtowerLevel > 0) desc += `\nWatchtower Lv ${cell.watchtowerLevel}.`;
@@ -395,8 +413,8 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
 
         layoutItem(this.divider, false);
 
-        layoutItem(this.descText);
         layoutItem(this.planDetailsText);
+        layoutItem(this.descText);
 
         currentY += 30; // Extra padding for bottom arrow
 
