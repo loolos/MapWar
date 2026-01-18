@@ -132,7 +132,9 @@ export class MainScene extends Phaser.Scene {
     create(data?: any) {
         // 1. Initialize Engine
         const mapType = data && data.mapType ? data.mapType : 'default';
-        this.engine = new GameEngine(data && data.playerConfigs ? data.playerConfigs : [], mapType);
+        const playerConfigs = data && data.playerConfigs ? data.playerConfigs : [];
+        const randomizeAiProfiles = !(data && data.tutorial);
+        this.engine = new GameEngine(playerConfigs, mapType, Math.random, { randomizeAiProfiles });
 
         // 2. Check for Preset Load
         if (data && data.loadPreset) {
@@ -267,7 +269,9 @@ export class MainScene extends Phaser.Scene {
         if (typeof (this.interactionMenu as any).setActionSelectHandler === 'function') {
             this.interactionMenu.setActionSelectHandler(({ description, r, c }) => {
                 this.setInfoActionDescription(description);
-                this.infoSystem.update(this.engine, r, c);
+                if (this.shouldUpdateInfoPanel()) {
+                    this.infoSystem.update(this.engine, r, c);
+                }
             });
         }
 
@@ -307,7 +311,9 @@ export class MainScene extends Phaser.Scene {
             this.drawMap();
             this.updateUI();
             // Refresh info system to show updated plan cost
-            this.infoSystem.update(this.engine, this.selectedRow, this.selectedCol);
+            if (this.shouldUpdateInfoPanel()) {
+                this.infoSystem.update(this.engine, this.selectedRow, this.selectedCol);
+            }
 
             // Refresh Interaction Menu if still selected
             if (this.selectedRow !== null && this.selectedCol !== null) {
@@ -326,7 +332,9 @@ export class MainScene extends Phaser.Scene {
             this.selectedRow = data.r;
             this.selectedCol = data.c;
             this.drawMap(); // Update Selection Highlight
-            this.infoSystem.update(this.engine, data.r, data.c);
+            if (this.shouldUpdateInfoPanel()) {
+                this.infoSystem.update(this.engine, data.r, data.c);
+            }
 
             // Show Interaction Menu
             // Calculate screen position for menu (near tile but within bounds)
@@ -349,7 +357,9 @@ export class MainScene extends Phaser.Scene {
             this.selectedCol = null;
             this.drawMap();
             this.setInfoActionDescription(null);
-            this.infoSystem.update(this.engine, null, null);
+            if (this.shouldUpdateInfoPanel()) {
+                this.infoSystem.update(this.engine, null, null);
+            }
             this.interactionMenu.hide();
         });
 
@@ -929,7 +939,9 @@ export class MainScene extends Phaser.Scene {
             // Force data refresh
             if (this.engine) {
                 this.playerStatusSystem.update(this.engine);
-                this.infoSystem.update(this.engine, null, null);
+                if (this.shouldUpdateInfoPanel()) {
+                    this.infoSystem.update(this.engine, null, null);
+                }
                 // Log persists, no update needed
             }
 
@@ -1420,7 +1432,9 @@ export class MainScene extends Phaser.Scene {
                 this.setInfoActionDescription(null);
                 this.interactionMenu.hide();
             }
-            this.infoSystem.update(this.engine, row, col);
+            if (this.shouldUpdateInfoPanel()) {
+                this.infoSystem.update(this.engine, row, col);
+            }
 
         } else {
             // Deselect
@@ -1454,7 +1468,12 @@ export class MainScene extends Phaser.Scene {
                 child.destroy();
             }
             else if (child.type === 'Image') {
-                if (child.texture && (child.texture.key === 'gold_mine' || child.texture.key.startsWith('watchtower') || child.texture.key.startsWith('farm'))) {
+                if (child.texture && (
+                    child.texture.key === 'gold_mine'
+                    || child.texture.key.startsWith('watchtower')
+                    || child.texture.key.startsWith('farm')
+                    || child.texture.key.startsWith('town_level')
+                )) {
                     child.destroy();
                 }
             }
@@ -1753,6 +1772,12 @@ export class MainScene extends Phaser.Scene {
         if (info && typeof info.setActionDescription === 'function') {
             info.setActionDescription(description);
         }
+    }
+
+    private shouldUpdateInfoPanel(): boolean {
+        if (!this.engine) return false;
+        const currentPlayer = this.engine.state.getCurrentPlayer();
+        return !currentPlayer?.isAI;
     }
 
     private lastScrollTime: number = 0;

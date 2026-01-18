@@ -114,7 +114,7 @@ export class PlayerStatusSystem {
             this.playerRows.some((row, i) => (row as any).playerId !== currentIds[i]);
 
         if (needsRebuild) {
-            this.rebuildList(engine.state.playerOrder, engine.state.players);
+            this.rebuildList(engine, engine.state.playerOrder, engine.state.players);
         }
 
         // Update values and Highlighting
@@ -143,7 +143,7 @@ export class PlayerStatusSystem {
         });
     }
 
-    private rebuildList(order: string[], players: any) {
+    private rebuildList(engine: GameEngine, order: string[], players: any) {
         this.listContainer.removeAll(true);
         this.playerRows = [];
 
@@ -165,7 +165,7 @@ export class PlayerStatusSystem {
 
         order.forEach(pid => {
             const player = players[pid];
-            const row = this.createPlayerRow(player, currentY, rowH);
+            const row = this.createPlayerRow(engine, player, currentY, rowH);
             (row as any).playerId = pid;
             this.listContainer.add(row);
             this.playerRows.push(row);
@@ -193,7 +193,7 @@ export class PlayerStatusSystem {
 
     // private updateButtonPositions... REMOVED
 
-    private createPlayerRow(player: any, y: number, h: number): Phaser.GameObjects.Container {
+    private createPlayerRow(engine: GameEngine, player: any, y: number, h: number): Phaser.GameObjects.Container {
         const scene = this.container.scene;
 
         // Adjust width to allow for scroll bar/buttons on Left?
@@ -218,7 +218,10 @@ export class PlayerStatusSystem {
         const goldSize = Math.max(12, Math.floor(16 * s));
 
         // Title
-        const title = scene.add.text(8, h / 2, player.id, {
+        const playerNumber = String(player.id || '').replace('P', '');
+        const profileLabel = player.isAI ? engine.ai.getProfileLabel(player.id) : null;
+        const displayName = player.isAI && profileLabel ? `${profileLabel} ${playerNumber}` : player.id;
+        const title = scene.add.text(8, h / 2, displayName, {
             fontFamily: 'Georgia, serif', fontSize: `${baseSize}px`,
             color: '#' + player.color.toString(16).padStart(6, '0'),
             fontStyle: 'bold',

@@ -162,11 +162,13 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
         const currentGold = currentPlayer.gold;
         const totalCost = engine.calculatePlannedCost();
 
-        this.planText.setText(`Plan: ${totalCost} G`);
+        const formattedTotalCost = this.formatNumber(totalCost);
+        this.planText.setText(`Plan: ${formattedTotalCost} G`);
 
         if (totalCost > currentGold) {
             const missing = totalCost - currentGold;
-            this.planText.setText(`Plan: ${totalCost} G\n(Need ${missing} more!)`);
+            const formattedMissing = this.formatNumber(missing);
+            this.planText.setText(`Plan: ${formattedTotalCost} G\n(Need ${formattedMissing} more!)`);
             this.planText.setColor('#ff0000');
         } else {
             this.planText.setColor('#88ff88');
@@ -207,12 +209,14 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
 
                 if (cell.owner === engine.state.currentPlayerId) {
                     const enemyCost = engine.getPotentialEnemyAttackCost(selectedRow, selectedCol);
-                    costStr = enemyCost.cost > 0 ? `${enemyCost.cost}G` : "0G";
-                    primaryBreakdown = enemyCost.breakdown;
+                    const formattedEnemyCost = this.formatNumber(enemyCost.cost);
+                    costStr = enemyCost.cost > 0 ? `${formattedEnemyCost}G` : "0G";
+                    primaryBreakdown = this.formatBreakdownNumbers(enemyCost.breakdown);
                 } else {
                     const costDetails = engine.getCostDetails(selectedRow, selectedCol);
-                    costStr = costDetails.cost === Infinity ? 'X' : `${costDetails.cost}G`;
-                    primaryBreakdown = costDetails.breakdown;
+                    const formattedCost = this.formatNumber(costDetails.cost);
+                    costStr = costDetails.cost === Infinity ? 'X' : `${formattedCost}G`;
+                    primaryBreakdown = this.formatBreakdownNumbers(costDetails.breakdown);
                 }
 
                 this.costText.setText(`Cost: ${costStr}`);
@@ -238,7 +242,7 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
                 // If I click enemy block, I want to know its income? Yes.
                 const income = engine.getTileIncome(selectedRow, selectedCol);
                 if (income > 0) {
-                    let incomeStr = `+${income.toFixed(1)}`;
+                    let incomeStr = `+${this.formatNumber(income)}`;
                     if (cell.owner && !cell.isConnected) incomeStr += " (Disc.)";
 
                     // Check for Aura Bonus
@@ -271,7 +275,7 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
     private generateDescription(cell: any): string {
         let desc = "";
         if (cell.building === 'gold_mine') desc = "Generates +5 G.";
-        else if (cell.building === 'town') desc = `Generates +${cell.townIncome} G.`;
+        else if (cell.building === 'town') desc = `Generates +${this.formatNumber(cell.townIncome)} G.`;
         else if (cell.building === 'base') desc = "Main Base.";
         else if (cell.building === 'wall') desc = `Wall (Lv ${cell.defenseLevel}).`;
         else {
@@ -301,6 +305,22 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
             // Simplify text to avoid clutter
         }
         return desc;
+    }
+
+    private formatNumber(value: number): string {
+        if (!Number.isFinite(value)) return String(value);
+        const rounded = Math.round(value * 10) / 10;
+        return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+    }
+
+    private formatBreakdownNumbers(text: string): string {
+        if (!text) return text;
+        return text.replace(/-?\d+(\.\d+)?/g, (raw) => {
+            const num = Number(raw);
+            if (!Number.isFinite(num)) return raw;
+            const rounded = Math.round(num * 10) / 10;
+            return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+        });
     }
 
     public setActionDescription(description: string | null) {

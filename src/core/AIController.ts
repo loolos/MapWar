@@ -16,6 +16,16 @@ export class AIController {
         this.profileByPlayerId.set(playerId, profile);
     }
 
+    public getProfileForPlayer(playerId: string): AIProfile | undefined {
+        return this.profileByPlayerId.get(playerId);
+    }
+
+    public getProfileLabel(playerId: string): string | null {
+        const profile = this.profileByPlayerId.get(playerId);
+        if (!profile) return null;
+        return profile.label || profile.id;
+    }
+
     private getWeightsForPlayer(playerId: string): AIWeights {
         const profile = this.profileByPlayerId.get(playerId);
         return mergeAIWeights(profile?.weights ?? DefaultAIProfile.weights);
@@ -36,6 +46,15 @@ export class AIController {
             this.engine.lastAiMoves = [];
 
             const weights = this.getWeightsForPlayer(aiPlayer.id as string);
+            const startTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+            const timeBudgetMs = GameConfig.AI_TURN_BUDGET_MS;
+            const isOverBudget = () => {
+                const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                return (now - startTime) >= timeBudgetMs;
+            };
+
+            const turnCount = this.engine.state.turnCount;
+            const isEarlyGame = turnCount <= weights.STRATEGY_EARLY_TURN_LIMIT;
 
             // Helper: Refresh Valid Moves
             const getValidMoves = () => {
@@ -59,6 +78,7 @@ export class AIController {
 
                 for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
                     for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+                        if (isOverBudget()) return moves;
                         const validation = this.engine.validateMove(r, c);
                         if (validation.valid) {
                             // NEW: Check Cost explicitly (since validateMove purely checks rules now)
@@ -81,7 +101,7 @@ export class AIController {
                             score += this.scoreTactical(cell, weights);
 
                             // 4. Expansion
-                            score += this.scoreExpansion(cell, weights);
+                            score += this.scoreExpansion(cell, turnCount, weights);
 
                             // 5. Aura Support
                             score += this.scoreAura(r, c, aiPlayer.id as string, weights);
@@ -114,6 +134,7 @@ export class AIController {
             const skippedMoves = new Set<string>();
 
             while (safetyCounter < MAX_MOVES) {
+                if (isOverBudget()) break;
                 let potentialMoves = getValidMoves();
 
                 // Filter out moves that previously failed in this turn
@@ -171,6 +192,7 @@ export class AIController {
 
                 for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
                     for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+                        if (isOverBudget()) break;
                         const cell = this.engine.state.getCell(r, c);
                         if (!cell || cell.owner !== aiPlayer.id) continue;
 
@@ -211,20 +233,26 @@ export class AIController {
                 }
 
                 for (const base of myBases) {
+                    if (isOverBudget()) break;
                     const { r, c, cell } = base;
                     if (cell.incomeLevel < GameConfig.UPGRADE_INCOME_MAX) {
-                        const score = weights.ECONOMY_BASE_INCOME + (cell.incomeLevel * weights.ECONOMY_BASE_INCOME_LEVEL);
+                        const score = weights.ECONOMY_BASE_INCOME
+                            + (cell.incomeLevel * weights.ECONOMY_BASE_INCOME_LEVEL)
+                            + (isEarlyGame ? weights.STRATEGY_BASE_UPGRADE_BONUS : 0);
                         addCandidate(score, GameConfig.UPGRADE_INCOME_COST, () => tryPlan(r, c, 'UPGRADE_INCOME'));
                     }
 
                     if (cell.defenseLevel < GameConfig.UPGRADE_DEFENSE_MAX) {
                         const threat = threatByKey.get(`${r},${c}`) || 0;
-                        const score = weights.DEFENSE_BASE_UPGRADE + (threat * weights.DEFENSE_THREAT_MULT);
+                        const score = weights.DEFENSE_BASE_UPGRADE
+                            + (threat * weights.DEFENSE_THREAT_MULT)
+                            + weights.STRATEGY_BASE_UPGRADE_BONUS;
                         addCandidate(score, GameConfig.UPGRADE_DEFENSE_COST, () => tryPlan(r, c, 'UPGRADE_DEFENSE'));
                     }
                 }
 
                 for (const farm of myFarms) {
+                    if (isOverBudget()) break;
                     const { r, c, cell } = farm;
                     if (cell.farmLevel < GameConfig.FARM_MAX_LEVEL) {
                         const score = weights.ECONOMY_FARM_UPGRADE + (cell.farmLevel * weights.ECONOMY_FARM_LEVEL);
@@ -233,16 +261,21 @@ export class AIController {
                 }
 
                 for (const spot of farmSpots) {
-                    const score = weights.ECONOMY_FARM_BUILD + (spot.auraBonus * weights.ECONOMY_AURA_BONUS_MULT);
+                    if (isOverBudget()) break;
+                    const score = weights.ECONOMY_FARM_BUILD
+                        + (spot.auraBonus * weights.ECONOMY_AURA_BONUS_MULT)
+                        + (isEarlyGame ? weights.STRATEGY_EARLY_FARM_BONUS : 0);
                     addCandidate(score, GameConfig.COST_BUILD_FARM, () => tryPlan(spot.r, spot.c, 'BUILD_FARM'));
                 }
 
                 for (const spot of myFrontLines) {
+                    if (isOverBudget()) break;
                     const { r, c, cell, threat } = spot;
                     const threatScore = threat * weights.DEFENSE_THREAT_MULT;
 
                     if (cell.building === 'none' && cell.type === 'plain') {
-                        addCandidate(weights.DEFENSE_WALL_BUILD + threatScore, GameConfig.COST_BUILD_WALL, () => tryPlan(r, c, 'BUILD_WALL'));
+                        const score = weights.DEFENSE_WALL_BUILD + threatScore + weights.STRATEGY_WALL_PRIORITY_BONUS;
+                        addCandidate(score, GameConfig.COST_BUILD_WALL, () => tryPlan(r, c, 'BUILD_WALL'));
                     } else if (cell.building === 'wall') {
                         if (cell.watchtowerLevel === 0) {
                             addCandidate(weights.DEFENSE_WATCHTOWER_BUILD + threatScore, GameConfig.COST_BUILD_WATCHTOWER, () => tryPlan(r, c, 'BUILD_WATCHTOWER'));
@@ -259,6 +292,7 @@ export class AIController {
                 candidates.sort((a, b) => b.score - a.score);
 
                 for (const candidate of candidates) {
+                    if (isOverBudget()) break;
                     if (simulatedGold < candidate.cost) continue;
                     if (candidate.execute()) {
                         simulatedGold -= candidate.cost;
@@ -328,8 +362,13 @@ export class AIController {
         return score;
     }
 
-    private scoreExpansion(cell: Cell, weights: AIWeights): number {
-        if (cell.owner === null) return weights.SCORE_EXPANSION;
+    private scoreExpansion(cell: Cell, turnCount: number, weights: AIWeights): number {
+        if (cell.owner === null) {
+            const earlyBonus = turnCount <= weights.STRATEGY_EARLY_TURN_LIMIT
+                ? weights.STRATEGY_EARLY_EXPANSION_BONUS
+                : 0;
+            return weights.SCORE_EXPANSION + earlyBonus;
+        }
         return 0;
     }
 

@@ -85,6 +85,7 @@ export const GameConfig = {
     TURN_EVENT_PLACEHOLDER_MESSAGE_TEMPLATE: "A strange omen appears before {player}'s turn.",
     TURN_EVENT_PLACEHOLDER_SFX: 'sfx:turn_event_default',
     AI_TURN_DELAY_MS: 500,
+    AI_TURN_BUDGET_MS: 500,
     PLAN_REVALIDATE_MAX_LOOPS: 20,
     INTENSITY_TURN_CAP: 20,
     INTENSITY_TURN_MAX: 0.5,

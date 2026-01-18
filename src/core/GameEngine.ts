@@ -2,6 +2,7 @@ import { GameConfig } from './GameConfig';
 import { AIController } from './AIController';
 import { InteractionRegistry } from './interaction/InteractionRegistry';
 import { CostSystem } from './CostSystem';
+import { RandomAiProfiles, type AIProfile } from './ai/AIProfile';
 
 import type { Action, EndTurnAction } from './Actions';
 import type { MapType } from './map/MapGenerator';
@@ -49,7 +50,8 @@ export class GameEngine {
     constructor(
         playerConfigs: { id: string, isAI: boolean, color: number }[] = [],
         mapType: MapType = 'default',
-        randomFn: () => number = Math.random
+        randomFn: () => number = Math.random,
+        options?: { randomizeAiProfiles?: boolean }
     ) {
         this.stateManager = new GameStateManager(playerConfigs, mapType);
         this.events = new TypedEventEmitter();
@@ -63,6 +65,36 @@ export class GameEngine {
             ok: this.random() < GameConfig.TURN_EVENT_FLOOD_RECEDE_CHANCE,
             onFail: 'defer'
         }));
+
+        if (options?.randomizeAiProfiles !== false) {
+            this.assignRandomAiProfiles(playerConfigs);
+        }
+    }
+
+    public setAiProfiles(profiles: Record<string, AIProfile | undefined>) {
+        if (!profiles) return;
+        for (const [playerId, profile] of Object.entries(profiles)) {
+            if (profile) {
+                this.ai.setProfileForPlayer(playerId, profile);
+            }
+        }
+    }
+
+    private assignRandomAiProfiles(playerConfigs: { id: string, isAI: boolean }[]) {
+        if (!RandomAiProfiles.length) return;
+        const aiPlayers = playerConfigs.filter(cfg => cfg.isAI);
+        if (aiPlayers.length === 0) return;
+
+        const pool = [...RandomAiProfiles];
+        for (let i = pool.length - 1; i > 0; i--) {
+            const j = Math.floor(this.random() * (i + 1));
+            [pool[i], pool[j]] = [pool[j], pool[i]];
+        }
+
+        for (let i = 0; i < aiPlayers.length; i++) {
+            const profile = pool[i % pool.length];
+            this.ai.setProfileForPlayer(aiPlayers[i].id, profile);
+        }
     }
 
     private shouldPlayPlanningSfx(): boolean {
