@@ -25,7 +25,7 @@ export const GameConfig = {
     // Farm Configs
     COST_BUILD_FARM: 20,
     COST_UPGRADE_FARM: 20,
-    FARM_INCOME: [0, 2, 4, 8], // Lv 1=2, Lv 2=4, Lv 3=8
+    FARM_INCOME: [0, 2, 4, 6], // Lv 1=2, Lv 2=4, Lv 3=6
     FARM_MAX_LEVEL: 3,
     // Base Support Configs (New)
     BASE_SUPPORT_RANGE_BASE: 2,

@@ -7,6 +7,7 @@ describe('Base Upgrades', () => {
 
     beforeEach(() => {
         engine = new GameEngine();
+        engine.state.players['P2'].isAI = false;
 
         // Clear all ownership to ensure clean slate
         const height = engine.state.grid.length;
@@ -92,6 +93,8 @@ describe('Base Upgrades', () => {
         expect(report?.total).toBe(GameConfig.GOLD_PER_TURN_BASE + 1); // Base(10) + Bonus(1)
 
         // 2. Upgrade Level 2
+        engine.endTurn();
+        engine.endTurn();
         engine.planInteraction(0, 0, 'UPGRADE_INCOME');
         engine.commitMoves();
         expect(cell.incomeLevel).toBe(2);
@@ -103,6 +106,8 @@ describe('Base Upgrades', () => {
 
         // 3. Verify Levels 3, 4, 5
         for (let i = 3; i <= 5; i++) {
+            engine.endTurn();
+            engine.endTurn();
             engine.planInteraction(0, 0, 'UPGRADE_INCOME');
             engine.commitMoves();
             expect(cell.incomeLevel).toBe(i);
@@ -186,6 +191,8 @@ describe('Base Upgrades', () => {
         engine.commitMoves();
 
         // Upgrade Lv 2
+        engine.endTurn();
+        engine.endTurn();
         engine.planInteraction(0, 0, 'UPGRADE_DEFENSE');
         engine.commitMoves();
 
@@ -210,10 +217,14 @@ describe('Base Upgrades', () => {
         // Upgrade Income twice
         engine.planInteraction(0, 0, 'UPGRADE_INCOME'); // Lv1
         engine.commitMoves();
+        engine.endTurn();
+        engine.endTurn();
         engine.planInteraction(0, 0, 'UPGRADE_INCOME'); // Lv2
         engine.commitMoves();
 
         // Upgrade Defense once
+        engine.endTurn();
+        engine.endTurn();
         engine.planInteraction(0, 0, 'UPGRADE_DEFENSE'); // Lv1
         engine.commitMoves();
 

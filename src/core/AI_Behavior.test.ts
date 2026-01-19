@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { GameEngine } from './GameEngine';
+import { GameConfig } from './GameConfig';
 
 describe('AI Behavior', () => {
     let engine: GameEngine;
@@ -26,8 +27,9 @@ describe('AI Behavior', () => {
         // Reset Gold
         engine.state.players['P1'].gold = 0;
 
-        // Force P1 to be AI setup
-        engine.state.players['P1'].isAI = true;
+        // Prevent auto AI turn during startGame
+        engine.state.players['P1'].isAI = false;
+        engine.state.players['P2'].isAI = false;
 
         // We'll manage startGame manually in tests if we need specific setup first
         // But generally startGame is safe to call immediately for defaults
@@ -44,6 +46,11 @@ describe('AI Behavior', () => {
 
         // Expectation: AI should capture (0,1)
         // Mock playTurn to run synchronously
+        const base = engine.state.getCell(0, 0)!;
+        base.incomeLevel = GameConfig.UPGRADE_INCOME_MAX;
+        base.defenseLevel = GameConfig.UPGRADE_DEFENSE_MAX;
+        engine.state.players['P1'].gold = 100;
+        engine.state.players['P1'].isAI = true;
         engine.ai.playTurn();
 
         const cell = engine.state.getCell(0, 1);
@@ -59,6 +66,7 @@ describe('AI Behavior', () => {
         // Need Gold! Town capture is 30.
         engine.state.players['P1'].gold = 50;
 
+        engine.state.players['P1'].isAI = true;
         engine.ai.playTurn();
 
         // Should have captured (1,0) [Town]
@@ -75,6 +83,7 @@ describe('AI Behavior', () => {
         // Need Gold! Attack cost 20.
         engine.state.players['P1'].gold = 50;
 
+        engine.state.players['P1'].isAI = true;
         engine.ai.playTurn();
 
         // Should have attacked (0,1)
@@ -95,6 +104,7 @@ describe('AI Behavior', () => {
         const lowGold = 5;
         engine.state.players['P1'].gold = lowGold;
 
+        engine.state.players['P1'].isAI = true;
         engine.ai.playTurn();
 
         // Should have done nothing
@@ -143,6 +153,7 @@ describe('AI Behavior', () => {
         // Gold 25 is safe.
         engine.state.players['P1'].gold = 25;
 
+        engine.state.players['P1'].isAI = true;
         engine.ai.playTurn();
 
         // Should have built wall OR upgraded defense at (0,1)

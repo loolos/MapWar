@@ -33,6 +33,7 @@ export class GameEngine {
     // Game Config State
     isSwapped: boolean = false;
     isGameOver: boolean = false;
+    private actedTilesThisTurn: Set<string> = new Set();
 
     // AI
     ai: AIController;
@@ -143,6 +144,7 @@ export class GameEngine {
         this.pendingInteractions = [];
         this.lastAiMoves = [];
         this.lastError = null;
+        this.actedTilesThisTurn.clear();
         this.isGameOver = false;
 
         // Update Audio State (React to changes)
@@ -171,6 +173,7 @@ export class GameEngine {
         this.pendingInteractions = [];
         this.lastAiMoves = [];
         this.lastError = null;
+        this.actedTilesThisTurn.clear();
         this.isGameOver = false;
 
         // Ensure Config Grid Size matches loaded state?
@@ -269,6 +272,7 @@ export class GameEngine {
 
     private advanceTurn() {
         const incomeReport = this.state.endTurn();
+        this.actedTilesThisTurn.clear();
 
         // Turn Change -> Re-evaluate Music
         this.checkAudioState();
@@ -600,6 +604,12 @@ export class GameEngine {
 
     planInteraction(row: number, col: number, actionId: string) {
         if (this.isGameOver) return;
+        if (this.hasActedThisTurn(row, col)) {
+            this.lastError = "Tile already acted this turn";
+            this.emit('logMessage', { text: `Action blocked: (${row}, ${col}) already acted this turn.`, type: 'warning' });
+            this.emit('planUpdate');
+            return;
+        }
 
         const action = this.interactionRegistry.get(actionId);
         if (!action) return;
@@ -696,6 +706,13 @@ export class GameEngine {
     // New: Toggle a move in the plan
     togglePlan(row: number, col: number) {
         if (this.isGameOver) return;
+        if (this.hasActedThisTurn(row, col)) {
+            this.lastError = "Tile already acted this turn";
+            if (this.shouldPlayPlanningSfx()) {
+                this.emit('sfx:cancel');
+            }
+            return;
+        }
         const existingIndex = this.pendingMoves.findIndex(m => m.r === row && m.c === col);
 
         if (existingIndex >= 0) {
@@ -1071,6 +1088,14 @@ export class GameEngine {
         );
     }
 
+    private hasActedThisTurn(row: number, col: number): boolean {
+        return this.actedTilesThisTurn.has(`${row},${col}`);
+    }
+
+    private markActedThisTurn(row: number, col: number) {
+        this.actedTilesThisTurn.add(`${row},${col}`);
+    }
+
     commitMoves() {
         const pid = this.state.currentPlayerId;
         if (!pid) return;
@@ -1098,6 +1123,9 @@ export class GameEngine {
         }));
 
         for (const { move, cost } of movesWithCost) {
+            if (this.hasActedThisTurn(move.r, move.c)) {
+                continue;
+            }
             const cell = this.state.getCell(move.r, move.c);
 
             if (!cell) continue; // Safety Check
@@ -1197,6 +1225,7 @@ export class GameEngine {
             // Deduct cost immediately to prevent overspending in subsequent iterations
             this.stateManager.spendGold(pid, cost);
             totalCost += cost;
+            this.markActedThisTurn(move.r, move.c);
         }
 
         // Emit SFX based on priority (Highest impact first)
@@ -1238,6 +1267,9 @@ export class GameEngine {
         interactionsToRun.forEach(interaction => {
             const action = this.interactionRegistry.get(interaction.actionId);
             if (action) {
+                if (this.hasActedThisTurn(interaction.r, interaction.c)) {
+                    return;
+                }
                 // Check Availability
                 if (action.isAvailable(this, interaction.r, interaction.c)) {
                     const c = typeof action.cost === 'function' ? action.cost(this, interaction.r, interaction.c) : action.cost;
@@ -1255,6 +1287,7 @@ export class GameEngine {
                     }
                     this.stateManager.spendGold(pid, c); // Deduct immediately (can go negative)
                     totalCost += c;
+                    this.markActedThisTurn(interaction.r, interaction.c);
                 } else {
                     console.warn(`Interaction ${interaction.actionId} failed validation at commit`);
                 }

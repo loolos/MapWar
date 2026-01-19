@@ -33,14 +33,11 @@ export class AIController {
 
     // AI Logic (Robust & Strategic)
     playTurn() {
-        console.log("AI playTurn start. Player:", this.engine.state.currentPlayerId);
         try {
             const aiPlayer = this.engine.state.getCurrentPlayer();
             if (!aiPlayer.isAI) {
-                console.log("Not AI, skipping.");
                 return;
             }
-            console.log("AI processing...");
 
             // Clear previous stats
             this.engine.lastAiMoves = [];
@@ -55,208 +52,193 @@ export class AIController {
 
             const turnCount = this.engine.state.turnCount;
             const isEarlyGame = turnCount <= weights.STRATEGY_EARLY_TURN_LIMIT;
+            const actedTiles = new Set<string>();
 
-            // Helper: Refresh Valid Moves
-            const getValidMoves = () => {
-                const moves: { r: number, c: number, score: number, cell: any, cost: number }[] = [];
-                const grid = this.engine.state.grid;
-
-                // Pre-calc: Find MY bases to defend
-                const myBases: { r: number, c: number }[] = [];
-                const disconnectedOwned = new Set<string>();
-                for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-                    for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
-                        const cell = grid[r][c];
-                        if (cell.owner === aiPlayer.id && cell.building === 'base') {
-                            myBases.push({ r, c });
-                        }
-                        if (cell.owner === aiPlayer.id && !cell.isConnected) {
-                            disconnectedOwned.add(`${r},${c}`);
-                        }
-                    }
-                }
-
-                for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-                    for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
-                        if (isOverBudget()) return moves;
-                        const validation = this.engine.validateMove(r, c);
-                        if (validation.valid) {
-                            // NEW: Check Cost explicitly (since validateMove purely checks rules now)
-                            const costValidation = this.engine.checkMoveCost(r, c);
-                            if (!costValidation.valid) continue;
-
-                            const cell = grid[r][c];
-                            const cost = this.engine.getMoveCost(r, c);
-
-                            // HEURISTIC SCORING
-                            let score = weights.SCORE_BASE_VALUE;
-
-                            // 1. Objectives
-                            score += this.scoreObjectives(cell, aiPlayer.id as string, weights);
-
-                            // 2. Aggression
-                            score += this.scoreAggression(cell, r, c, aiPlayer.id as string, myBases, weights);
-
-                            // 3. Tactical
-                            score += this.scoreTactical(cell, weights);
-
-                            // 4. Expansion
-                            score += this.scoreExpansion(cell, turnCount, weights);
-
-                            // 5. Aura Support
-                            score += this.scoreAura(r, c, aiPlayer.id as string, weights);
-
-                            // 6. Look-Ahead
-                            score += this.scoreLookAhead(r, c, aiPlayer.id as string, grid, weights);
-
-                            // 7. Reconnect Cut-Off Territory
-                            score += this.scoreReconnect(r, c, disconnectedOwned, weights);
-
-                            // 8. Cost Penalty
-                            score -= (cost * weights.COST_PENALTY_MULTIPLIER);
-
-                            // Random noise
-                            score += Math.random() * weights.RANDOM_NOISE;
-
-                            moves.push({ r, c, score, cell, cost });
-                        }
-                    }
-                }
-                moves.sort((a, b) => b.score - a.score);
-                return moves;
+            type ActionCategory = 'attack' | 'expand' | 'defense' | 'base_upgrade' | 'farm';
+            type ActionCandidate = {
+                kind: 'move' | 'interaction';
+                category: ActionCategory;
+                r: number;
+                c: number;
+                score: number;
+                cost: number;
+                actionId?: string;
             };
 
-            // ... (rest of playTurn)
 
-            // PASS 1: EXECUTION LOOP
-            let safetyCounter = 0;
-            const MAX_MOVES = weights.MAX_MOVES_PER_TURN;
-            const skippedMoves = new Set<string>();
-
-            while (safetyCounter < MAX_MOVES) {
-                if (isOverBudget()) break;
-                let potentialMoves = getValidMoves();
-
-                // Filter out moves that previously failed in this turn
-                potentialMoves = potentialMoves.filter(m => !skippedMoves.has(`${m.r},${m.c}`));
-
-                if (potentialMoves.length === 0) break;
-
-                const bestMove = potentialMoves[0];
-
-                // Try to Execute
-                this.engine.togglePlan(bestMove.r, bestMove.c);
-
-                if (this.engine.lastError) {
-                    // Mark as skipped and continue to next best
-                    skippedMoves.add(`${bestMove.r},${bestMove.c}`);
-                    continue;
-                } else {
-                    // Success - Commit immediately
-                    this.engine.lastAiMoves.push({ r: bestMove.r, c: bestMove.c });
-                    this.engine.commitMoves();
-                }
-
-                safetyCounter++;
-            }
-
-            // Post-Move Interactions (Spend excess gold on Upgrades)
-            const playerAfterMoves = this.engine.state.getCurrentPlayer();
-
-            if (playerAfterMoves.gold > 0) {
-                let simulatedGold = playerAfterMoves.gold;
-
-                type UpgradeCandidate = {
-                    score: number;
-                    cost: number;
-                    execute: () => boolean;
-                };
-
-                const candidates: UpgradeCandidate[] = [];
+            const buildCandidates = (): ActionCandidate[] => {
+                const candidates: ActionCandidate[] = [];
+                const grid = this.engine.state.grid;
+                const myBases: { r: number; c: number }[] = [];
+                const ownedCells: { r: number; c: number }[] = [];
+                const disconnectedOwned = new Set<string>();
                 const threatByKey = new Map<string, number>();
-                const myBases: { r: number, c: number, cell: any }[] = [];
-                const myFarms: { r: number, c: number, cell: any }[] = [];
-                const myFrontLines: { r: number, c: number, cell: any, threat: number }[] = [];
-                const farmSpots: { r: number, c: number, auraBonus: number }[] = [];
-
-                const tryPlan = (r: number, c: number, actionId: string) => {
-                    const before = this.engine.pendingInteractions.length;
-                    this.engine.planInteraction(r, c, actionId);
-                    return this.engine.pendingInteractions.length > before;
-                };
-
-                const addCandidate = (score: number, cost: number, execute: () => boolean) => {
-                    if (score <= 0) return;
-                    candidates.push({ score, cost, execute });
-                };
+                const myFrontLines: { r: number; c: number; cell: any; threat: number }[] = [];
+                const farmSpots: { r: number; c: number; auraBonus: number }[] = [];
+                let farmIncome = 0;
+                let baseIncome = 0;
 
                 for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
                     for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
-                        if (isOverBudget()) break;
-                        const cell = this.engine.state.getCell(r, c);
-                        if (!cell || cell.owner !== aiPlayer.id) continue;
-
-                        if (cell.building === 'base') {
-                            myBases.push({ r, c, cell });
-                        }
-
-                        if (cell.building === 'farm') {
-                            myFarms.push({ r, c, cell });
-                        }
-
-                        const neighbors = [
-                            { r: r + 1, c: c }, { r: r - 1, c: c },
-                            { r: r, c: c + 1 }, { r: r, c: c - 1 }
-                        ];
-                        let threat = 0;
-                        for (let i = 0; i < neighbors.length; i++) {
-                            const n = neighbors[i];
-                            const nCell = this.engine.state.getCell(n.r, n.c);
-                            if (nCell && nCell.owner && nCell.owner !== aiPlayer.id) {
-                                threat++;
+                        if (isOverBudget()) return candidates;
+                        const cell = grid[r][c];
+                        if (cell.owner === aiPlayer.id) {
+                            ownedCells.push({ r, c });
+                            if (cell.building === 'base') {
+                                myBases.push({ r, c });
+                            }
+                            if (!cell.isConnected) {
+                                disconnectedOwned.add(`${r},${c}`);
+                            }
+                            const income = this.engine.state.getTileIncome(r, c);
+                            if (cell.building === 'farm') {
+                                farmIncome += income;
+                            } else if (cell.building === 'base') {
+                                baseIncome += income;
                             }
                         }
+                    }
+                }
+                const farmToBaseRatio = baseIncome > 0 ? farmIncome / baseIncome : farmIncome > 0 ? 1 : 0;
+                const farmBalanceBonus = farmToBaseRatio < weights.ECONOMY_FARM_INCOME_TARGET_RATIO
+                    ? weights.ECONOMY_FARM_BALANCE_BONUS
+                    : 0;
+                const baseBalanceBonus = farmToBaseRatio > weights.ECONOMY_FARM_INCOME_TARGET_RATIO
+                    ? weights.ECONOMY_BASE_BALANCE_BONUS
+                    : 0;
 
-                        if (threat > 0) {
-                            const key = `${r},${c}`;
-                            threatByKey.set(key, threat);
-                            myFrontLines.push({ r, c, cell, threat });
+                const countEnemyAdjacent = (r: number, c: number) => {
+                    let enemies = 0;
+                    const neighbors = [
+                        { r: r + 1, c }, { r: r - 1, c },
+                        { r, c: c + 1 }, { r, c: c - 1 }
+                    ];
+                    for (const n of neighbors) {
+                        if (!this.engine.isValidCell(n.r, n.c)) continue;
+                        const nCell = this.engine.state.getCell(n.r, n.c);
+                        if (nCell && nCell.owner && nCell.owner !== aiPlayer.id) {
+                            enemies++;
                         }
+                    }
+                    return enemies;
+                };
 
-                        if (cell.building === 'none' && cell.type === 'plain' && cell.isConnected) {
-                            const auraBonus = AuraSystem.getIncomeAuraBonus(this.engine.state, r, c, aiPlayer.id as string);
-                            if (auraBonus > 0) {
-                                farmSpots.push({ r, c, auraBonus });
-                            }
+                const addInteraction = (r: number, c: number, actionId: string, score: number, category: ActionCategory) => {
+                    if (actedTiles.has(`${r},${c}`)) return;
+                    const action = this.engine.interactionRegistry.get(actionId);
+                    if (!action) return;
+                    if (!action.isAvailable(this.engine, r, c, true)) return;
+                    const cost = typeof action.cost === 'function' ? action.cost(this.engine, r, c) : action.cost;
+                    if (cost <= 0) return;
+                    candidates.push({ kind: 'interaction', category, r, c, score, cost, actionId });
+                };
+
+                // Build candidate positions: owned tiles and their neighbors
+                const candidatePositions = new Set<string>();
+                for (const cellPos of ownedCells) {
+                    const { r, c } = cellPos;
+                    candidatePositions.add(`${r},${c}`);
+                    const neighbors = [
+                        { r: r + 1, c }, { r: r - 1, c },
+                        { r, c: c + 1 }, { r, c: c - 1 }
+                    ];
+                    for (const n of neighbors) {
+                        if (this.engine.isValidCell(n.r, n.c)) {
+                            candidatePositions.add(`${n.r},${n.c}`);
+                        }
+                    }
+                }
+
+                // Move candidates (owned + adjacent)
+                for (const key of candidatePositions) {
+                    if (isOverBudget()) return candidates;
+                    const [rStr, cStr] = key.split(',');
+                    const r = Number(rStr);
+                    const c = Number(cStr);
+                    if (!this.engine.isValidCell(r, c)) continue;
+                    if (actedTiles.has(`${r},${c}`)) continue;
+
+                    const validation = this.engine.validateMove(r, c);
+                    if (!validation.valid) continue;
+                    const costValidation = this.engine.checkMoveCost(r, c);
+                    if (!costValidation.valid) continue;
+
+                    const cell = grid[r][c];
+                    const cost = this.engine.getMoveCost(r, c);
+                    let score = weights.SCORE_BASE_VALUE;
+                    score += this.scoreObjectives(cell, aiPlayer.id as string, weights);
+                    score += this.scoreAggression(cell, r, c, aiPlayer.id as string, myBases, weights);
+                    score += this.scoreTactical(cell, weights);
+                    score += this.scoreExpansion(cell, turnCount, weights);
+                    score += this.scoreAura(r, c, aiPlayer.id as string, weights);
+                    score += this.scoreLookAhead(r, c, aiPlayer.id as string, grid, weights);
+                    score += this.scoreReconnect(r, c, disconnectedOwned, weights);
+                    const enemyAdj = countEnemyAdjacent(r, c);
+                    if (enemyAdj > 0) {
+                        score -= enemyAdj * weights.RISK_ENEMY_ADJACENT_PENALTY;
+                    }
+                    score -= (cost * weights.COST_PENALTY_MULTIPLIER);
+                    score += Math.random() * weights.RANDOM_NOISE;
+
+                    const category: ActionCategory = cell.owner && cell.owner !== aiPlayer.id ? 'attack' : 'expand';
+                    if (category === 'attack' && turnCount >= weights.STRATEGY_ENDGAME_TURN) {
+                        score += weights.STRATEGY_ENDGAME_ATTACK_BONUS;
+                    }
+                    candidates.push({ kind: 'move', category, r, c, score, cost });
+                }
+
+                // Interaction candidates
+                for (const cellPos of ownedCells) {
+                    if (isOverBudget()) return candidates;
+                    const { r, c } = cellPos;
+                    if (actedTiles.has(`${r},${c}`)) continue;
+                    const cell = this.engine.state.getCell(r, c);
+                    if (!cell) continue;
+
+                    const neighbors = [
+                        { r: r + 1, c: c }, { r: r - 1, c: c },
+                        { r: r, c: c + 1 }, { r: r, c: c - 1 }
+                    ];
+                    let threat = 0;
+                    for (let i = 0; i < neighbors.length; i++) {
+                        const n = neighbors[i];
+                        const nCell = this.engine.state.getCell(n.r, n.c);
+                        if (nCell && nCell.owner && nCell.owner !== aiPlayer.id) {
+                            threat++;
+                        }
+                    }
+                    if (threat > 0) {
+                        const key = `${r},${c}`;
+                        threatByKey.set(key, threat);
+                        myFrontLines.push({ r, c, cell, threat });
+                    }
+
+                    if (cell.building === 'none' && cell.type === 'plain' && cell.isConnected) {
+                        const auraBonus = AuraSystem.getIncomeAuraBonus(this.engine.state, r, c, aiPlayer.id as string);
+                        if (auraBonus > 0) {
+                            farmSpots.push({ r, c, auraBonus });
                         }
                     }
                 }
 
                 for (const base of myBases) {
                     if (isOverBudget()) break;
-                    const { r, c, cell } = base;
+                    const { r, c } = base;
+                    const cell = this.engine.state.getCell(r, c);
+                    if (!cell) continue;
                     if (cell.incomeLevel < GameConfig.UPGRADE_INCOME_MAX) {
                         const score = weights.ECONOMY_BASE_INCOME
                             + (cell.incomeLevel * weights.ECONOMY_BASE_INCOME_LEVEL)
+                            + baseBalanceBonus
                             + (isEarlyGame ? weights.STRATEGY_BASE_UPGRADE_BONUS : 0);
-                        addCandidate(score, GameConfig.UPGRADE_INCOME_COST, () => tryPlan(r, c, 'UPGRADE_INCOME'));
+                        addInteraction(r, c, 'UPGRADE_INCOME', score, 'base_upgrade');
                     }
-
                     if (cell.defenseLevel < GameConfig.UPGRADE_DEFENSE_MAX) {
                         const threat = threatByKey.get(`${r},${c}`) || 0;
                         const score = weights.DEFENSE_BASE_UPGRADE
                             + (threat * weights.DEFENSE_THREAT_MULT)
                             + weights.STRATEGY_BASE_UPGRADE_BONUS;
-                        addCandidate(score, GameConfig.UPGRADE_DEFENSE_COST, () => tryPlan(r, c, 'UPGRADE_DEFENSE'));
-                    }
-                }
-
-                for (const farm of myFarms) {
-                    if (isOverBudget()) break;
-                    const { r, c, cell } = farm;
-                    if (cell.farmLevel < GameConfig.FARM_MAX_LEVEL) {
-                        const score = weights.ECONOMY_FARM_UPGRADE + (cell.farmLevel * weights.ECONOMY_FARM_LEVEL);
-                        addCandidate(score, GameConfig.COST_UPGRADE_FARM, () => tryPlan(r, c, 'UPGRADE_FARM'));
+                        addInteraction(r, c, 'UPGRADE_DEFENSE', score, 'defense');
                     }
                 }
 
@@ -264,44 +246,112 @@ export class AIController {
                     if (isOverBudget()) break;
                     const score = weights.ECONOMY_FARM_BUILD
                         + (spot.auraBonus * weights.ECONOMY_AURA_BONUS_MULT)
+                        + farmBalanceBonus
                         + (isEarlyGame ? weights.STRATEGY_EARLY_FARM_BONUS : 0);
-                    addCandidate(score, GameConfig.COST_BUILD_FARM, () => tryPlan(spot.r, spot.c, 'BUILD_FARM'));
+                    addInteraction(spot.r, spot.c, 'BUILD_FARM', score, 'farm');
                 }
 
-                for (const spot of myFrontLines) {
+                for (const r of myFrontLines) {
                     if (isOverBudget()) break;
-                    const { r, c, cell, threat } = spot;
-                    const threatScore = threat * weights.DEFENSE_THREAT_MULT;
-
-                    if (cell.building === 'none' && cell.type === 'plain') {
+                    const threatScore = r.threat * weights.DEFENSE_THREAT_MULT;
+                    if (r.cell.building === 'none' && r.cell.type === 'plain') {
                         const score = weights.DEFENSE_WALL_BUILD + threatScore + weights.STRATEGY_WALL_PRIORITY_BONUS;
-                        addCandidate(score, GameConfig.COST_BUILD_WALL, () => tryPlan(r, c, 'BUILD_WALL'));
-                    } else if (cell.building === 'wall') {
-                        if (cell.watchtowerLevel === 0) {
-                            addCandidate(weights.DEFENSE_WATCHTOWER_BUILD + threatScore, GameConfig.COST_BUILD_WATCHTOWER, () => tryPlan(r, c, 'BUILD_WATCHTOWER'));
-                        } else if (cell.watchtowerLevel < GameConfig.WATCHTOWER_MAX_LEVEL) {
-                            addCandidate(weights.DEFENSE_WATCHTOWER_UPGRADE + threatScore, GameConfig.COST_UPGRADE_WATCHTOWER, () => tryPlan(r, c, 'UPGRADE_WATCHTOWER'));
+                        addInteraction(r.r, r.c, 'BUILD_WALL', score, 'defense');
+                    } else if (r.cell.building === 'wall') {
+                        if (r.cell.watchtowerLevel === 0) {
+                            const score = weights.DEFENSE_WATCHTOWER_BUILD + threatScore;
+                            addInteraction(r.r, r.c, 'BUILD_WATCHTOWER', score, 'defense');
+                        } else if (r.cell.watchtowerLevel < GameConfig.WATCHTOWER_MAX_LEVEL) {
+                            const score = weights.DEFENSE_WATCHTOWER_UPGRADE + threatScore;
+                            addInteraction(r.r, r.c, 'UPGRADE_WATCHTOWER', score, 'defense');
                         }
-
-                        if (cell.defenseLevel < GameConfig.UPGRADE_WALL_MAX) {
-                            addCandidate(weights.DEFENSE_WALL_UPGRADE + threatScore, GameConfig.UPGRADE_WALL_COST, () => tryPlan(r, c, 'UPGRADE_DEFENSE'));
+                        if (r.cell.defenseLevel < GameConfig.UPGRADE_WALL_MAX) {
+                            const score = weights.DEFENSE_WALL_UPGRADE + threatScore;
+                            addInteraction(r.r, r.c, 'UPGRADE_DEFENSE', score, 'defense');
                         }
                     }
                 }
 
-                candidates.sort((a, b) => b.score - a.score);
-
-                for (const candidate of candidates) {
-                    if (isOverBudget()) break;
-                    if (simulatedGold < candidate.cost) continue;
-                    if (candidate.execute()) {
-                        simulatedGold -= candidate.cost;
+                for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+                    for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+                        const cell = this.engine.state.getCell(r, c);
+                        if (!cell || cell.owner !== aiPlayer.id) continue;
+                        if (actedTiles.has(`${r},${c}`)) continue;
+                        if (cell.building === 'farm' && cell.farmLevel < GameConfig.FARM_MAX_LEVEL) {
+                            const score = weights.ECONOMY_FARM_UPGRADE
+                                + (cell.farmLevel * weights.ECONOMY_FARM_LEVEL)
+                                + farmBalanceBonus;
+                            addInteraction(r, c, 'UPGRADE_FARM', score, 'farm');
+                        }
                     }
                 }
 
-                if (this.engine.pendingInteractions.length > 0) {
+                return candidates;
+            };
+
+            let actionCounter = 0;
+            const MAX_ACTIONS = weights.MAX_MOVES_PER_TURN;
+            let remainingGold = aiPlayer.gold;
+            const skipped = new Set<string>();
+
+            const initialCandidates = buildCandidates();
+            const bestTarget = initialCandidates
+                .filter((c) => c.kind === 'move')
+                .map((c) => ({ candidate: c, cell: this.engine.state.getCell(c.r, c.c) }))
+                .filter(({ cell }) => !!cell && cell.owner && cell.owner !== aiPlayer.id && (cell.building === 'base' || cell.building === 'town'))
+                .sort((a, b) => b.candidate.score - a.candidate.score)[0];
+
+            if (bestTarget && bestTarget.candidate.cost > remainingGold) {
+                const income = this.engine.state.calculateIncome(aiPlayer.id as string);
+                const incomePerTurn = Math.max(income || 0, 1);
+                const shortfall = bestTarget.candidate.cost - remainingGold;
+                const turnsNeeded = Math.ceil(shortfall / incomePerTurn);
+                if (turnsNeeded <= weights.SAVE_FOR_TARGET_MAX_TURNS && bestTarget.candidate.score >= weights.SAVE_FOR_TARGET_MIN_SCORE) {
+                    return;
+                }
+            }
+
+            while (actionCounter < MAX_ACTIONS) {
+                if (isOverBudget()) break;
+                const candidates = buildCandidates();
+                const eligible = candidates.filter((c) => {
+                    const key = `${c.kind}:${c.actionId ?? 'move'}:${c.r},${c.c}`;
+                    if (skipped.has(key)) return false;
+                    if (c.cost > remainingGold) return false;
+                    if (actedTiles.has(`${c.r},${c.c}`)) return false;
+                    return true;
+                });
+
+                if (eligible.length === 0) break;
+                eligible.sort((a, b) => b.score - a.score);
+                const best = eligible[0];
+                const key = `${best.kind}:${best.actionId ?? 'move'}:${best.r},${best.c}`;
+                let executed = false;
+
+                if (best.kind === 'move') {
+                    this.engine.togglePlan(best.r, best.c);
+                    if (this.engine.lastError) {
+                        skipped.add(key);
+                        continue;
+                    }
+                    this.engine.lastAiMoves.push({ r: best.r, c: best.c });
                     this.engine.commitMoves();
+                    executed = true;
+                } else if (best.actionId) {
+                    const before = this.engine.pendingInteractions.length;
+                    this.engine.planInteraction(best.r, best.c, best.actionId);
+                    if (this.engine.pendingInteractions.length > before) {
+                        this.engine.commitMoves();
+                        executed = true;
+                    } else {
+                        skipped.add(key);
+                    }
                 }
+
+                if (!executed) continue;
+                actedTiles.add(`${best.r},${best.c}`);
+                remainingGold = this.engine.state.getCurrentPlayer().gold;
+                actionCounter++;
             }
 
         } catch (err) {
@@ -414,6 +464,11 @@ export class AIController {
                 adjacentDisconnected++;
             }
         }
-        return adjacentDisconnected * weights.RECONNECT_DISCONNECTED_SCORE;
+        if (adjacentDisconnected === 0) return 0;
+        let score = adjacentDisconnected * weights.RECONNECT_DISCONNECTED_SCORE;
+        if (adjacentDisconnected > 1) {
+            score += (adjacentDisconnected - 1) * weights.RECONNECT_MULTI_BONUS;
+        }
+        return score;
     }
 }

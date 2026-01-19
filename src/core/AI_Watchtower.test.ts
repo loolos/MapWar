@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { GameEngine } from './GameEngine';
 import { AIController } from './AIController';
+import { GameConfig } from './GameConfig';
 
 describe('AI Watchtower Logic', () => {
     let engine: GameEngine;
@@ -34,6 +35,9 @@ describe('AI Watchtower Logic', () => {
         // P2 Base at (5,5) - Out of Aura Range
         engine.state.setOwner(5, 5, 'P2');
         engine.state.setBuilding(5, 5, 'base');
+        const base = engine.state.getCell(5, 5)!;
+        base.incomeLevel = GameConfig.UPGRADE_INCOME_MAX;
+        base.defenseLevel = GameConfig.UPGRADE_DEFENSE_MAX;
 
         // Surround Base with MAX LEVEL WALLS to block EVERYTHING
         // - Cannot Move (Owned)
@@ -50,6 +54,7 @@ describe('AI Watchtower Logic', () => {
         // Wall at (0,1) owned by P2
         engine.state.setOwner(0, 1, 'P2');
         engine.state.setBuilding(0, 1, 'wall');
+        engine.state.getCell(0, 1)!.defenseLevel = GameConfig.UPGRADE_WALL_MAX;
         engine.state.getCell(0, 1)!.isConnected = true;
 
         // Also surround (0,1) to prevent expansion from there
@@ -93,6 +98,9 @@ describe('AI Watchtower Logic', () => {
         // P2 Base at (5,5)
         engine.state.setOwner(5, 5, 'P2');
         engine.state.setBuilding(5, 5, 'base');
+        const base = engine.state.getCell(5, 5)!;
+        base.incomeLevel = GameConfig.UPGRADE_INCOME_MAX;
+        base.defenseLevel = GameConfig.UPGRADE_DEFENSE_MAX;
 
         // Surround Base with MAX LEVEL HOSTILE BASES to block EVERYTHING
         const neighbors = [{ r: 4, c: 5 }, { r: 6, c: 5 }, { r: 5, c: 4 }, { r: 5, c: 6 }];
@@ -108,6 +116,7 @@ describe('AI Watchtower Logic', () => {
         engine.state.setBuilding(0, 1, 'wall');
         const cell = engine.state.getCell(0, 1)!;
         cell.watchtowerLevel = 1;
+        cell.defenseLevel = GameConfig.UPGRADE_WALL_MAX;
         cell.isConnected = true;
 
         // Also surround (0,1) with Hostile Bases

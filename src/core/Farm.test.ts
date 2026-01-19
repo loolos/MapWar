@@ -7,6 +7,7 @@ describe('Farm Logic', () => {
 
     beforeEach(() => {
         engine = new GameEngine();
+        engine.state.players['P2'].isAI = false;
         engine.startGame();
         // P1 Base at 0,0
         engine.state.setOwner(0, 0, 'P1');
@@ -65,6 +66,8 @@ describe('Farm Logic', () => {
         engine.commitMoves();
 
         // Upgrade to Lv 2
+        engine.endTurn();
+        engine.endTurn();
         engine.planInteraction(0, 1, 'UPGRADE_FARM');
         engine.commitMoves();
 
@@ -84,7 +87,7 @@ describe('Farm Logic', () => {
         engine.commitMoves();
 
         // P2 Captures
-        engine.state.currentPlayerId = 'P2';
+        engine.endTurn();
         engine.state.players['P2'].gold = 100;
 
         // P2 is at (0,2)

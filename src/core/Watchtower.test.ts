@@ -6,6 +6,7 @@ describe('Watchtower Logic', () => {
 
     beforeEach(() => {
         engine = new GameEngine();
+        engine.state.players['P2'].isAI = false;
         // Setup simple grid
         const height = engine.state.grid.length;
         const width = height > 0 ? engine.state.grid[0].length : 0;
@@ -40,11 +41,15 @@ describe('Watchtower Logic', () => {
         expect(cell.watchtowerLevel).toBe(1);
 
         // 2. Upgrade to Lv 2
+        engine.endTurn();
+        engine.endTurn();
         engine.planInteraction(0, 1, 'UPGRADE_WATCHTOWER');
         engine.commitMoves();
         expect(cell.watchtowerLevel).toBe(2);
 
         // 3. Upgrade to Lv 3
+        engine.endTurn();
+        engine.endTurn();
         engine.planInteraction(0, 1, 'UPGRADE_WATCHTOWER');
         engine.commitMoves();
         expect(cell.watchtowerLevel).toBe(3);
