@@ -10,6 +10,12 @@ export class InteractionRegistry {
         this.registerDefaults();
     }
 
+    private formatLogNumber(value: number): string {
+        if (!Number.isFinite(value)) return String(value);
+        const rounded = Math.round(value * 10) / 10;
+        return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+    }
+
     register(action: InteractionDefinition) {
         this.actions.set(action.id, action);
     }
@@ -161,7 +167,7 @@ export class InteractionRegistry {
                 if (cell) {
                     cell.incomeLevel++;
                     const bonus = GameConfig.UPGRADE_INCOME_BONUS[cell.incomeLevel - 1];
-                    engine.emit('logMessage', { text: `Base economy upgraded! Income +${bonus}`, type: 'info' });
+                    engine.emit('logMessage', { text: `Base economy upgraded! Income +${this.formatLogNumber(bonus)}`, type: 'info' });
                 }
             }
         });
@@ -322,7 +328,7 @@ export class InteractionRegistry {
                 if (cell) {
                     cell.farmLevel++;
                     const inc = GameConfig.FARM_INCOME[cell.farmLevel];
-                    engine.emit('logMessage', { text: `Farm upgraded to Lv ${cell.farmLevel} (+${inc}G)`, type: 'info' });
+                    engine.emit('logMessage', { text: `Farm upgraded to Lv ${cell.farmLevel} (+${this.formatLogNumber(inc)}G)`, type: 'info' });
                 }
             }
         });

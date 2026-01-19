@@ -653,7 +653,7 @@ export class GameEngine {
             this.lastError = `Not enough gold for ${label}`;
             // Error Log (Red)
             this.emit('logMessage', {
-                text: `Insufficient Funds: Need ${currentCost + cost}G (Have ${player.gold}G) for ${label}.`,
+                text: `Insufficient Funds: Need ${this.formatLogNumber(currentCost + cost)}G (Have ${this.formatLogNumber(player.gold)}G) for ${label}.`,
                 type: 'error'
             });
             this.emit('planUpdate');
@@ -985,14 +985,14 @@ export class GameEngine {
         const thisMoveCost = this.getMoveCost(row, col);
 
         if (player.gold < plannedCost + thisMoveCost) {
-            let reason = `Not enough gold(Need ${thisMoveCost})`;
+            let reason = `Not enough gold(Need ${this.formatLogNumber(thisMoveCost)})`;
             const isLongRange = !this.state.isAdjacentToOwned(row, col, player.id);
             if (isLongRange) reason += " (Includes Distance Penalty)";
 
             // Only log if this is an explicit action (User Click) AND not AI
             if (isAction && !player.isAI) {
                 const details = this.getCostDetails(row, col);
-                const logMsg = `Insufficient Funds: Need ${plannedCost + thisMoveCost}G (Have ${player.gold}G). \nCost Logic: ${details.breakdown || 'Base Cost'}`;
+                const logMsg = `Insufficient Funds: Need ${this.formatLogNumber(plannedCost + thisMoveCost)}G (Have ${this.formatLogNumber(player.gold)}G). \nCost Logic: ${details.breakdown || 'Base Cost'}`;
                 this.emit('logMessage', { text: logMsg, type: 'error' });
             }
 
@@ -1356,16 +1356,22 @@ export class GameEngine {
         }
     }
 
+    private formatLogNumber(value: number): string {
+        if (!Number.isFinite(value)) return String(value);
+        const rounded = Math.round(value * 10) / 10;
+        return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+    }
+
     private logIncomeReport(incomeReport: any) {
         // Detailed Income Summary Log (White/Info)
         const parts = [];
-        if (incomeReport.base > 0) parts.push(`Base: +${incomeReport.base}`);
-        if (incomeReport.town > 0) parts.push(`Towns: +${incomeReport.town}`);
-        if (incomeReport.mine > 0) parts.push(`Mines: +${incomeReport.mine}`);
-        if (incomeReport.farm > 0) parts.push(`Farms: +${incomeReport.farm}`);
-        if (incomeReport.land > 0) parts.push(`Land(${incomeReport.landCount}): +${incomeReport.land}`);
+        if (incomeReport.base > 0) parts.push(`Base: +${this.formatLogNumber(incomeReport.base)}`);
+        if (incomeReport.town > 0) parts.push(`Towns: +${this.formatLogNumber(incomeReport.town)}`);
+        if (incomeReport.mine > 0) parts.push(`Mines: +${this.formatLogNumber(incomeReport.mine)}`);
+        if (incomeReport.farm > 0) parts.push(`Farms: +${this.formatLogNumber(incomeReport.farm)}`);
+        if (incomeReport.land > 0) parts.push(`Land(${incomeReport.landCount}): +${this.formatLogNumber(incomeReport.land)}`);
 
-        const summaryText = `Turn ${this.state.turnCount} Start. Income: +${incomeReport.total} (${parts.join(', ')})`;
+        const summaryText = `Turn ${this.state.turnCount} Start. Income: +${this.formatLogNumber(incomeReport.total)} (${parts.join(', ')})`;
         this.emit('logMessage', { text: summaryText, type: 'info' });
 
         if (incomeReport.depletedMines && incomeReport.depletedMines.length > 0) {

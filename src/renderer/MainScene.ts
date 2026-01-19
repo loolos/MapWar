@@ -414,7 +414,12 @@ export class MainScene extends Phaser.Scene {
         this.engine.on('incomeReport', (report: any) => {
             const isAI = this.engine.state.getCurrentPlayer().isAI;
             const prefix = isAI ? "AI: " : "Income: ";
-            const msg = `${prefix}+${report.total}G (B:${report.base}, L:${report.land})`;
+            const formatNum = (val: number) => {
+                if (!Number.isFinite(val)) return String(val);
+                const rounded = Math.round(val * 10) / 10;
+                return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+            };
+            const msg = `${prefix}+${formatNum(report.total)}G (B:${formatNum(report.base)}, L:${formatNum(report.land)})`;
             this.logSystem.addLog(msg, 'info');
         });
 
