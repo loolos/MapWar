@@ -13,6 +13,7 @@
     "ai:selfplay": "tsx scripts/ai_selfplay.ts",
     "ai:selfplay:tune": "tsx scripts/ai_selfplay_tune.ts",
     "ai:selfplay:benchmark": "tsx scripts/ai_selfplay_benchmark.ts",
+    "ai:evolve": "tsx scripts/ai_evolve.ts",
     "prepare": "husky"
   },
   "devDependencies": {
