@@ -40,7 +40,7 @@ export const GameConfig = {
     AURA_BONUS_STEP: 0.05, // +5% per step closer / higher level
     // Wall Configs
     COST_BUILD_WALL: 10,
-    WALL_DEFENSE_BONUS: 30, // Increased from 20
+    WALL_DEFENSE_BONUS: 20, // Per level bonus for capture cost
     WALL_CAPTURE_BASE_ADDITION: 10,
     UPGRADE_WALL_COST: 10,
     UPGRADE_WALL_MAX: 3,
@@ -52,6 +52,7 @@ export const GameConfig = {
     WATCHTOWER_RANGES: [0, 2, 3, 4], // Index 1 = 2 tiles, 2 = 3 tiles...
     WATCHTOWER_DISCOUNT_BASE: 0.20,
     WATCHTOWER_DISCOUNT_PER_WALL: 0.05,
+    WATCHTOWER_DEFENSE_BONUS: 5, // Per level bonus for capture cost
     // Global Cost Multipliers (System Parameters)
     COST_MULTIPLIER_NEUTRAL: 1.0,
     COST_MULTIPLIER_ATTACK: 1.2,

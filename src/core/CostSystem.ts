@@ -70,6 +70,13 @@ export class CostSystem {
                     breakdownParts.push(`Wall Disconnected(+0)`);
                 }
             }
+
+            // Watchtower Defense (applies to any building with watchtower)
+            if (cell.watchtowerLevel > 0 && cell.isConnected) {
+                const watchtowerBonus = cell.watchtowerLevel * GameConfig.WATCHTOWER_DEFENSE_BONUS;
+                baseCost += watchtowerBonus;
+                breakdownParts.push(`Tower Lv${cell.watchtowerLevel}(+${watchtowerBonus})`);
+            }
         }
 
         // 3. Multipliers
@@ -218,6 +225,13 @@ export class CostSystem {
             } else {
                 breakdownParts.push(`Wall Disconnected(+0)`);
             }
+        }
+
+        // Watchtower Defense (applies to any building with watchtower)
+        if (cell.watchtowerLevel > 0 && cell.isConnected) {
+            const watchtowerBonus = cell.watchtowerLevel * GameConfig.WATCHTOWER_DEFENSE_BONUS;
+            baseCost += watchtowerBonus;
+            breakdownParts.push(`Tower Lv${cell.watchtowerLevel}(+${watchtowerBonus})`);
         }
 
         // Aura: Wall Defense (from Neighbors)
