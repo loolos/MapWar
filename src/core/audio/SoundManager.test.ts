@@ -93,11 +93,11 @@ describe('SoundManager', () => {
         expect(Tone.MetalSynth).toHaveBeenCalled();
     });
 
-    it('updates bgm state and triggers Transport', () => {
+    it('updates bgm state and triggers Transport', async () => {
         soundManager.setBgmState('TENSION');
         expect(soundManager.bgmState).toBe('TENSION');
 
-        soundManager.playBgm('bgm_test');
+        await soundManager.playBgm('bgm_test');
         expect(Tone.Transport.start).toHaveBeenCalled();
         expect(Tone.Transport.bpm.value).toBe(90); // Tension BPM
     });

@@ -389,7 +389,9 @@ export class MainScene extends Phaser.Scene {
         this.engine.on('sfx:base_upgrade_defense', () => this.soundManager.playSfx('sfx:base_upgrade_defense'));
 
         // Start BGM
-        this.soundManager.playBgm('bgm_main');
+        this.soundManager.playBgm('bgm_main').catch((err) => {
+            console.warn("Could not start BGM:", err);
+        });
 
         this.engine.on('gameRestart', () => {
             if (this.overlayContainer) {

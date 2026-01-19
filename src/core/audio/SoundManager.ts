@@ -244,10 +244,10 @@ export class SoundManager {
         }
     }
 
-    public playBgm(key: string) {
+    public async playBgm(key: string) {
         // We ignore the key, we procedurally generate based on state
         console.log("Requested BGM:", key);
-        this.startContext();
+        await this.startContext();
         this.updateBgm();
         Tone.Transport.start();
     }

@@ -344,7 +344,7 @@ vi.mock('../core/audio/SoundManager', () => ({
     SoundManager: vi.fn().mockImplementation(function () {
         return {
             playSfx: vi.fn(),
-            playBgm: vi.fn(),
+            playBgm: vi.fn().mockResolvedValue(undefined),
             stopBgm: vi.fn(),
             setBgmState: vi.fn(),
             toggleMute: vi.fn(),
