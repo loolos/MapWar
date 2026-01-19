@@ -213,7 +213,9 @@ export class AIController {
                         myFrontLines.push({ r, c, cell, threat });
                     }
 
-                    if (cell.building === 'none' && cell.type === 'plain' && cell.isConnected) {
+                    // Only add to farm spots if not on front line (threat = 0)
+                    // Front line cells should prioritize defense over economy
+                    if (threat === 0 && cell.building === 'none' && cell.type === 'plain' && cell.isConnected) {
                         const auraBonus = AuraSystem.getIncomeAuraBonus(this.engine.state, r, c, aiPlayer.id as string);
                         if (auraBonus > 0) {
                             farmSpots.push({ r, c, auraBonus });

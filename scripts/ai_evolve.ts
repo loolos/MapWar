@@ -24,6 +24,7 @@ type CliOptions = {
     baseVariantRange: number;
     defaultVariantRange: number;
     diversityWeight: number;
+    winBonusMultiplier: number;
     outDir: string;
     quiet: boolean;
     writeProfile: boolean;
@@ -38,6 +39,7 @@ type Individual = {
     avgPointsRaw: number;
     avgTurns: number;
     decisiveRate: number;
+    avgDecisiveBonus: number;
 };
 
 type MatchResult = {
@@ -57,7 +59,7 @@ const parseArgs = (): CliOptions => {
     const options: CliOptions = {
         seed: Date.now(),
         rounds: 3,
-        matchesPerAi: 10,
+        matchesPerAi: 5,
         maxTurns: 200,
         mapTypes: ['default', 'archipelago', 'pangaea'],
         width: 15,
@@ -67,6 +69,7 @@ const parseArgs = (): CliOptions => {
         baseVariantRange: 0.1,
         defaultVariantRange: 0.4,
         diversityWeight: 0.1,
+        winBonusMultiplier: 3,
         outDir: 'reports',
         quiet: false,
         writeProfile: false
@@ -122,6 +125,10 @@ const parseArgs = (): CliOptions => {
                 break;
             case '--diversity-weight':
                 options.diversityWeight = parseFloat(next);
+                i++;
+                break;
+            case '--win-bonus':
+                options.winBonusMultiplier = parseFloat(next);
                 i++;
                 break;
             case '--out':
@@ -238,24 +245,42 @@ const runMatch = (
     profilesByPlayer: Record<string, AIProfile>,
     seed: number,
     mapType: MapType,
-    options: CliOptions
+    options: CliOptions,
+    positionRotation: number = 0
 ): MatchResult => {
     return withSeededRandom(seed, (rng) => {
         (GameConfig as any).GRID_WIDTH = options.width;
         (GameConfig as any).GRID_HEIGHT = options.height;
 
-        const players = Array.from({ length: options.playerCount }, (_, index) => {
-            const id = `P${index + 1}`;
-            return {
-                id,
-                isAI: true,
-                color: GameConfig.COLORS[id as keyof typeof GameConfig.COLORS]
-            };
-        });
+        // Create players array with rotation
+        // Rotate player positions so each AI gets to play each starting position
+        const basePlayerIds = Array.from({ length: options.playerCount }, (_, index) => `P${index + 1}`);
+        const rotatedPlayerIds = [];
+        for (let i = 0; i < basePlayerIds.length; i++) {
+            const rotatedIndex = (i + positionRotation) % basePlayerIds.length;
+            rotatedPlayerIds.push(basePlayerIds[rotatedIndex]);
+        }
+
+        const players = rotatedPlayerIds.map((id) => ({
+            id,
+            isAI: true,
+            color: GameConfig.COLORS[id as keyof typeof GameConfig.COLORS]
+        }));
+
+        // Create rotated profile mapping: map rotated player ID to original profile
+        const rotatedProfilesByPlayer: Record<string, AIProfile> = {};
+        for (let i = 0; i < rotatedPlayerIds.length; i++) {
+            const rotatedPlayerId = rotatedPlayerIds[i];
+            // The profile that should be at position i after rotation
+            // is the profile that was originally at position (i - positionRotation + length) % length
+            const originalPositionIndex = (i - positionRotation + basePlayerIds.length) % basePlayerIds.length;
+            const originalPlayerId = basePlayerIds[originalPositionIndex];
+            rotatedProfilesByPlayer[rotatedPlayerId] = profilesByPlayer[originalPlayerId];
+        }
 
         const engine = new GameEngine(players, mapType, rng, { randomizeAiProfiles: false });
         (engine as any).triggerAiTurn = () => {};
-        engine.setAiProfiles(profilesByPlayer);
+        engine.setAiProfiles(rotatedProfilesByPlayer);
 
         engine.startGame();
 
@@ -274,9 +299,10 @@ const runMatch = (
             steps++;
         }
 
+        // Map rotated player IDs back to original profiles for result tracking
         const profiles: Record<string, string> = {};
         for (const player of players) {
-            const profile = profilesByPlayer[player.id];
+            const profile = rotatedProfilesByPlayer[player.id];
             profiles[player.id] = profile?.id ?? 'baseline';
         }
 
@@ -347,12 +373,12 @@ const evaluateRound = (
     roundIndex: number,
     rng: () => number
 ): { results: Individual[]; mapCounts: Record<string, Record<string, number>> } => {
-    const stats = new Map<string, { wins: number; games: number; decisiveGames: number; totalTurns: number; totalPoints: number }>();
+    const stats = new Map<string, { wins: number; games: number; decisiveGames: number; totalTurns: number; totalPoints: number; totalDecisiveBonus: number }>();
     const groupCounts = new Map<string, number>();
     const mapCounts: Record<string, Record<string, number>> = {};
 
     for (const profile of profiles) {
-        stats.set(profile.id, { wins: 0, games: 0, decisiveGames: 0, totalTurns: 0, totalPoints: 0 });
+        stats.set(profile.id, { wins: 0, games: 0, decisiveGames: 0, totalTurns: 0, totalPoints: 0, totalDecisiveBonus: 0 });
         groupCounts.set(profile.id, 0);
         mapCounts[profile.id] = {};
         for (const mapType of options.mapTypes) {
@@ -375,42 +401,59 @@ const evaluateRound = (
 
         for (let mapIndex = 0; mapIndex < options.mapTypes.length; mapIndex++) {
             const mapType = options.mapTypes[mapIndex];
-            const matchSeed = options.seed + roundIndex * 100000 + groupsCompleted * 1000 + mapIndex * 100;
-            const result = runMatch(profilesByPlayer, matchSeed, mapType, options);
+            
+            // Run 4 matches per map with rotated positions
+            for (let rotation = 0; rotation < 4; rotation++) {
+                const matchSeed = options.seed + roundIndex * 100000 + groupsCompleted * 1000 + mapIndex * 100 + rotation * 10;
+                const result = runMatch(profilesByPlayer, matchSeed, mapType, options, rotation);
 
-            const totalPlayers = playerIds.length;
-            const winnerId = result.placements[0];
-            const winBonus = result.decisiveWin
-                ? Math.max(0, (options.maxTurns - result.turns) / options.maxTurns) * 2
-                : 0;
+                const totalPlayers = playerIds.length;
+                const winnerId = result.placements[0];
+                const winBonus = result.decisiveWin
+                    ? Math.max(0, (options.maxTurns - result.turns) / options.maxTurns) * options.winBonusMultiplier
+                    : 0;
 
-            for (let i = 0; i < result.placements.length; i++) {
-                const playerId = result.placements[i];
-                const profileId = result.profiles[playerId];
-                const stat = stats.get(profileId);
-                if (stat) {
-                    let points = Math.max(0, totalPlayers - 1 - i);
-                    if (playerId === winnerId && winBonus > 0) {
-                        points += winBonus;
-                    }
-                    stat.totalPoints += points;
-                    if (i === 0) {
-                        stat.wins++;
-                    }
-                }
-            }
-
-            for (const playerId of playerIds) {
-                const profileId = result.profiles[playerId];
-                const stat = stats.get(profileId);
-                if (stat) {
-                    stat.games++;
-                    stat.totalTurns += result.turns;
-                    if (result.decisiveWin) {
-                        stat.decisiveGames++;
+                for (let i = 0; i < result.placements.length; i++) {
+                    const playerId = result.placements[i];
+                    const profileId = result.profiles[playerId];
+                    const stat = stats.get(profileId);
+                    if (stat) {
+                        let points = Math.max(0, totalPlayers - 1 - i);
+                        if (playerId === winnerId && winBonus > 0) {
+                            points += winBonus;
+                            stat.totalDecisiveBonus += winBonus;
+                        }
+                        stat.totalPoints += points;
+                        if (i === 0) {
+                            stat.wins++;
+                        }
                     }
                 }
-                mapCounts[profileId][mapType] = (mapCounts[profileId][mapType] || 0) + 1;
+
+                // Map original playerIds to their profileIds after rotation
+                // Original player at position i maps to profile at position i
+                // After rotation, that profile is at position (i - rotation + 4) % 4
+                const originalToProfileMap: Record<string, string> = {};
+                for (let i = 0; i < playerIds.length; i++) {
+                    // Original player at position i (playerIds[i]) should have profile at position i
+                    // After rotation, profile at position i is at rotated position (i - rotation + length) % length
+                    const rotatedPositionIndex = (i - rotation + playerIds.length) % playerIds.length;
+                    const rotatedPlayerId = `P${rotatedPositionIndex + 1}`;
+                    originalToProfileMap[playerIds[i]] = result.profiles[rotatedPlayerId];
+                }
+
+                for (const playerId of playerIds) {
+                    const profileId = originalToProfileMap[playerId] || result.profiles[playerId];
+                    const stat = stats.get(profileId);
+                    if (stat) {
+                        stat.games++;
+                        stat.totalTurns += result.turns;
+                        if (result.decisiveWin) {
+                            stat.decisiveGames++;
+                        }
+                    }
+                    mapCounts[profileId][mapType] = (mapCounts[profileId][mapType] || 0) + 1;
+                }
             }
         }
 
@@ -433,6 +476,7 @@ const evaluateRound = (
         const avgPointsRaw = stat.games > 0 ? stat.totalPoints / stat.games : 0;
         const avgTurns = stat.games > 0 ? stat.totalTurns / stat.games : 0;
         const decisiveRate = stat.games > 0 ? stat.decisiveGames / stat.games : 0;
+        const avgDecisiveBonus = stat.games > 0 ? stat.totalDecisiveBonus / stat.games : 0;
         return {
             profile,
             games: stat.games,
@@ -441,7 +485,8 @@ const evaluateRound = (
             totalPoints: stat.totalPoints,
             avgPointsRaw,
             avgTurns,
-            decisiveRate
+            decisiveRate,
+            avgDecisiveBonus
         };
     });
 
@@ -679,7 +724,8 @@ const main = async () => {
                 const winRate = ind.games > 0 ? ind.wins / ind.games : 0;
                 const decisiveRate = ind.decisiveRate || 0;
                 const diversityScore = diversityById.get(ind.profile.id) ?? 0;
-                console.log(`  ${i + 1}. ${ind.profile.id} | AvgPoints=${ind.avgPointsRaw.toFixed(2)} | WinRate=${(winRate * 100).toFixed(1)}% | Decisive=${(decisiveRate * 100).toFixed(1)}% | Diversity=${diversityScore.toFixed(3)}`);
+                const decisiveBonusStr = ind.avgDecisiveBonus > 0 ? ` | DecisiveBonus=${ind.avgDecisiveBonus.toFixed(2)}` : '';
+                console.log(`  ${i + 1}. ${ind.profile.id} | AvgPoints=${ind.avgPointsRaw.toFixed(2)}${decisiveBonusStr} | WinRate=${(winRate * 100).toFixed(1)}% | Decisive=${(decisiveRate * 100).toFixed(1)}% | Diversity=${diversityScore.toFixed(3)}`);
             }
         }
 
@@ -696,6 +742,7 @@ const main = async () => {
                 decisiveGames: ind.decisiveGames,
                 totalPoints: ind.totalPoints,
                 avgPoints: ind.avgPointsRaw,
+                avgDecisiveBonus: ind.avgDecisiveBonus,
                 avgTurns: ind.avgTurns,
                 decisiveRate: ind.decisiveRate,
                 diversityScore: diversityById.get(ind.profile.id) ?? 0
