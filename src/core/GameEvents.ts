@@ -3,6 +3,7 @@ export interface GameEventMap {
     'stateChanged': void;
     'musicState': 'PEACE' | 'TENSION' | 'CONFLICT' | 'DOOM' | 'PEACE_DAY';
     'peaceDayState': { active: boolean };
+    'bloodMoonState': { active: boolean };
 
     'turnChange': void; // Legacy?
     'gameStart': void;

@@ -73,7 +73,7 @@ export const GameConfig = {
     TURN_EVENT_FLOOD_SFX: 'sfx:turn_event_flood',
     TURN_EVENT_PEACE_DAY_NAME: 'Peace Day',
     TURN_EVENT_PEACE_DAY_MESSAGE: 'A holy stillness falls across the land.',
-    TURN_EVENT_PEACE_DAY_SFX: 'sfx:turn_event_default',
+    TURN_EVENT_PEACE_DAY_SFX: 'sfx:turn_event_peace_day',
     TURN_EVENT_PEACE_DAY_CHANCE: 0.5,
     TURN_EVENT_PEACE_DAY_ATTACK_MULTIPLIER_MIN: 2,
     TURN_EVENT_PEACE_DAY_ATTACK_MULTIPLIER_MAX: 4,
@@ -82,6 +82,14 @@ export const GameConfig = {
     TURN_EVENT_FLOOD_RECEDE_NAME: 'Flood Recedes',
     TURN_EVENT_FLOOD_RECEDE_MESSAGE: 'The floodwaters begin to retreat.',
     TURN_EVENT_FLOOD_RECEDE_SFX: 'sfx:turn_event_default',
+    TURN_EVENT_BLOOD_MOON_NAME: 'Blood Moon',
+    TURN_EVENT_BLOOD_MOON_MESSAGE: 'The moon turns blood red. Violence is fueled.',
+    TURN_EVENT_BLOOD_MOON_SFX: 'sfx:turn_event_blood_moon',
+    TURN_EVENT_BLOOD_MOON_RANDOM_CHANCE: 0.05,
+    TURN_EVENT_BLOOD_MOON_ATTACK_MULTIPLIER_MIN: 0.8,
+    TURN_EVENT_BLOOD_MOON_ATTACK_MULTIPLIER_MAX: 1.0,
+    TURN_EVENT_BLOOD_MOON_DURATION_MIN: 2,
+    TURN_EVENT_BLOOD_MOON_DURATION_MAX: 5,
     TURN_EVENT_PLACEHOLDER_NAME: 'Mysterious Omen',
     TURN_EVENT_PLACEHOLDER_MESSAGE_TEMPLATE: "A strange omen appears before {player}'s turn.",
     TURN_EVENT_PLACEHOLDER_SFX: 'sfx:turn_event_default',
@@ -165,7 +173,13 @@ export const GameConfig = {
         PEACE_DAY_GLOW_ALPHA: 0.6,
         PEACE_DAY_GLOW_THICKNESS: 32,
         PEACE_DAY_GLOW_INSET: 6,
-        PEACE_DAY_GLOW_GRADIENT_STEPS: 20
+        PEACE_DAY_GLOW_MAX_INSET: 32, // Used for animation? kept existing keys for now
+        PEACE_DAY_GLOW_GRADIENT_STEPS: 20,
+        BLOOD_MOON_GLOW_COLOR: 0xff0000,
+        BLOOD_MOON_GLOW_ALPHA: 0.6,
+        BLOOD_MOON_GLOW_THICKNESS: 32,
+        BLOOD_MOON_GLOW_INSET: 6,
+        BLOOD_MOON_GLOW_GRADIENT_STEPS: 20
     },
     AI_DIFFICULTY: 'MEDIUM' as Difficulty,
     ENABLE_EXPERIMENTAL: false, // Set to true to enable experimental features

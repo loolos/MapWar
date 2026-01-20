@@ -87,6 +87,19 @@ export const NearVictory = {
             events: {
                 forced: [
                     {
+                        round: 32,
+                        event: {
+                            id: 'blood_moon',
+                            name: GameConfig.TURN_EVENT_BLOOD_MOON_NAME,
+                            message: GameConfig.TURN_EVENT_BLOOD_MOON_MESSAGE,
+                            sfxKey: GameConfig.TURN_EVENT_BLOOD_MOON_SFX,
+                            params: {
+                                duration: 2,
+                                multiplier: 0.8
+                            }
+                        }
+                    },
+                    {
                         round: 27,
                         event: {
                             id: 'peace_day',

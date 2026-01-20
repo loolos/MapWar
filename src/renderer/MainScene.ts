@@ -37,6 +37,8 @@ export class MainScene extends Phaser.Scene {
     private activeTurnEvent?: { name: string; message: string; sfxKey?: string };
     private peaceDayGlow?: Phaser.GameObjects.Graphics;
     private peaceDayActive: boolean = false;
+    private bloodMoonGlow?: Phaser.GameObjects.Graphics;
+    private bloodMoonActive: boolean = false;
     private tutorialActive: boolean = false;
     private tutorialStepIndex: number = 0;
     private tutorialSteps: {
@@ -446,6 +448,11 @@ export class MainScene extends Phaser.Scene {
             this.updatePeaceDayGlow();
         });
 
+        this.engine.on('bloodMoonState', (state) => {
+            this.bloodMoonActive = state.active;
+            this.updateBloodMoonGlow();
+        });
+
         // Initialize Cursor Keys
         if (this.input.keyboard) {
             this.cursors = this.input.keyboard.createCursorKeys();
@@ -515,6 +522,43 @@ export class MainScene extends Phaser.Scene {
             if (w <= 0 || h <= 0) break;
             this.peaceDayGlow.lineStyle(stepThickness, 0xffffff, alpha);
             this.peaceDayGlow.strokeRect(bounds.x + insetStep, bounds.y + insetStep, w, h);
+        }
+    }
+
+    private updateBloodMoonGlow() {
+        if (!this.bloodMoonGlow) {
+            this.bloodMoonGlow = this.add.graphics();
+            this.bloodMoonGlow.setDepth(GameConfig.UI.TURN_EVENT_TEXT_DEPTH - 1);
+        }
+
+        this.bloodMoonGlow.clear();
+        if (!this.bloodMoonActive) {
+            this.bloodMoonGlow.setVisible(false);
+            return;
+        }
+
+        const bounds = this.mapBounds;
+        if (!bounds) {
+            this.bloodMoonGlow.setVisible(false);
+            return;
+        }
+
+        const inset = GameConfig.UI.BLOOD_MOON_GLOW_INSET;
+        const thickness = GameConfig.UI.BLOOD_MOON_GLOW_THICKNESS;
+        const steps = Math.max(1, Math.floor(GameConfig.UI.BLOOD_MOON_GLOW_GRADIENT_STEPS));
+        const baseAlpha = GameConfig.UI.BLOOD_MOON_GLOW_ALPHA;
+        const color = GameConfig.UI.BLOOD_MOON_GLOW_COLOR;
+        const stepThickness = thickness / steps;
+
+        this.bloodMoonGlow.setVisible(true);
+        for (let i = 0; i < steps; i++) {
+            const alpha = baseAlpha * (1 - (i / steps));
+            const insetStep = inset + (i * stepThickness);
+            const w = Math.max(0, bounds.width - (insetStep * 2));
+            const h = Math.max(0, bounds.height - (insetStep * 2));
+            if (w <= 0 || h <= 0) break;
+            this.bloodMoonGlow.lineStyle(stepThickness, color, alpha);
+            this.bloodMoonGlow.strokeRect(bounds.x + insetStep, bounds.y + insetStep, w, h);
         }
     }
 

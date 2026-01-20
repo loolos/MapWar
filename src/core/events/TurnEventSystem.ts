@@ -7,6 +7,7 @@ export type TurnEventPayload = {
     name: string;
     message: string;
     sfxKey?: string;
+    params?: any;
 };
 
 export type TurnEventDefinition = {
@@ -14,6 +15,7 @@ export type TurnEventDefinition = {
     name: string;
     message: string;
     sfxKey?: string;
+    params?: any;
 };
 
 export type TurnEventPrecheckResult = {
@@ -95,60 +97,64 @@ export class TurnEventSystem {
                 if (data.round < GameConfig.TURN_EVENT_RANDOM_MIN_ROUND) {
                     this.scheduledEvent = null;
                 } else {
-                if (GameConfig.TURN_EVENT_ENABLE_TEST_PLACEHOLDER && this.rng() < GameConfig.TURN_EVENT_TRIGGER_CHANCE) {
-                    const message = GameConfig.TURN_EVENT_PLACEHOLDER_MESSAGE_TEMPLATE.replace(
-                        '{player}',
-                        data.currentPlayerId
-                    );
-                    this.scheduledEvent = {
-                        event: {
-                            id: 'placeholder',
-                            name: GameConfig.TURN_EVENT_PLACEHOLDER_NAME,
-                            message,
-                            sfxKey: GameConfig.TURN_EVENT_PLACEHOLDER_SFX
-                        },
-                        source: 'random'
-                    };
-                } else {
-                    const floodRoll = this.rng() < GameConfig.TURN_EVENT_FLOOD_RANDOM_CHANCE;
-                    const peaceRoll = this.rng() < GameConfig.TURN_EVENT_PEACE_DAY_RANDOM_CHANCE;
-                    if (floodRoll || peaceRoll) {
-                        let event;
-                        if (floodRoll && peaceRoll) {
-                            event = this.rng() < 0.5
-                                ? {
-                                    id: 'peace_day',
-                                    name: GameConfig.TURN_EVENT_PEACE_DAY_NAME,
-                                    message: GameConfig.TURN_EVENT_PEACE_DAY_MESSAGE,
-                                    sfxKey: GameConfig.TURN_EVENT_PEACE_DAY_SFX
-                                }
-                                : {
-                                    id: 'flood',
-                                    name: GameConfig.TURN_EVENT_FLOOD_NAME,
-                                    message: GameConfig.TURN_EVENT_FLOOD_MESSAGE,
-                                    sfxKey: GameConfig.TURN_EVENT_FLOOD_SFX
-                                };
-                        } else if (peaceRoll) {
-                            event = {
-                                id: 'peace_day',
-                                name: GameConfig.TURN_EVENT_PEACE_DAY_NAME,
-                                message: GameConfig.TURN_EVENT_PEACE_DAY_MESSAGE,
-                                sfxKey: GameConfig.TURN_EVENT_PEACE_DAY_SFX
-                            };
-                        } else {
-                            event = {
-                                id: 'flood',
-                                name: GameConfig.TURN_EVENT_FLOOD_NAME,
-                                message: GameConfig.TURN_EVENT_FLOOD_MESSAGE,
-                                sfxKey: GameConfig.TURN_EVENT_FLOOD_SFX
-                            };
-                        }
+                    if (GameConfig.TURN_EVENT_ENABLE_TEST_PLACEHOLDER && this.rng() < GameConfig.TURN_EVENT_TRIGGER_CHANCE) {
+                        const message = GameConfig.TURN_EVENT_PLACEHOLDER_MESSAGE_TEMPLATE.replace(
+                            '{player}',
+                            data.currentPlayerId
+                        );
                         this.scheduledEvent = {
-                            event,
+                            event: {
+                                id: 'placeholder',
+                                name: GameConfig.TURN_EVENT_PLACEHOLDER_NAME,
+                                message,
+                                sfxKey: GameConfig.TURN_EVENT_PLACEHOLDER_SFX
+                            },
                             source: 'random'
                         };
+                    } else {
+                        const candidates: string[] = [];
+                        if (this.rng() < GameConfig.TURN_EVENT_FLOOD_RANDOM_CHANCE) candidates.push('flood');
+                        if (this.rng() < GameConfig.TURN_EVENT_PEACE_DAY_RANDOM_CHANCE) candidates.push('peace_day');
+                        if (this.rng() < GameConfig.TURN_EVENT_BLOOD_MOON_RANDOM_CHANCE) candidates.push('blood_moon');
+
+                        if (candidates.length > 0) {
+                            const chosenId = candidates[Math.floor(this.rng() * candidates.length)];
+                            let event: TurnEventDefinition;
+
+                            switch (chosenId) {
+                                case 'peace_day':
+                                    event = {
+                                        id: 'peace_day',
+                                        name: GameConfig.TURN_EVENT_PEACE_DAY_NAME,
+                                        message: GameConfig.TURN_EVENT_PEACE_DAY_MESSAGE,
+                                        sfxKey: GameConfig.TURN_EVENT_PEACE_DAY_SFX
+                                    };
+                                    break;
+                                case 'blood_moon':
+                                    event = {
+                                        id: 'blood_moon',
+                                        name: GameConfig.TURN_EVENT_BLOOD_MOON_NAME,
+                                        message: GameConfig.TURN_EVENT_BLOOD_MOON_MESSAGE,
+                                        sfxKey: GameConfig.TURN_EVENT_BLOOD_MOON_SFX
+                                    };
+                                    break;
+                                case 'flood':
+                                default:
+                                    event = {
+                                        id: 'flood',
+                                        name: GameConfig.TURN_EVENT_FLOOD_NAME,
+                                        message: GameConfig.TURN_EVENT_FLOOD_MESSAGE,
+                                        sfxKey: GameConfig.TURN_EVENT_FLOOD_SFX
+                                    };
+                                    break;
+                            }
+
+                            this.scheduledEvent = {
+                                event,
+                                source: 'random'
+                            };
+                        }
                     }
-                }
                 }
             }
 
@@ -188,7 +194,8 @@ export class TurnEventSystem {
                 round: data.round,
                 name: this.scheduledEvent.event.name,
                 message: this.scheduledEvent.event.message,
-                sfxKey: this.scheduledEvent.event.sfxKey
+                sfxKey: this.scheduledEvent.event.sfxKey,
+                params: this.scheduledEvent.event.params
             };
         }
 

@@ -119,10 +119,11 @@ vi.mock('../../core/audio/SoundManager', () => ({
     SoundManager: vi.fn().mockImplementation(function () {
         return {
             playSfx: vi.fn(),
-            playBgm: vi.fn(),
+            playBgm: vi.fn().mockResolvedValue(undefined),
             stopBgm: vi.fn(),
             setBgmState: vi.fn(),
             toggleMute: vi.fn(),
+            startContext: vi.fn().mockResolvedValue(undefined),
             isMuted: false
         };
     })
@@ -263,7 +264,7 @@ vi.mock('phaser', () => {
                     };
                     this.make = { graphics: vi.fn(() => new MockGraphics()) };
                     this.time = { delayedCall: vi.fn((_delay, callback) => callback()) };
-                    this.textures = { exists: vi.fn(() => false), addGLTexture: vi.fn(), get: vi.fn(() => ({ getSourceImage: vi.fn() })) };
+                    this.textures = { exists: vi.fn(() => false), addGLTexture: vi.fn(), get: vi.fn(() => ({ getSourceImage: vi.fn() })), on: vi.fn(), addCanvas: vi.fn() };
                     this.sound = { get: vi.fn(), add: vi.fn(() => ({ play: vi.fn(), stop: vi.fn(), pause: vi.fn(), resume: vi.fn() })), play: vi.fn() };
                     this.events = { on: vi.fn(), once: vi.fn(), off: vi.fn(), emit: vi.fn() };
                 }

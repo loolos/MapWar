@@ -46,6 +46,8 @@ export class GameEngine {
     private floodedCells: Map<string, { r: number; c: number; type: 'plain' | 'hill' | 'bridge' }> = new Map();
     private peaceDayActive = false;
     private peaceDayEndRound: number | null = null;
+    private bloodMoonActive = false;
+    private bloodMoonEndRound: number | null = null;
     private readonly baseAttackMultiplier = GameConfig.COST_MULTIPLIER_ATTACK;
 
     constructor(
@@ -64,6 +66,14 @@ export class GameEngine {
         this.turnEventSystem.setEventPrecheck('flood', () => this.hasLargeOcean());
         this.turnEventSystem.setEventPrecheck('flood_recede', () => ({
             ok: this.random() < GameConfig.TURN_EVENT_FLOOD_RECEDE_CHANCE,
+            onFail: 'defer'
+        }));
+        this.turnEventSystem.setEventPrecheck('peace_day', () => ({
+            ok: !this.bloodMoonActive,
+            onFail: 'defer'
+        }));
+        this.turnEventSystem.setEventPrecheck('blood_moon', () => ({
+            ok: !this.peaceDayActive,
             onFail: 'defer'
         }));
 
@@ -145,6 +155,8 @@ export class GameEngine {
         this.lastAiMoves = [];
         this.lastError = null;
         this.actedTilesThisTurn.clear();
+        if (this.peaceDayActive) this.endPeaceDay();
+        if (this.bloodMoonActive) this.endBloodMoon();
         this.isGameOver = false;
 
         // Update Audio State (React to changes)
@@ -297,6 +309,7 @@ export class GameEngine {
 
     private maybeTriggerTurnEvent() {
         this.checkPeaceDayExpiry();
+        this.checkBloodMoonExpiry();
         const event = this.turnEventSystem.onTurnStart({
             round: this.state.turnCount,
             turnsTakenInRound: this.state.turnsTakenInRound,
@@ -345,16 +358,29 @@ export class GameEngine {
             };
         }
         if (event.eventId === 'peace_day') {
-            const duration = this.randomInt(
+            const duration = event.params?.duration ?? this.randomInt(
                 GameConfig.TURN_EVENT_PEACE_DAY_DURATION_MIN,
                 GameConfig.TURN_EVENT_PEACE_DAY_DURATION_MAX
             );
-            const rawMultiplier = this.randomRange(
+            const rawMultiplier = event.params?.multiplier ?? this.randomRange(
                 GameConfig.TURN_EVENT_PEACE_DAY_ATTACK_MULTIPLIER_MIN,
                 GameConfig.TURN_EVENT_PEACE_DAY_ATTACK_MULTIPLIER_MAX
             );
             const multiplier = Math.round(rawMultiplier * 10) / 10;
             this.startPeaceDay(duration, multiplier);
+            return event;
+        }
+        if (event.eventId === 'blood_moon') {
+            const duration = event.params?.duration ?? this.randomInt(
+                GameConfig.TURN_EVENT_BLOOD_MOON_DURATION_MIN,
+                GameConfig.TURN_EVENT_BLOOD_MOON_DURATION_MAX
+            );
+            const rawMultiplier = event.params?.multiplier ?? this.randomRange(
+                GameConfig.TURN_EVENT_BLOOD_MOON_ATTACK_MULTIPLIER_MIN,
+                GameConfig.TURN_EVENT_BLOOD_MOON_ATTACK_MULTIPLIER_MAX
+            );
+            const multiplier = Math.round(rawMultiplier * 10) / 10;
+            this.startBloodMoon(duration, multiplier);
             return event;
         }
         return event;
@@ -506,6 +532,30 @@ export class GameEngine {
         if (!this.peaceDayActive || this.peaceDayEndRound === null) return;
         if (this.state.turnsTakenInRound === 0 && this.state.turnCount >= this.peaceDayEndRound) {
             this.endPeaceDay();
+        }
+    }
+
+    private startBloodMoon(durationRounds: number, attackMultiplier: number) {
+        this.bloodMoonActive = true;
+        this.bloodMoonEndRound = this.state.turnCount + Math.max(1, durationRounds);
+        GameConfig.COST_MULTIPLIER_ATTACK = attackMultiplier;
+        this.emit('bloodMoonState', { active: true });
+        this.emit('musicState', 'DOOM'); // Blood Moon implies danger/doom
+    }
+
+    private endBloodMoon() {
+        if (!this.bloodMoonActive) return;
+        this.bloodMoonActive = false;
+        this.bloodMoonEndRound = null;
+        GameConfig.COST_MULTIPLIER_ATTACK = this.baseAttackMultiplier;
+        this.emit('bloodMoonState', { active: false });
+        this.checkAudioState();
+    }
+
+    private checkBloodMoonExpiry() {
+        if (!this.bloodMoonActive || this.bloodMoonEndRound === null) return;
+        if (this.state.turnsTakenInRound === 0 && this.state.turnCount >= this.bloodMoonEndRound) {
+            this.endBloodMoon();
         }
     }
 
@@ -1015,6 +1065,10 @@ export class GameEngine {
     private updateMusicState() {
         if (this.peaceDayActive) {
             this.emit('musicState', 'PEACE_DAY');
+            return;
+        }
+        if (this.bloodMoonActive) {
+            this.emit('musicState', 'DOOM');
             return;
         }
         const tensionState = this.calculateTensionState();

@@ -162,6 +162,17 @@ export class SoundManager {
             else if (key.includes('base_upgrade_defense')) {
                 this.polySynth.triggerAttackRelease(["C3", "G3"], "8n");
             }
+            else if (key.includes('turn_event_peace_day')) {
+                // Holy/Ethereal: Higher pitch major chord with sustain
+                this.polySynth.triggerAttackRelease(["C5", "E5", "G5", "C6"], "2n");
+            }
+            else if (key.includes('turn_event_blood_moon')) {
+                // Ominous/Dark: Dissonant low cluster + sharp metallic impact
+                const now = Tone.now();
+                this.polySynth.triggerAttackRelease(["C2", "F#2", "B2"], "1n", now);
+                this.metalSynth.triggerAttackRelease(150, "8n", now);
+                this.membraneSynth.triggerAttackRelease("A0", "2n", now);
+            }
             else if (key.includes('turn_event_default')) {
                 this.polySynth.triggerAttackRelease(["C4", "D4", "G4"], "8n");
             }
@@ -207,14 +218,14 @@ export class SoundManager {
 
         try {
             const now = Tone.now();
-            
+
             // Grand, majestic opening with powerful low-end
             // Deep, thunderous drum hits - even lower and more powerful
             this.membraneSynth.triggerAttackRelease("C0", "2n", now);
             this.membraneSynth.triggerAttackRelease("C0", "2n", now + 0.6);
             this.membraneSynth.triggerAttackRelease("C0", "2n", now + 1.2);
             this.membraneSynth.triggerAttackRelease("C0", "1n", now + 1.8);
-            
+
             // Powerful bass foundation - very deep and sustained for grandeur
             this.bassSynth.triggerAttackRelease("C1", "2n", now);
             this.bassSynth.triggerAttackRelease("G1", "2n", now + 0.8);
@@ -230,12 +241,12 @@ export class SoundManager {
             this.polySynth.triggerAttackRelease(["G2", "B2", "D3", "G3"], "2n", now + 1.8);
             this.polySynth.triggerAttackRelease(["C2", "E2", "G2", "C3", "E3"], "1n", now + 2.6);
             this.polySynth.triggerAttackRelease(["G2", "B2", "D3", "G3", "B3"], "1n", now + 3.6);
-            
+
             // Epic finale - massive chord with all voices
             this.polySynth.triggerAttackRelease(["C2", "E2", "G2", "C3", "E3", "G3", "C4"], "2n", now + 4.4);
             this.membraneSynth.triggerAttackRelease("C0", "1n", now + 4.4);
             this.membraneSynth.triggerAttackRelease("C0", "2n", now + 5.2);
-            
+
             // Final sustained chord for resolution
             this.bassSynth.triggerAttackRelease("C1", "1n", now + 4.6);
             this.polySynth.triggerAttackRelease(["C2", "G2", "C3", "E3", "G3"], "1n", now + 5.0);
@@ -341,7 +352,7 @@ export class SoundManager {
         // 2. Bass / Pad
         new Tone.Loop((time) => {
             const note = BassScale[Math.floor(Math.random() * BassScale.length)];
-        const dur = (this.bgmState === 'PEACE' || this.bgmState === 'PEACE_DAY') ? "2m" : "1m";
+            const dur = (this.bgmState === 'PEACE' || this.bgmState === 'PEACE_DAY') ? "2m" : "1m";
             this.bassSynth.triggerAttackRelease(note, dur, time);
         }, (this.bgmState === 'PEACE' || this.bgmState === 'PEACE_DAY') ? "2m" : "1m").start(0);
 

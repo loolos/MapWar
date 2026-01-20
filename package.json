@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
-    "check": "tsc --noEmit && vitest run && npm run ai:selfplay:benchmark -- --width 30 --height 30 --players 8 --turns 16 --quiet",
+    "check": "tsc --noEmit && vitest run && npm run ai:selfplay:benchmark -- --width 30 --height 30 --players 8 --turns 30 --quiet",
     "ai:selfplay": "tsx scripts/ai_selfplay.ts",
     "ai:selfplay:tune": "tsx scripts/ai_selfplay_tune.ts",
     "ai:selfplay:benchmark": "tsx scripts/ai_selfplay_benchmark.ts",
