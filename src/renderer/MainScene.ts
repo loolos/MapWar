@@ -388,9 +388,17 @@ export class MainScene extends Phaser.Scene {
         this.engine.on('sfx:base_upgrade_income', () => this.soundManager.playSfx('sfx:base_upgrade_income'));
         this.engine.on('sfx:base_upgrade_defense', () => this.soundManager.playSfx('sfx:base_upgrade_defense'));
 
-        // Start BGM
-        this.soundManager.playBgm('bgm_main').catch((err) => {
-            console.warn("Could not start BGM:", err);
+        // Start BGM only (fanfare plays in menu scene)
+        this.soundManager.startContext().then(() => {
+            this.soundManager.playBgm('bgm_main').catch((err) => {
+                console.warn("Could not start BGM:", err);
+            });
+        }).catch((err) => {
+            console.warn("Could not start audio context:", err);
+            // Try to start BGM anyway
+            this.soundManager.playBgm('bgm_main').catch((e) => {
+                console.warn("Could not start BGM:", e);
+            });
         });
 
         this.engine.on('gameRestart', () => {

@@ -500,7 +500,8 @@ const evaluateRound = (
     return { results, mapCounts };
 };
 
-const generateLabel = (profile: AIProfile): string => {
+// Generate a short single-word label based on profile characteristics
+const generateShortLabel = (profile: AIProfile, existingLabels: Set<string> = new Set()): string => {
     const weights = profile.weights || {};
     const defaultWeights = DefaultAIWeights;
     
@@ -516,114 +517,66 @@ const generateLabel = (profile: AIProfile): string => {
     ) / 2;
     
     const attackScore = (weights.SCORE_ENEMY_LAND ?? defaultWeights.SCORE_ENEMY_LAND) / defaultWeights.SCORE_ENEMY_LAND;
-    
     const expansionScore = (weights.SCORE_EXPANSION ?? defaultWeights.SCORE_EXPANSION) / defaultWeights.SCORE_EXPANSION;
-    
     const townScore = (weights.SCORE_TOWN ?? defaultWeights.SCORE_TOWN) / defaultWeights.SCORE_TOWN;
+    const auraScore = (weights.SCORE_AURA_MULTIPLIER ?? defaultWeights.SCORE_AURA_MULTIPLIER) / defaultWeights.SCORE_AURA_MULTIPLIER;
     
-    // Collect primary characteristics with scores
+    // Single-word name options for each trait (short, descriptive)
+    const nameOptions: Record<string, string[]> = {
+        'Town': ['Townsman', 'Citizen', 'Mayor', 'Urban'],
+        'Economy': ['Economist', 'Merchant', 'Trader', 'Banker', 'Miser'],
+        'Defense': ['Defender', 'Guard', 'Shield', 'Knight', 'Wall'],
+        'Attack': ['Raider', 'Warrior', 'Conqueror', 'Fighter', 'Assault'],
+        'Expansion': ['Explorer', 'Pioneer', 'Settler', 'Colonist', 'Voyager'],
+        'Aura': ['Aura', 'Influencer', 'Leader', 'Beacon']
+    };
+    
+    // Collect traits with scores
     const traits: Array<{ name: string; score: number }> = [];
-    
     if (townScore > 1.1) traits.push({ name: 'Town', score: townScore });
     if (economyScore > 1.1) traits.push({ name: 'Economy', score: economyScore });
     if (defenseScore > 1.1) traits.push({ name: 'Defense', score: defenseScore });
     if (attackScore > 1.1) traits.push({ name: 'Attack', score: attackScore });
     if (expansionScore > 1.1) traits.push({ name: 'Expansion', score: expansionScore });
+    if (auraScore > 1.5) traits.push({ name: 'Aura', score: auraScore });
     
-    // Sort by score (descending)
+    // Sort by score
     traits.sort((a, b) => b.score - a.score);
     
-    // Name components
-    const nameMap: Record<string, string> = {
-        'Town': 'Townsman',
-        'Economy': 'Economist',
-        'Defense': 'Defender',
-        'Attack': 'Raider',
-        'Expansion': 'Explorer'
-    };
-    
-    const suffixMap: Record<string, string> = {
-        'Town': 'Tact',
-        'Economy': 'Miser',
-        'Defense': 'Guard',
-        'Attack': 'Warrior',
-        'Expansion': 'Pioneer'
-    };
-    
-    // Check for special traits
-    const hasAura = (weights.SCORE_AURA_MULTIPLIER ?? defaultWeights.SCORE_AURA_MULTIPLIER) > defaultWeights.SCORE_AURA_MULTIPLIER * 1.2;
-    const hasWall = (weights.DEFENSE_WALL_BUILD ?? defaultWeights.DEFENSE_WALL_BUILD) > defaultWeights.DEFENSE_WALL_BUILD * 1.2;
-    const hasFarm = (weights.ECONOMY_FARM_BUILD ?? defaultWeights.ECONOMY_FARM_BUILD) > defaultWeights.ECONOMY_FARM_BUILD * 1.2;
-    const hasStrategic = (weights.SCORE_LOOKAHEAD_TOWN ?? defaultWeights.SCORE_LOOKAHEAD_TOWN) > defaultWeights.SCORE_LOOKAHEAD_TOWN * 1.2;
-    
-    // Generate name based on traits
-    if (traits.length === 0) {
-        if (hasStrategic) return 'Strategist';
-        return 'Balanced';
-    }
-    
-    // Use profile id hash for deterministic variations
+    // Use profile id hash for deterministic selection
     const idHash = (profile.id || '').split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     
-    if (traits.length === 1) {
-        const main = traits[0];
-        let name = nameMap[main.name] || main.name;
+    // Try primary trait first
+    if (traits.length > 0) {
+        const primary = traits[0];
+        const options = nameOptions[primary.name] || [primary.name];
+        const baseName = options[idHash % options.length];
         
-        // Add modifier if needed
-        if (hasStrategic && name.length + 4 <= 16) {
-            name = 'Smart ' + name;
-        } else if (hasAura && name.length <= 12) {
-            name = name + ' Aura';
+        // Check for uniqueness and add suffix if needed
+        let candidate = baseName;
+        let suffix = 1;
+        while (existingLabels.has(candidate)) {
+            candidate = `${baseName}${suffix}`;
+            suffix++;
         }
-        
-        if (name.length <= 16) return name;
-        // Fallback to shorter version
-        return suffixMap[main.name] || main.name;
+        return candidate;
     }
     
-    // Multiple traits - create compound name
-    const primary = traits[0];
-    const secondary = traits[1];
-    
-    // Try combination names (max 16 chars)
-    const combinations: string[] = [];
-    
-    // Primary-Secondary format
-    if (primary.name === 'Attack' && secondary.name === 'Defense') combinations.push('Battle Guard', 'Combat Defender');
-    else if (primary.name === 'Defense' && secondary.name === 'Attack') combinations.push('Defensive Raid', 'Guard Warrior');
-    else if (primary.name === 'Economy' && secondary.name === 'Expansion') combinations.push('Trade Explorer', 'Rich Pioneer');
-    else if (primary.name === 'Expansion' && secondary.name === 'Economy') combinations.push('Expanding Econ', 'Growth Trader');
-    else if (primary.name === 'Town' && secondary.name === 'Defense') combinations.push('Town Defender', 'Urban Guard');
-    else if (primary.name === 'Defense' && secondary.name === 'Town') combinations.push('Defensive Town', 'Guard Tact');
-    else if (primary.name === 'Attack' && secondary.name === 'Expansion') combinations.push('Conqueror', 'War Explorer');
-    else if (primary.name === 'Expansion' && secondary.name === 'Attack') combinations.push('Aggressive Exp', 'Raid Pioneer');
-    
-    // Try abbreviated combinations
-    if (combinations.length === 0 || combinations[0].length > 16) {
-        const p1 = primary.name.substring(0, 4);
-        const p2 = secondary.name.substring(0, 4);
-        const combo = `${p1}-${p2}`;
-        if (combo.length <= 16) combinations.unshift(combo);
+    // Fallback: use balanced name
+    const balancedNames = ['Balanced', 'Neutral', 'General', 'Standard', 'Basic'];
+    const baseName = balancedNames[idHash % balancedNames.length];
+    let candidate = baseName;
+    let suffix = 1;
+    while (existingLabels.has(candidate)) {
+        candidate = `${baseName}${suffix}`;
+        suffix++;
     }
-    
-    // Select based on hash
-    if (combinations.length > 0) {
-        const selected = combinations[idHash % combinations.length];
-        if (selected.length <= 16) {
-            // Add modifiers if space allows
-            if (hasStrategic && selected.length + 2 <= 16) {
-                return 'St ' + selected;
-            }
-            return selected;
-        }
-    }
-    
-    // Fallback: use primary trait with suffix
-    let result = suffixMap[primary.name] || primary.name;
-    if (result.length <= 16) return result;
-    
-    // Last resort: abbreviate
-    return primary.name.substring(0, Math.min(16, primary.name.length));
+    return candidate;
+};
+
+// Keep the old function for backward compatibility but use short version when writing profiles
+const generateLabel = (profile: AIProfile): string => {
+    return generateShortLabel(profile);
 };
 
 const rankResults = (
@@ -818,9 +771,27 @@ const main = async () => {
     }));
 
     const profileTimestamp = Date.now();
+    const usedLabels = new Set<string>();
+    
+    // First, collect existing labels from source file if writing profiles
+    if (options.writeProfile) {
+        const sourcePath = path.join(process.cwd(), 'src', 'core', 'ai', 'AIProfile.ts');
+        if (fs.existsSync(sourcePath)) {
+            const source = fs.readFileSync(sourcePath, 'utf-8');
+            // Extract existing labels from EvolvedProfile definitions
+            const labelRegex = /label:\s*['"]([^'"]+)['"]/g;
+            let match;
+            while ((match = labelRegex.exec(source)) !== null) {
+                usedLabels.add(match[1]);
+            }
+        }
+    }
+    
     for (let i = 0; i < finalProfiles.length; i++) {
         finalProfiles[i].id = `evolved_${profileTimestamp}_${i + 1}`;
-        finalProfiles[i].label = generateLabel(finalProfiles[i]);
+        // Generate unique short single-word label
+        finalProfiles[i].label = generateShortLabel(finalProfiles[i], usedLabels);
+        usedLabels.add(finalProfiles[i].label);
     }
 
     // Save results

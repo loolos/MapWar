@@ -340,18 +340,25 @@ vi.mock('./ui/LogSystem', () => ({
     })
 }));
 
-vi.mock('../core/audio/SoundManager', () => ({
-    SoundManager: vi.fn().mockImplementation(function () {
-        return {
-            playSfx: vi.fn(),
-            playBgm: vi.fn().mockResolvedValue(undefined),
-            stopBgm: vi.fn(),
-            setBgmState: vi.fn(),
-            toggleMute: vi.fn(),
-            isMuted: false
-        };
-    })
-}));
+vi.mock('../core/audio/SoundManager', () => {
+    const mockStartContext = vi.fn().mockResolvedValue(undefined);
+    const mockPlayBgm = vi.fn().mockResolvedValue(undefined);
+    
+    return {
+        SoundManager: vi.fn().mockImplementation(function () {
+            return {
+                playSfx: vi.fn(),
+                playBgm: mockPlayBgm,
+                playStartFanfare: vi.fn(),
+                startContext: mockStartContext,
+                stopBgm: vi.fn(),
+                setBgmState: vi.fn(),
+                toggleMute: vi.fn(),
+                isMuted: false
+            };
+        })
+    };
+});
 
 
 describe('MainScene', () => {

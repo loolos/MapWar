@@ -208,29 +208,37 @@ export class SoundManager {
         try {
             const now = Tone.now();
             
-            // Deep, powerful drum hits for majestic and grand feel
-            // Lower octave and longer duration for more impact
-            this.membraneSynth.triggerAttackRelease("C0", "4n", now);
-            this.membraneSynth.triggerAttackRelease("C0", "4n", now + 0.4);
-            this.membraneSynth.triggerAttackRelease("C0", "4n", now + 0.8);
+            // Grand, majestic opening with powerful low-end
+            // Deep, thunderous drum hits - even lower and more powerful
+            this.membraneSynth.triggerAttackRelease("C0", "2n", now);
+            this.membraneSynth.triggerAttackRelease("C0", "2n", now + 0.6);
+            this.membraneSynth.triggerAttackRelease("C0", "2n", now + 1.2);
+            this.membraneSynth.triggerAttackRelease("C0", "1n", now + 1.8);
             
-            // Deep bass foundation - adds weight and grandeur
-            this.bassSynth.triggerAttackRelease("C1", "2n", now + 0.1);
-            this.bassSynth.triggerAttackRelease("G1", "2n", now + 0.7);
-            this.bassSynth.triggerAttackRelease("C1", "2n", now + 1.3);
-            this.bassSynth.triggerAttackRelease("F1", "2n", now + 1.9);
-            this.bassSynth.triggerAttackRelease("C1", "1n", now + 2.5);
+            // Powerful bass foundation - very deep and sustained for grandeur
+            this.bassSynth.triggerAttackRelease("C1", "2n", now);
+            this.bassSynth.triggerAttackRelease("G1", "2n", now + 0.8);
+            this.bassSynth.triggerAttackRelease("C1", "2n", now + 1.6);
+            this.bassSynth.triggerAttackRelease("F1", "2n", now + 2.4);
+            this.bassSynth.triggerAttackRelease("G1", "2n", now + 3.2);
+            this.bassSynth.triggerAttackRelease("C1", "1n", now + 4.0);
 
-            // Lower, more powerful chord progression - shifted down an octave
-            // Using lower register for deeper, more majestic sound
-            this.polySynth.triggerAttackRelease(["C3", "G3", "C4"], "2n", now + 0.15);
-            this.polySynth.triggerAttackRelease(["F3", "A3", "C4"], "2n", now + 0.75);
-            this.polySynth.triggerAttackRelease(["G3", "B3", "D4"], "2n", now + 1.35);
-            this.polySynth.triggerAttackRelease(["C3", "G3", "C4", "E4"], "1n", now + 1.95);
+            // Majestic chord progression - using power chords and full chords for grandeur
+            // Starting with powerful, full chords in lower register
+            this.polySynth.triggerAttackRelease(["C2", "G2", "C3", "E3"], "2n", now + 0.2);
+            this.polySynth.triggerAttackRelease(["F2", "A2", "C3", "F3"], "2n", now + 1.0);
+            this.polySynth.triggerAttackRelease(["G2", "B2", "D3", "G3"], "2n", now + 1.8);
+            this.polySynth.triggerAttackRelease(["C2", "E2", "G2", "C3", "E3"], "1n", now + 2.6);
+            this.polySynth.triggerAttackRelease(["G2", "B2", "D3", "G3", "B3"], "1n", now + 3.6);
             
-            // Final powerful chord
-            this.polySynth.triggerAttackRelease(["C3", "G3", "C4", "E4", "G4"], "2n", now + 3.0);
-            this.membraneSynth.triggerAttackRelease("C0", "1n", now + 3.0);
+            // Epic finale - massive chord with all voices
+            this.polySynth.triggerAttackRelease(["C2", "E2", "G2", "C3", "E3", "G3", "C4"], "2n", now + 4.4);
+            this.membraneSynth.triggerAttackRelease("C0", "1n", now + 4.4);
+            this.membraneSynth.triggerAttackRelease("C0", "2n", now + 5.2);
+            
+            // Final sustained chord for resolution
+            this.bassSynth.triggerAttackRelease("C1", "1n", now + 4.6);
+            this.polySynth.triggerAttackRelease(["C2", "G2", "C3", "E3", "G3"], "1n", now + 5.0);
         } catch (e) {
             console.warn("Tone.js Fanfare Error:", e);
         }
