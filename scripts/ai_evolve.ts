@@ -10,6 +10,8 @@ import {
     type AIProfile,
     type AIWeights
 } from '../src/core/ai/AIProfile';
+import { assignProfileLabels } from './ai_profile_label';
+import { writeEvolvedProfilesToSource } from './ai_profile_writer';
 
 type CliOptions = {
     seed: number;
@@ -500,157 +502,7 @@ const evaluateRound = (
     return { results, mapCounts };
 };
 
-// Generate a label in format "Job Name" based on profile characteristics
-const generateShortLabel = (profile: AIProfile, existingLabels: Set<string> = new Set()): string => {
-    const weights = profile.weights || {};
-    const defaultWeights = DefaultAIWeights;
-    
-    // Calculate strategy scores
-    const economyScore = (
-        (weights.ECONOMY_BASE_INCOME ?? defaultWeights.ECONOMY_BASE_INCOME) / defaultWeights.ECONOMY_BASE_INCOME +
-        (weights.ECONOMY_FARM_BUILD ?? defaultWeights.ECONOMY_FARM_BUILD) / defaultWeights.ECONOMY_FARM_BUILD
-    ) / 2;
-    
-    const defenseScore = (
-        (weights.DEFENSE_WALL_BUILD ?? defaultWeights.DEFENSE_WALL_BUILD) / defaultWeights.DEFENSE_WALL_BUILD +
-        (weights.DEFENSE_BASE_UPGRADE ?? defaultWeights.DEFENSE_BASE_UPGRADE) / defaultWeights.DEFENSE_BASE_UPGRADE
-    ) / 2;
-    
-    const attackScore = (weights.SCORE_ENEMY_LAND ?? defaultWeights.SCORE_ENEMY_LAND) / defaultWeights.SCORE_ENEMY_LAND;
-    const expansionScore = (weights.SCORE_EXPANSION ?? defaultWeights.SCORE_EXPANSION) / defaultWeights.SCORE_EXPANSION;
-    const townScore = (weights.SCORE_TOWN ?? defaultWeights.SCORE_TOWN) / defaultWeights.SCORE_TOWN;
-    const auraScore = (weights.SCORE_AURA_MULTIPLIER ?? defaultWeights.SCORE_AURA_MULTIPLIER) / defaultWeights.SCORE_AURA_MULTIPLIER;
-    
-    // Check for farm specialization
-    const hasFarm = (weights.ECONOMY_FARM_BUILD ?? defaultWeights.ECONOMY_FARM_BUILD) > defaultWeights.ECONOMY_FARM_BUILD * 1.2;
-    
-    // Job titles for each trait
-    const jobOptions: Record<string, string[]> = {
-        'Town': ['Mayor', 'Citizen', 'Urban', 'Mayor'],
-        'Economy': hasFarm ? ['Farmer', 'Grower', 'Harvester', 'Planter'] : ['Banker', 'Merchant', 'Trader', 'Broker'],
-        'Defense': ['Guard', 'Shield', 'Knight', 'Sentinel'],
-        'Attack': ['Raider', 'Warrior', 'Fighter', 'Ravager'],
-        'Expansion': ['Explorer', 'Pioneer', 'Settler', 'Scout'],
-        'Aura': ['Leader', 'Influencer', 'Beacon', 'Guide']
-    };
-    
-    // Common first names (mixed genders)
-    const firstNames = [
-        'Alice', 'Bob', 'Charlie', 'Diana', 'Eve', 'Frank', 'Grace', 'Henry',
-        'Ivy', 'Jack', 'Kate', 'Leo', 'Mia', 'Noah', 'Olivia', 'Paul',
-        'Quinn', 'Rose', 'Sam', 'Tina', 'Uma', 'Vic', 'Wendy', 'Xavier',
-        'Yara', 'Zoe', 'Alex', 'Ben', 'Cam', 'Dan', 'Eli', 'Finn',
-        'Gabe', 'Hal', 'Ian', 'Jay', 'Kim', 'Lou', 'Max', 'Nat',
-        'Owen', 'Pat', 'Ray', 'Sue', 'Tom', 'Val', 'Will', 'Zoe'
-    ];
-    
-    // Collect traits with scores
-    const traits: Array<{ name: string; score: number }> = [];
-    if (townScore > 1.1) traits.push({ name: 'Town', score: townScore });
-    if (economyScore > 1.1) traits.push({ name: 'Economy', score: economyScore });
-    if (defenseScore > 1.1) traits.push({ name: 'Defense', score: defenseScore });
-    if (attackScore > 1.1) traits.push({ name: 'Attack', score: attackScore });
-    if (expansionScore > 1.1) traits.push({ name: 'Expansion', score: expansionScore });
-    if (auraScore > 1.5) traits.push({ name: 'Aura', score: auraScore });
-    
-    // Sort by score
-    traits.sort((a, b) => b.score - a.score);
-    
-    // Use profile id hash for deterministic selection
-    const idHash = (profile.id || '').split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    
-    // Determine job title
-    let job: string;
-    if (traits.length > 0) {
-        const primary = traits[0];
-        const jobs = jobOptions[primary.name] || [primary.name];
-        job = jobs[idHash % jobs.length];
-    } else {
-        // Fallback: use balanced job
-        const balancedJobs = ['General', 'Agent', 'Captain', 'Commander'];
-        job = balancedJobs[idHash % balancedJobs.length];
-    }
-    
-    // Select first name deterministically but try different ones if duplicate
-    let nameIndex = idHash % firstNames.length;
-    let jobIndex = 0;
-    let attempts = 0;
-    let candidate: string;
-    let currentJob = job;
-    
-    // Get all possible jobs for this profile
-    let allJobs: string[] = [job];
-    if (traits.length > 0) {
-        const primary = traits[0];
-        const jobs = jobOptions[primary.name] || [primary.name];
-        allJobs = jobs;
-        currentJob = allJobs[jobIndex % allJobs.length];
-    }
-    
-    // Try to find unique name+job combination (never use numbers)
-    const maxAttempts = firstNames.length * allJobs.length;
-    
-    do {
-        candidate = `${currentJob} ${firstNames[nameIndex]}`;
-        
-        // Try next name
-        nameIndex = (nameIndex + 1) % firstNames.length;
-        attempts++;
-        
-        // If exhausted all names for this job, try next job
-        if (attempts % firstNames.length === 0) {
-            jobIndex++;
-            if (jobIndex < allJobs.length) {
-                currentJob = allJobs[jobIndex];
-                nameIndex = idHash % firstNames.length; // Reset to start
-            } else {
-                // All jobs exhausted, cycle back to first job
-                jobIndex = 0;
-                currentJob = allJobs[0];
-                nameIndex = (idHash + attempts) % firstNames.length;
-            }
-        }
-        
-        // Safety check: if we've tried everything, use a backup name from secondary list
-        // This should rarely happen with 50 names and multiple jobs
-        if (attempts >= maxAttempts) {
-            // Backup names for edge cases (short, unique names)
-            const backupNames = ['Ace', 'Blake', 'Cody', 'Drew', 'Eden', 'Felix', 'Gale', 'Hayes', 'Iris', 'Jade', 
-                                 'Kai', 'Lane', 'Miles', 'Nico', 'Orin', 'Pax', 'Quinn', 'Reed', 'Sky', 'Tate'];
-            let backupAttempts = 0;
-            let found = false;
-            
-            // Try backup names with all jobs
-            for (const backupJob of allJobs) {
-                for (const backupName of backupNames) {
-                    const backupCandidate = `${backupJob} ${backupName}`;
-                    if (!existingLabels.has(backupCandidate)) {
-                        candidate = backupCandidate;
-                        found = true;
-                        break;
-                    }
-                    backupAttempts++;
-                }
-                if (found) break;
-            }
-            
-            // Last resort: use hash-based unique combination
-            if (!found) {
-                const finalName = backupNames[(idHash + profile.id.length) % backupNames.length];
-                const finalJob = allJobs[(idHash + attempts) % allJobs.length];
-                candidate = `${finalJob} ${finalName}`;
-            }
-            break;
-        }
-    } while (existingLabels.has(candidate));
-    
-    return candidate;
-};
-
-// Keep the old function for backward compatibility but use short version when writing profiles
-const generateLabel = (profile: AIProfile): string => {
-    return generateShortLabel(profile);
-};
+// Label logic moved to scripts/ai_profile_label.ts
 
 const rankResults = (
     results: Individual[],
@@ -697,71 +549,7 @@ const rankResults = (
     return { ranked, diversityById };
 };
 
-const formatWeightsBlock = (weights: Partial<AIWeights>, indent: string = '        ') => {
-    const sortedKeys = Object.keys(weights).sort() as (keyof AIWeights)[];
-    const lines = sortedKeys.map((key) => {
-        const value = weights[key]!;
-        return `${indent}${key}: ${value},`;
-    });
-    return lines.join('\n');
-};
-
-const writeProfilesToSource = (profiles: AIProfile[], outputPath: string) => {
-    const sourcePath = path.join(process.cwd(), 'src', 'core', 'ai', 'AIProfile.ts');
-    let source = fs.readFileSync(sourcePath, 'utf-8');
-
-    // Remove existing EvolvedProfile definitions
-    source = source.replace(/export const EvolvedProfile\d+: AIProfile = \{[\s\S]*?\};\n\n/g, '');
-
-    // Ensure RandomAiProfiles declaration is correct
-    source = source.replace(/export const RandomAiProfiles: AIProfile\[[\s\S]*?\];/g, (match) => {
-        return match.replace('AIProfile[', 'AIProfile[] = [');
-    });
-
-    // Find RandomAiProfiles array
-    const startMarker = 'export const RandomAiProfiles: AIProfile[] = [';
-    const startIndex = source.indexOf(startMarker);
-    if (startIndex === -1) {
-        throw new Error('Could not find RandomAiProfiles array in source file');
-    }
-    const afterStart = source.indexOf('\n', startIndex);
-    const endIndex = source.indexOf('];', afterStart);
-    if (endIndex === -1) {
-        throw new Error('Could not find end of RandomAiProfiles array');
-    }
-
-    // Extract existing entries, removing any stale EvolvedProfile references
-    const existingArrayContent = source.substring(afterStart + 1, endIndex)
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0 && !line.startsWith('EvolvedProfile'))
-        .map((line) => line.replace(/,?$/, ''))
-        .join(',\n');
-
-    // Generate new profile definitions
-    const profileDefs = profiles.map((profile, index) => {
-        const varName = `EvolvedProfile${index + 1}`;
-        const weightsBlock = formatWeightsBlock(profile.weights || {});
-        return `export const ${varName}: AIProfile = {\n    id: '${profile.id}',\n    label: '${profile.label}',\n    weights: {\n${weightsBlock}\n    }\n};`;
-    }).join('\n\n');
-
-    // Generate new array entries
-    const newArrayEntries = profiles.map((profile, index) => `    EvolvedProfile${index + 1}`).join(',\n');
-
-    const newArrayContent = existingArrayContent
-        ? `${existingArrayContent},\n${newArrayEntries}`
-        : newArrayEntries;
-
-    const before = source.substring(0, startIndex);
-    const after = source.substring(endIndex + 2);
-
-    const updatedArray = `${startMarker}\n${newArrayContent}\n];`;
-
-    const finalSource = before + profileDefs + '\n\n' + updatedArray + after;
-
-    fs.writeFileSync(sourcePath, finalSource, 'utf-8');
-    console.log(`\n✅ Written ${profiles.length} evolved profiles to ${sourcePath}`);
-};
+// Profile writer moved to scripts/ai_profile_writer.ts
 
 const main = async () => {
     const options = parseArgs();
@@ -862,10 +650,9 @@ const main = async () => {
     
     for (let i = 0; i < finalProfiles.length; i++) {
         finalProfiles[i].id = `evolved_${profileTimestamp}_${i + 1}`;
-        // Generate unique short single-word label
-        finalProfiles[i].label = generateShortLabel(finalProfiles[i], usedLabels);
-        usedLabels.add(finalProfiles[i].label);
     }
+
+    assignProfileLabels(finalProfiles, { existingLabels: usedLabels });
 
     // Save results
     const reportTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -881,7 +668,7 @@ const main = async () => {
     console.log(`\n✅ Report saved to ${reportPath}`);
 
     if (options.writeProfile) {
-        writeProfilesToSource(finalProfiles, reportPath);
+        writeEvolvedProfilesToSource(finalProfiles);
     }
 };
 
