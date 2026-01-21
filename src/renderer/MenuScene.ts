@@ -12,6 +12,7 @@ export class MenuScene extends Phaser.Scene {
     private domElement!: Phaser.GameObjects.DOMElement;
     private background!: Phaser.GameObjects.Image;
     private soundManager!: SoundManager;
+    private menuFanfarePlayed: boolean = false;
 
     preload() {
         this.load.image('war_map_bg', 'assets/war_map_background.png');
@@ -251,25 +252,38 @@ export class MenuScene extends Phaser.Scene {
 
         // Audio: majestic start fanfare on scene load
         this.soundManager = new SoundManager();
-        
+
+        const playMenuFanfare = () => {
+            if (this.menuFanfarePlayed) return;
+            this.menuFanfarePlayed = true;
+            this.soundManager.startContext().then(() => {
+                this.time.delayedCall(GameConfig.UI_MENU_FANFARE_DELAY, () => {
+                    this.soundManager.playStartFanfare();
+                });
+            }).catch((err) => {
+                console.warn("Could not start audio context:", err);
+                this.soundManager.playStartFanfare();
+            });
+        };
+
         // Try to auto-play start fanfare
         // Note: Browser autoplay policies may require user interaction first
         this.soundManager.startContext().then(() => {
-            // Small delay to ensure audio context is fully ready
             this.time.delayedCall(GameConfig.UI_MENU_FANFARE_DELAY, () => {
-                this.soundManager.playStartFanfare();
+                playMenuFanfare();
             });
         }).catch((err) => {
             console.warn("Could not auto-play start fanfare:", err);
             // Fallback: play on first user interaction
-            const playOnInteraction = () => {
-                this.soundManager.playStartFanfare();
-                // Remove listener after first play
-                document.removeEventListener('click', playOnInteraction);
-                document.removeEventListener('touchstart', playOnInteraction);
-            };
-            document.addEventListener('click', playOnInteraction, { once: true });
-            document.addEventListener('touchstart', playOnInteraction, { once: true });
+            this.input.once('pointerdown', playMenuFanfare);
+            const domNode = this.domElement?.node as HTMLElement | null;
+            if (domNode) {
+                domNode.addEventListener('pointerdown', playMenuFanfare, { once: true });
+                domNode.addEventListener('touchstart', playMenuFanfare, { once: true });
+            } else {
+                document.addEventListener('pointerdown', playMenuFanfare, { once: true });
+                document.addEventListener('touchstart', playMenuFanfare, { once: true });
+            }
         });
 
         // --- Logic Binding ---
@@ -325,7 +339,8 @@ export class MenuScene extends Phaser.Scene {
         const btn = this.domElement.getChildByID('startGameBtn');
         if (btn) {
             btn.addEventListener('click', () => {
-                // Start game without playing fanfare (already played on menu load)
+                // Ensure fanfare plays at least once on mobile
+                playMenuFanfare();
                 const presetVal = (this.domElement.getChildByID('presetSelect') as HTMLSelectElement).value;
 
                 if (presetVal) {
@@ -365,6 +380,7 @@ export class MenuScene extends Phaser.Scene {
         const tutorialBtn = this.domElement.getChildByID('tutorialGameBtn');
         if (tutorialBtn) {
             tutorialBtn.addEventListener('click', () => {
+                playMenuFanfare();
                 const defaultWidth = 10;
                 const defaultHeight = 10;
                 (GameConfig as any).GRID_WIDTH = defaultWidth;

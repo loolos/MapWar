@@ -1605,6 +1605,24 @@ export class MainScene extends Phaser.Scene {
 
                 // 3. BUILDINGS (Towns, Bases) - Gold Mine already drawn
                 if (cell.building === 'base') {
+                    const owner = cell.owner ? this.engine.state.players[cell.owner] : null;
+                    const attackFactor = owner ? Math.max(1, owner.attackCostFactor ?? 1) : 1;
+                    if (attackFactor > 1) {
+                        const maxFactor = Math.max(1, GameConfig.ATTACK_DOMINANCE_MAX_FACTOR);
+                        const t = maxFactor > 1 ? Math.min(1, (attackFactor - 1) / (maxFactor - 1)) : 1;
+                        const cx = x + this.tileSize / 2;
+                        const cy = y + this.tileSize / 2;
+                        const baseRadius = this.tileSize * 0.35;
+                        const extraRadius = this.tileSize * 0.35 * t;
+                        const steps = 3;
+                        for (let i = 0; i < steps; i++) {
+                            const alpha = 0.35 * (1 - (i / steps));
+                            const radius = baseRadius + (extraRadius * (i + 1) / steps);
+                            this.gridGraphics.lineStyle(2, 0xff4444, alpha);
+                            this.gridGraphics.strokeCircle(cx, cy, radius);
+                        }
+                    }
+
                     // Base Defense Upgrade: Square Wall Border
                     if (cell.defenseLevel > 0) {
                         const lw = cell.defenseLevel * 2; // Lv 1..3 -> 2, 4, 6px

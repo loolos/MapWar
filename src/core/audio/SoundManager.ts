@@ -163,8 +163,12 @@ export class SoundManager {
                 this.polySynth.triggerAttackRelease(["C3", "G3"], "8n");
             }
             else if (key.includes('turn_event_peace_day')) {
-                // Holy/Ethereal: Higher pitch major chord with sustain
-                this.polySynth.triggerAttackRelease(["C5", "E5", "G5", "C6"], "2n");
+                // Cheerful/harmonic: Rich major chord with sparkle
+                const now = Tone.now();
+                this.polySynth.triggerAttackRelease(["C4", "E4", "G4", "B4", "D5"], "8n", now);
+                this.polySynth.triggerAttackRelease(["E4", "G4", "B4", "C5"], "8n", now + 0.12);
+                this.polySynth.triggerAttackRelease(["G4", "B4", "D5"], "8n", now + 0.24);
+                this.metalSynth.triggerAttackRelease(800, "32n", now + 0.32);
             }
             else if (key.includes('turn_event_blood_moon')) {
                 // Ominous/Dark: Dissonant low cluster + sharp metallic impact

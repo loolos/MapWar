@@ -124,7 +124,8 @@ export class GameState {
                     id: cfg.id,
                     color: cfg.color,
                     gold: GameConfig.INITIAL_GOLD,
-                    isAI: cfg.isAI
+                    isAI: cfg.isAI,
+                    attackCostFactor: 1
                 };
                 this.playerOrder.push(cfg.id);
             });
@@ -137,6 +138,7 @@ export class GameState {
             this.playerOrder.forEach(pid => {
                 if (this.players[pid]) {
                     this.players[pid].gold = GameConfig.INITIAL_GOLD;
+                    this.players[pid].attackCostFactor = 1;
                 }
             });
         }
