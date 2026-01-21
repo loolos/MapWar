@@ -17,11 +17,14 @@ import {
     rankResults,
     type TournamentOptions
 } from './ai_tournament_lib';
+import { getQualifierMapSeedsFromSeed, qualifiesCandidate } from './ai_qualifier';
 
 type CliOptions = TournamentOptions & {
     rounds: number;
     baseVariantRange: number;
     defaultVariantRange: number;
+    diversityMaxAttempts: number;
+    qualifierMapRefreshEvery: number;
     outDir: string;
     writeProfile: boolean;
 };
@@ -45,6 +48,8 @@ const parseArgs = (): CliOptions => {
         mapTypes: ['default', 'archipelago', 'pangaea'],
         baseVariantRange: 0.1,
         defaultVariantRange: 0.4,
+        diversityMaxAttempts: 500,
+        qualifierMapRefreshEvery: 10,
         diversityWeight: 0.1,
         outDir: 'reports',
         quiet: false,
@@ -97,6 +102,14 @@ const parseArgs = (): CliOptions => {
                 break;
             case '--default-range':
                 options.defaultVariantRange = parseFloat(next);
+                i++;
+                break;
+            case '--diversity-tries':
+                options.diversityMaxAttempts = Math.max(1, parseInt(next, 10));
+                i++;
+                break;
+            case '--qualifier-map-refresh':
+                options.qualifierMapRefreshEvery = Math.max(1, parseInt(next, 10));
                 i++;
                 break;
             case '--diversity-weight':
@@ -168,6 +181,107 @@ const createVariantProfile = (baseProfile: AIProfile, rng: () => number, mutatio
     };
 };
 
+const buildQualifiedVariant = (
+    baseProfile: AIProfile,
+    baseIndex: number,
+    variantIndex: number,
+    rng: () => number,
+    options: CliOptions,
+    roundIndex: number,
+    mapSeedBase: number
+): AIProfile => {
+    const progressEvery = 25;
+    const refreshEvery = options.qualifierMapRefreshEvery;
+    for (let attempt = 1; attempt <= options.diversityMaxAttempts; attempt++) {
+        const candidate = createVariantProfile(
+            baseProfile,
+            rng,
+            options.baseVariantRange,
+            `round_${roundIndex}_var_${baseIndex + 1}_${variantIndex}_${attempt}`
+        );
+        const aiSeedBase = options.seed + roundIndex * 100000 + baseIndex * 10000 + variantIndex * 1000 + attempt * 10;
+        const mapBlock = Math.floor((attempt - 1) / refreshEvery);
+        const mapSeeds = getQualifierMapSeedsFromSeed(mapSeedBase + mapBlock * 100);
+        const qualified = qualifiesCandidate(candidate, baseProfile, mapSeeds, aiSeedBase);
+        if (qualified) {
+            if (!options.quiet) {
+                console.log(`Round ${roundIndex + 1} variant: base ${baseIndex + 1} variant ${variantIndex} qualified after ${attempt} tries.`);
+            }
+            return candidate;
+        }
+        if (!options.quiet && attempt % progressEvery === 0) {
+            console.log(`Round ${roundIndex + 1} variant: base ${baseIndex + 1} variant ${variantIndex} ${attempt} tries, no qualifier yet.`);
+        }
+    }
+
+    if (!options.quiet) {
+        console.warn(`Round ${roundIndex + 1} variant: base ${baseIndex + 1} variant ${variantIndex} failed to qualify within ${options.diversityMaxAttempts} tries.`);
+    }
+    return cloneProfile(baseProfile, `round_${roundIndex}_base_${baseIndex + 1}_fallback_${variantIndex}`);
+};
+
+const generateDiversityProfiles = (
+    baseProfiles: AIProfile[],
+    rng: () => number,
+    options: CliOptions,
+    roundIndex: number
+): AIProfile[] => {
+    const diversity: AIProfile[] = [];
+    const baseDefaultProfile: AIProfile = {
+        id: 'diversity_base',
+        label: 'Default',
+        weights: {}
+    };
+    let attemptsUsed = 0;
+    const progressEvery = 25;
+    const refreshEvery = options.qualifierMapRefreshEvery;
+    for (let baseIndex = 0; baseIndex < 4; baseIndex++) {
+        const opponent = baseProfiles[baseIndex] ?? DefaultAIProfile;
+        let qualified = false;
+        for (let attempt = 1; attempt <= options.diversityMaxAttempts; attempt++) {
+            attemptsUsed += 1;
+            const candidate = createVariantProfile(
+                baseDefaultProfile,
+                rng,
+                options.defaultVariantRange,
+                `round_${roundIndex}_default_${baseIndex + 1}_${attempt}`
+            );
+            const aiSeedBase = options.seed + roundIndex * 100000 + baseIndex * 10000 + attempt * 10;
+            const mapBlock = Math.floor((attempt - 1) / refreshEvery);
+            const mapSeeds = getQualifierMapSeedsFromSeed(options.seed + roundIndex * 100000 + baseIndex * 10000 + mapBlock * 100);
+            if (qualifiesCandidate(candidate, opponent, mapSeeds, aiSeedBase)) {
+                diversity.push(candidate);
+                qualified = true;
+                if (!options.quiet) {
+                    console.log(`Round ${roundIndex + 1} default AI: found qualifier vs base ${baseIndex + 1} after ${attempt} tries.`);
+                }
+                break;
+            }
+            if (!options.quiet && attempt % progressEvery === 0) {
+                console.log(`Round ${roundIndex + 1} default AI: base ${baseIndex + 1} ${attempt} tries, no qualifier yet.`);
+            }
+        }
+        if (!qualified && !options.quiet) {
+            console.warn(`Round ${roundIndex + 1} default AI: base ${baseIndex + 1} failed to qualify within ${options.diversityMaxAttempts} tries.`);
+        }
+    }
+
+    if (diversity.length < 4) {
+        if (attemptsUsed >= options.diversityMaxAttempts * 4) {
+            console.warn(`Reached default AI max attempts (${options.diversityMaxAttempts}) per base with only ${diversity.length} qualified.`);
+        }
+        const missing = 4 - diversity.length;
+        if (!options.quiet) {
+            console.warn(`Only ${diversity.length} default AI qualified. Filling ${missing} with defaults.`);
+        }
+        for (let i = 0; i < missing; i++) {
+            diversity.push(createVariantProfile(baseDefaultProfile, rng, options.defaultVariantRange, `round_${roundIndex}_default_${i + 1}`));
+        }
+    }
+
+    return diversity;
+};
+
 const buildRoundProfiles = (baseProfiles: AIProfile[], rng: () => number, options: CliOptions, roundIndex: number): AIProfile[] => {
     const bases: AIProfile[] = [];
     for (let i = 0; i < 4; i++) {
@@ -177,20 +291,13 @@ const buildRoundProfiles = (baseProfiles: AIProfile[], rng: () => number, option
     const profiles: AIProfile[] = [];
     bases.forEach((base, index) => {
         profiles.push(cloneProfile(base, `round_${roundIndex}_base_${index + 1}`));
-        profiles.push(createVariantProfile(base, rng, options.baseVariantRange, `round_${roundIndex}_var_${index + 1}_a`));
-        profiles.push(createVariantProfile(base, rng, options.baseVariantRange, `round_${roundIndex}_var_${index + 1}_b`));
+        const mapSeedBase = options.seed + roundIndex * 100000 + index * 10000;
+        profiles.push(buildQualifiedVariant(base, index, 1, rng, options, roundIndex, mapSeedBase));
+        profiles.push(buildQualifiedVariant(base, index, 2, rng, options, roundIndex, mapSeedBase));
     });
 
-    // Create default variants from AIConfig defaults (not from DefaultAIProfile)
-    // Use a profile with only DefaultAIWeights (no overrides) as the base
-    const baseDefaultProfile: AIProfile = {
-        id: 'default_base',
-        label: 'Default',
-        weights: {} // Empty weights means it will use DefaultAIWeights
-    };
-    for (let i = 0; i < 4; i++) {
-        profiles.push(createVariantProfile(baseDefaultProfile, rng, options.defaultVariantRange, `round_${roundIndex}_default_${i + 1}`));
-    }
+    const diversity = generateDiversityProfiles(bases, rng, options, roundIndex);
+    profiles.push(...diversity);
 
     return profiles;
 };
