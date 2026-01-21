@@ -13,7 +13,7 @@ export interface GameEventMap {
     'tileSelected': { r: number, c: number, options: any[] };
     'tileDeselected': void;
     'logMessage': { text: string, type?: LogType };
-    'incomeReport': { total: number, base: number, land: number, landCount: number, depletedMines: { r: number, c: number }[] };
+    'incomeReport': { total: number, base: number, land: number, landCount: number, depletedMines: { r: number, c: number }[], powerActivated?: boolean, attackCostFactor?: number };
     'gameOver': string; // winnerId
     'turnEvent': { eventId: string, playerId: string, round: number, name: string, message: string, sfxKey?: string };
 

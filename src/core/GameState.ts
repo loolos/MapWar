@@ -33,7 +33,8 @@ export class GameState {
                 id: cfg.id,
                 color: cfg.color,
                 gold: GameConfig.INITIAL_GOLD,
-                isAI: cfg.isAI
+                isAI: cfg.isAI,
+                attackCostFactor: 1
             };
             this.playerOrder.push(cfg.id);
         });
@@ -241,6 +242,41 @@ export class GameState {
         // User Request: Determine connectivity state BEFORE calculating income
         this.updateConnectivity(playerId);
 
+        const previousAttackFactor = Math.max(1, this.players[playerId].attackCostFactor ?? 1);
+        const height = this.grid.length;
+        const width = height > 0 ? this.grid[0].length : 0;
+        let totalOwnableCount = 0;
+        let ownedCount = 0;
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
+                const cell = this.grid[r][c];
+                if (cell.type === 'water' || cell.type === 'bridge') continue;
+                totalOwnableCount++;
+                if (cell.owner === playerId) {
+                    ownedCount++;
+                }
+            }
+        }
+        if (!Number.isFinite(this.players[playerId].attackCostFactor)) {
+            this.players[playerId].attackCostFactor = 1;
+        }
+        if (this.turnCount >= GameConfig.ATTACK_DOMINANCE_TURN_MIN && totalOwnableCount > 0) {
+            const ratio = ownedCount / totalOwnableCount;
+            if (ratio > GameConfig.ATTACK_DOMINANCE_MIN_RATIO) {
+                const t = Math.min(1, Math.max(0,
+                    (ratio - GameConfig.ATTACK_DOMINANCE_MIN_RATIO) / (1 - GameConfig.ATTACK_DOMINANCE_MIN_RATIO)
+                ));
+                const factor = 1 + (GameConfig.ATTACK_DOMINANCE_MAX_FACTOR - 1) * t;
+                this.players[playerId].attackCostFactor = Math.max(1, Math.min(GameConfig.ATTACK_DOMINANCE_MAX_FACTOR, factor));
+            } else {
+                this.players[playerId].attackCostFactor = 1;
+            }
+        } else {
+            this.players[playerId].attackCostFactor = 1;
+        }
+        const currentAttackFactor = Math.max(1, this.players[playerId].attackCostFactor ?? 1);
+        const powerActivated = previousAttackFactor <= 1 && currentAttackFactor > 1;
+
         // Single Source of Truth for Income
         // const totalIncome = this.calculateIncome(playerId); // Not needed anymore
 
@@ -357,7 +393,9 @@ export class GameState {
             farm: farmIncome,
             landCount,
             depletedMines,
-            upgradeBonus: 0
+            upgradeBonus: 0,
+            powerActivated,
+            attackCostFactor: currentAttackFactor
         };
     }
 
@@ -531,6 +569,11 @@ export class GameState {
         // Restore persistent list or fallback to players keys
         this.allPlayerIds = data.allPlayerIds || Object.keys(this.players);
         this.playerOrder = data.playerOrder || [...this.allPlayerIds]; // Fallback
+        for (const playerId of Object.keys(this.players)) {
+            if (!Number.isFinite(this.players[playerId].attackCostFactor)) {
+                this.players[playerId].attackCostFactor = 1;
+            }
+        }
 
         // Reconstruct Grid
         // Use loaded data dimensions

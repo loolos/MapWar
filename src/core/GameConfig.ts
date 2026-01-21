@@ -56,6 +56,10 @@ export const GameConfig = {
     // Global Cost Multipliers (System Parameters)
     COST_MULTIPLIER_NEUTRAL: 1.0,
     COST_MULTIPLIER_ATTACK: 1.2,
+    // Attack Dominance Factor
+    ATTACK_DOMINANCE_TURN_MIN: 26,
+    ATTACK_DOMINANCE_MIN_RATIO: 0.5,
+    ATTACK_DOMINANCE_MAX_FACTOR: 3,
     // Turn Event: Flood
     FLOOD_CHANCE_BASE: 0.35,
     FLOOD_CHANCE_WALL: 0.35 / 3,
@@ -196,4 +200,5 @@ export interface Player {
     color: number;
     gold: number;
     isAI: boolean;
+    attackCostFactor?: number;
 }

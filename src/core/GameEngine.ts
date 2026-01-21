@@ -1471,6 +1471,13 @@ export class GameEngine {
         const summaryText = `Turn ${this.state.turnCount} Start. Income: +${this.formatLogNumber(incomeReport.total)} (${parts.join(', ')})`;
         this.emit('logMessage', { text: summaryText, type: 'info' });
 
+        if (incomeReport.powerActivated && incomeReport.attackCostFactor) {
+            const factor = Number.isFinite(incomeReport.attackCostFactor)
+                ? incomeReport.attackCostFactor.toFixed(1)
+                : '1.0';
+            this.emit('logMessage', { text: `Power surge! Attack costs reduced (x${factor}).`, type: 'info' });
+        }
+
         if (incomeReport.depletedMines && incomeReport.depletedMines.length > 0) {
             incomeReport.depletedMines.forEach((m: any) => {
                 this.emit('logMessage', { text: `Gold Mine collapsed at (${m.r}, ${m.c})!`, type: 'info' });

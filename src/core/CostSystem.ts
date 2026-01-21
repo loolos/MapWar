@@ -149,6 +149,12 @@ export class CostSystem {
                     breakdownParts.push(`WallCover(+${Math.floor(defenseBonus * 100)}%)`);
                 }
             }
+
+            const attackFactor = Math.max(1, state.players[attackerId!]?.attackCostFactor ?? 1);
+            if (attackFactor > 1) {
+                baseCost = Math.floor(baseCost / attackFactor);
+                breakdownParts.push(`Dominance(/${attackFactor.toFixed(1)})`);
+            }
         }
 
         return { cost: Math.max(1, baseCost), breakdown: breakdownParts.join(' ') };

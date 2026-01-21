@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { GameEngine } from '../../core/GameEngine'; // For Move type if needed? Or just pass primitives
+import { GameConfig } from '../../core/GameConfig';
 
 export class PlayerStatusSystem {
     private container!: Phaser.GameObjects.Container;
@@ -136,6 +137,16 @@ export class PlayerStatusSystem {
             // To get left edge: goldTxt.x - goldTxt.displayWidth
             incomeTxt.setX(goldTxt.x - goldTxt.displayWidth - 10);
 
+            const dominanceTxt = row.getAt(6) as Phaser.GameObjects.Text;
+            const attackFactor = Math.max(1, player.attackCostFactor ?? 1);
+            const showDominance = state.turnCount >= GameConfig.ATTACK_DOMINANCE_TURN_MIN && attackFactor > 1;
+            if (showDominance) {
+                dominanceTxt.setText(`P x${attackFactor.toFixed(1)}`);
+                dominanceTxt.setVisible(true);
+                dominanceTxt.setX(incomeTxt.x - incomeTxt.displayWidth - 8);
+            } else {
+                dominanceTxt.setVisible(false);
+            }
 
             const currentId = state.currentPlayerId || '';
             const pAlpha = currentId === pid ? 1 : 0.4;
@@ -260,6 +271,13 @@ export class PlayerStatusSystem {
         });
         incomeText.setOrigin(1, 0.5);
         row.add(incomeText);
+
+        const dominanceText = scene.add.text(incomeText.x - (incomeText.width + 8), h / 2, '', {
+            fontFamily: 'Arial', fontSize: `${Math.max(8, baseSize - 3)}px`, color: '#ffcc66'
+        });
+        dominanceText.setOrigin(1, 0.5);
+        dominanceText.setVisible(false);
+        row.add(dominanceText);
 
         return row;
     }

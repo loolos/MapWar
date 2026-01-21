@@ -120,6 +120,154 @@ describe('GameEngine', () => {
             expect(cost).toBe(24);
         });
 
+        it('reduces attack cost when dominance factor applies', () => {
+            const height = engine.state.grid.length;
+            const width = height > 0 ? engine.state.grid[0].length : 0;
+            for (let r = 0; r < height; r++) {
+                for (let c = 0; c < width; c++) {
+                    const cell = engine.state.grid[r][c];
+                    cell.type = 'plain';
+                    cell.owner = null;
+                    cell.building = 'none';
+                    cell.isConnected = false;
+                }
+            }
+
+            let owned = 0;
+            for (let r = 0; r < height && owned < 60; r++) {
+                for (let c = 0; c < width && owned < 60; c++) {
+                    if ((r === 0 && c === 1) || (r === 0 && c === 2)) continue;
+                    engine.state.setOwner(r, c, 'P1');
+                    owned++;
+                }
+            }
+
+            engine.state.setOwner(0, 0, 'P1');
+            engine.state.setBuilding(0, 0, 'base');
+            engine.state.setOwner(0, 2, 'P2');
+            engine.state.setBuilding(0, 2, 'base');
+            engine.state.setOwner(0, 1, 'P2');
+            engine.state.updateConnectivity('P1');
+            engine.state.updateConnectivity('P2');
+
+            engine.state.turnCount = 50;
+            engine.state.accrueResources('P1');
+            expect(engine.state.players['P1'].attackCostFactor).toBeCloseTo(1.4, 3);
+
+            const cost = engine.getMoveCost(0, 1);
+            expect(cost).toBe(17);
+        });
+
+        it('does not apply dominance factor before turn threshold', () => {
+            const height = engine.state.grid.length;
+            const width = height > 0 ? engine.state.grid[0].length : 0;
+            for (let r = 0; r < height; r++) {
+                for (let c = 0; c < width; c++) {
+                    const cell = engine.state.grid[r][c];
+                    cell.type = 'plain';
+                    cell.owner = null;
+                    cell.building = 'none';
+                    cell.isConnected = false;
+                }
+            }
+
+            let owned = 0;
+            for (let r = 0; r < height && owned < 60; r++) {
+                for (let c = 0; c < width && owned < 60; c++) {
+                    if ((r === 0 && c === 1) || (r === 0 && c === 2)) continue;
+                    engine.state.setOwner(r, c, 'P1');
+                    owned++;
+                }
+            }
+
+            engine.state.setOwner(0, 0, 'P1');
+            engine.state.setBuilding(0, 0, 'base');
+            engine.state.setOwner(0, 2, 'P2');
+            engine.state.setBuilding(0, 2, 'base');
+            engine.state.setOwner(0, 1, 'P2');
+            engine.state.updateConnectivity('P1');
+            engine.state.updateConnectivity('P2');
+
+            engine.state.turnCount = GameConfig.ATTACK_DOMINANCE_TURN_MIN - 1;
+            engine.state.accrueResources('P1');
+            expect(engine.state.players['P1'].attackCostFactor).toBe(1);
+
+            const cost = engine.getMoveCost(0, 1);
+            expect(cost).toBe(24);
+        });
+
+        it('respects configurable dominance minimum ratio', () => {
+            const originalMinRatio = GameConfig.ATTACK_DOMINANCE_MIN_RATIO;
+            GameConfig.ATTACK_DOMINANCE_MIN_RATIO = 0.8;
+            try {
+                const height = engine.state.grid.length;
+                const width = height > 0 ? engine.state.grid[0].length : 0;
+                for (let r = 0; r < height; r++) {
+                    for (let c = 0; c < width; c++) {
+                        const cell = engine.state.grid[r][c];
+                        cell.type = 'plain';
+                        cell.owner = null;
+                        cell.building = 'none';
+                        cell.isConnected = false;
+                    }
+                }
+
+                let owned = 0;
+                for (let r = 0; r < height && owned < 60; r++) {
+                    for (let c = 0; c < width && owned < 60; c++) {
+                        if ((r === 0 && c === 1) || (r === 0 && c === 2)) continue;
+                        engine.state.setOwner(r, c, 'P1');
+                        owned++;
+                    }
+                }
+
+                engine.state.setOwner(0, 0, 'P1');
+                engine.state.setBuilding(0, 0, 'base');
+                engine.state.setOwner(0, 2, 'P2');
+                engine.state.setBuilding(0, 2, 'base');
+                engine.state.setOwner(0, 1, 'P2');
+                engine.state.updateConnectivity('P1');
+                engine.state.updateConnectivity('P2');
+
+                engine.state.turnCount = GameConfig.ATTACK_DOMINANCE_TURN_MIN;
+                engine.state.accrueResources('P1');
+                expect(engine.state.players['P1'].attackCostFactor).toBe(1);
+
+                const cost = engine.getMoveCost(0, 1);
+                expect(cost).toBe(24);
+            } finally {
+                GameConfig.ATTACK_DOMINANCE_MIN_RATIO = originalMinRatio;
+            }
+        });
+
+        it('caps dominance factor at configured maximum', () => {
+            const originalMax = GameConfig.ATTACK_DOMINANCE_MAX_FACTOR;
+            GameConfig.ATTACK_DOMINANCE_MAX_FACTOR = 2;
+            try {
+                const height = engine.state.grid.length;
+                const width = height > 0 ? engine.state.grid[0].length : 0;
+                for (let r = 0; r < height; r++) {
+                    for (let c = 0; c < width; c++) {
+                        const cell = engine.state.grid[r][c];
+                        cell.type = 'plain';
+                        cell.owner = 'P1';
+                        cell.building = 'none';
+                        cell.isConnected = false;
+                    }
+                }
+
+                engine.state.setOwner(0, 0, 'P1');
+                engine.state.setBuilding(0, 0, 'base');
+                engine.state.updateConnectivity('P1');
+
+                engine.state.turnCount = GameConfig.ATTACK_DOMINANCE_TURN_MIN;
+                engine.state.accrueResources('P1');
+                expect(engine.state.players['P1'].attackCostFactor).toBe(2);
+            } finally {
+                GameConfig.ATTACK_DOMINANCE_MAX_FACTOR = originalMax;
+            }
+        });
+
         it('charges 40G for chained distance attack', () => {
             // Setup: P2 owns (0,2). P1 (0,0).
             // P1 plans (0,1) [Empty].
