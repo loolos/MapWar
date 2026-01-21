@@ -26,14 +26,9 @@ type CliOptions = {
     winBonus4p: number;
     winBonus8p: number;
     mapTypes: MapType[];
-    width: number;
-    height: number;
-    playerCount: number;
-    mutationRange: number;
     baseVariantRange: number;
     defaultVariantRange: number;
     diversityWeight: number;
-    winBonusMultiplier: number;
     outDir: string;
     quiet: boolean;
     writeProfile: boolean;
@@ -101,14 +96,9 @@ const parseArgs = (): CliOptions => {
         winBonus4p: 2,
         winBonus8p: 4,
         mapTypes: ['default', 'archipelago', 'pangaea'],
-        width: 15,
-        height: 15,
-        playerCount: 4,
-        mutationRange: 0.3,
         baseVariantRange: 0.1,
         defaultVariantRange: 0.4,
         diversityWeight: 0.1,
-        winBonusMultiplier: 3,
         outDir: 'reports',
         quiet: false,
         writeProfile: false
@@ -152,22 +142,6 @@ const parseArgs = (): CliOptions => {
                 break;
             case '--maps':
                 options.mapTypes = next.split(',').map((t) => t.trim()).filter(Boolean) as MapType[];
-                i++;
-                break;
-            case '--width':
-                options.width = parseInt(next, 10);
-                i++;
-                break;
-            case '--height':
-                options.height = parseInt(next, 10);
-                i++;
-                break;
-            case '--players':
-                options.playerCount = Math.max(2, parseInt(next, 10));
-                i++;
-                break;
-            case '--mutation-range':
-                options.mutationRange = parseFloat(next);
                 i++;
                 break;
             case '--base-range':
@@ -513,7 +487,7 @@ const evaluateRound = (
         winBonusMultiplier: number;
     }> = [
         { key: '2p', players: 2, width: 10, height: 10, matchesPerAi: options.matchesPerAi2p, maxTurns: options.maxTurns2p, winBonusMultiplier: options.winBonus2p },
-        { key: '4p', players: 4, width: options.width, height: options.height, matchesPerAi: options.matchesPerAi4p, maxTurns: options.maxTurns4p, winBonusMultiplier: options.winBonus4p },
+        { key: '4p', players: 4, width: 15, height: 15, matchesPerAi: options.matchesPerAi4p, maxTurns: options.maxTurns4p, winBonusMultiplier: options.winBonus4p },
         { key: '8p', players: 8, width: 20, height: 20, matchesPerAi: options.matchesPerAi8p, maxTurns: options.maxTurns8p, winBonusMultiplier: options.winBonus8p }
     ];
 
@@ -780,10 +754,6 @@ const main = async () => {
 
     if (!options.mapTypes.length) {
         options.mapTypes = ['default'];
-    }
-    if (options.playerCount !== 4) {
-        console.warn(`⚠️ This mode expects 4 players. Forcing --players=4 (was ${options.playerCount}).`);
-        options.playerCount = 4;
     }
 
     const startTime = Date.now();
