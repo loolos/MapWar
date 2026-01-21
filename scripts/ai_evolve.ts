@@ -174,6 +174,9 @@ const parseArgs = (): CliOptions => {
                 break;
             case '--write-profile':
                 options.writeProfile = true;
+                if (!options.quiet) {
+                    console.log('✓ --write-profile flag detected');
+                }
                 break;
             case '--quiet':
                 options.quiet = true;
@@ -868,7 +871,17 @@ const main = async () => {
     console.log(`\n✅ Report saved to ${reportPath}`);
 
     if (options.writeProfile) {
-        writeEvolvedProfilesToSource(finalProfiles);
+        console.log('\n📝 Writing evolved profiles to source file...');
+        try {
+            writeEvolvedProfilesToSource(finalProfiles);
+        } catch (err) {
+            console.error('\n❌ Error writing profiles to source:', err);
+            throw err;
+        }
+    } else {
+        if (!options.quiet) {
+            console.log('\nℹ️  Profiles not written to source (use --write-profile to enable)');
+        }
     }
 };
 
