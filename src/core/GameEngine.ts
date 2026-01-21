@@ -5,6 +5,7 @@ import { CostSystem } from './CostSystem';
 import { RandomAiProfiles, type AIProfile } from './ai/AIProfile';
 
 import type { Action, EndTurnAction } from './Actions';
+import type { Cell } from './Cell';
 import type { MapType } from './map/MapGenerator';
 
 import { GameStateManager } from './GameStateManager';
@@ -394,10 +395,13 @@ export class GameEngine {
 
         const floodChanceBase = GameConfig.FLOOD_CHANCE_BASE;
         const floodChanceWall = GameConfig.FLOOD_CHANCE_WALL;
+        const floodBridgeDistanceBonus = GameConfig.FLOOD_BRIDGE_DISTANCE_BONUS;
         const oceanMinSize = GameConfig.TURN_EVENT_FLOOD_OCEAN_MIN_SIZE;
         const visited = Array.from({ length: height }, () => Array(width).fill(false));
         const oceanId = Array.from({ length: height }, () => Array(width).fill(-1));
         const oceanSizes: number[] = [];
+        const isWaterLike = (cell: Cell) => cell.type === 'water' || cell.type === 'bridge';
+        const isLand = (cell: Cell) => !isWaterLike(cell);
 
         const bfs = (sr: number, sc: number, id: number) => {
             const queue: { r: number; c: number }[] = [{ r: sr, c: sc }];
@@ -417,7 +421,7 @@ export class GameEngine {
                 for (const n of neighbors) {
                     if (n.r < 0 || n.r >= height || n.c < 0 || n.c >= width) continue;
                     if (visited[n.r][n.c]) continue;
-                    if (grid[n.r][n.c].type !== 'water') continue;
+                    if (!isWaterLike(grid[n.r][n.c])) continue;
                     visited[n.r][n.c] = true;
                     oceanId[n.r][n.c] = id;
                     queue.push(n);
@@ -429,7 +433,7 @@ export class GameEngine {
         let oceanCount = 0;
         for (let r = 0; r < height; r++) {
             for (let c = 0; c < width; c++) {
-                if (!visited[r][c] && grid[r][c].type === 'water') {
+                if (!visited[r][c] && isWaterLike(grid[r][c])) {
                     bfs(r, c, oceanCount);
                     oceanCount++;
                 }
@@ -440,11 +444,45 @@ export class GameEngine {
             const id = oceanId[r][c];
             return id >= 0 && (oceanSizes[id] || 0) >= oceanMinSize;
         };
-        const candidates: { r: number; c: number }[] = [];
+        const distanceToLand = Array.from({ length: height }, () => Array(width).fill(-1));
+        const distanceQueue: { r: number; c: number }[] = [];
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
+                if (isLand(grid[r][c])) {
+                    distanceToLand[r][c] = 0;
+                    distanceQueue.push({ r, c });
+                }
+            }
+        }
+        let distanceHead = 0;
+        while (distanceHead < distanceQueue.length) {
+            const curr = distanceQueue[distanceHead++];
+            const nextDistance = distanceToLand[curr.r][curr.c] + 1;
+            const neighbors = [
+                { r: curr.r + 1, c: curr.c },
+                { r: curr.r - 1, c: curr.c },
+                { r: curr.r, c: curr.c + 1 },
+                { r: curr.r, c: curr.c - 1 }
+            ];
+            for (const n of neighbors) {
+                if (n.r < 0 || n.r >= height || n.c < 0 || n.c >= width) continue;
+                if (distanceToLand[n.r][n.c] !== -1) continue;
+                distanceToLand[n.r][n.c] = nextDistance;
+                distanceQueue.push(n);
+            }
+        }
+
+        const candidates: { r: number; c: number; isBridge?: boolean }[] = [];
         for (let r = 0; r < height; r++) {
             for (let c = 0; c < width; c++) {
                 const cell = grid[r][c];
-                if (cell.type === 'water' || cell.type === 'bridge') continue;
+                if (cell.type === 'bridge') {
+                    if (isLargeOcean(r, c)) {
+                        candidates.push({ r, c, isBridge: true });
+                    }
+                    continue;
+                }
+                if (cell.type === 'water') continue;
                 if (cell.building === 'base') continue;
                 const neighbors = [
                     { r: r + 1, c },
@@ -461,10 +499,15 @@ export class GameEngine {
         if (candidates.length === 0) return 0;
 
         let flooded = 0;
-        for (const { r, c } of candidates) {
+        for (const { r, c, isBridge } of candidates) {
             const cell = grid[r][c];
             if (cell.type === 'water' || cell.building === 'base') continue;
-            const chance = cell.building === 'wall' ? floodChanceWall : floodChanceBase;
+            let chance = cell.building === 'wall' ? floodChanceWall : floodChanceBase;
+            if (isBridge) {
+                const distRaw = distanceToLand[r][c];
+                const dist = distRaw >= 0 ? Math.max(0, distRaw - 1) : Math.max(height, width);
+                chance = Math.min(1, floodChanceBase + dist * floodBridgeDistanceBonus);
+            }
             if (this.random() > chance) continue;
             this.floodedCells.set(`${r},${c}`, { r, c, type: cell.type });
             cell.owner = null;
@@ -498,7 +541,7 @@ export class GameEngine {
         for (const entry of this.floodedCells.values()) {
             const cell = this.state.getCell(entry.r, entry.c);
             if (!cell) continue;
-            if (cell.type === 'water') {
+            if (cell.type === 'water' && entry.type !== 'bridge') {
                 cell.type = entry.type;
                 restored++;
             }
@@ -592,7 +635,7 @@ export class GameEngine {
 
         for (let r = 0; r < height; r++) {
             for (let c = 0; c < width; c++) {
-                if (visited[r][c] || grid[r][c].type !== 'water') continue;
+                if (visited[r][c] || (grid[r][c].type !== 'water' && grid[r][c].type !== 'bridge')) continue;
                 enqueue(r, c);
                 let size = 0;
                 let head = 0;
@@ -608,7 +651,7 @@ export class GameEngine {
                     for (const n of neighbors) {
                         if (n.r < 0 || n.r >= height || n.c < 0 || n.c >= width) continue;
                         if (visited[n.r][n.c]) continue;
-                        if (grid[n.r][n.c].type !== 'water') continue;
+                        if (grid[n.r][n.c].type !== 'water' && grid[n.r][n.c].type !== 'bridge') continue;
                         enqueue(n.r, n.c);
                     }
                 }

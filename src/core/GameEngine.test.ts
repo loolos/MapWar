@@ -987,6 +987,34 @@ describe('GameEngine', () => {
             expect(firstTarget.building).toBe('none');
             expect(secondTarget.building).toBe('none');
         });
+
+        it('keeps flooded bridges as water after recede', () => {
+            setupFloodMap();
+            GameConfig.FLOOD_CHANCE_BASE = 1;
+            GameConfig.FLOOD_CHANCE_WALL = 1;
+            GameConfig.TURN_EVENT_FLOOD_RECEDE_CHANCE = 1;
+
+            const bridgeTarget = engine.state.grid[5][6];
+            bridgeTarget.type = 'bridge';
+            bridgeTarget.owner = 'P2';
+            bridgeTarget.building = 'none';
+
+            const flooded = (engine as any).applyFloodEvent();
+            expect(flooded).toBeGreaterThan(0);
+            expect(bridgeTarget.type).toBe('water');
+
+            const event = (engine as any).turnEventSystem.onTurnStart({
+                round: 2,
+                turnsTakenInRound: 0,
+                playerOrder: ['P1'],
+                currentPlayerId: 'P1'
+            });
+            expect(event?.eventId).toBe('flood_recede');
+
+            (engine as any).applyTurnEvent(event);
+            expect(bridgeTarget.type).toBe('water');
+            expect(bridgeTarget.owner).toBe(null);
+        });
     });
     });
 

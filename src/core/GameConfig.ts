@@ -59,6 +59,7 @@ export const GameConfig = {
     // Turn Event: Flood
     FLOOD_CHANCE_BASE: 0.35,
     FLOOD_CHANCE_WALL: 0.35 / 3,
+    FLOOD_BRIDGE_DISTANCE_BONUS: 0.05,
     // Turn Event: Trigger Chance
     TURN_EVENT_TRIGGER_CHANCE: 0.05,
     TURN_EVENT_FLOOD_RANDOM_CHANCE: 0.05,
