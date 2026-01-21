@@ -1,7 +1,5 @@
 import fs from 'node:fs';
 import path from 'path';
-import { GameEngine } from '../src/core/GameEngine';
-import { GameConfig } from '../src/core/GameConfig';
 import type { MapType } from '../src/core/map/MapGenerator';
 import {
     DefaultAIWeights,
@@ -12,71 +10,20 @@ import {
 } from '../src/core/ai/AIProfile';
 import { assignProfileLabels } from './ai_profile_label';
 import { writeEvolvedProfilesToSource } from './ai_profile_writer';
+import {
+    createSeededRandom,
+    evaluateTournament,
+    getActiveModes,
+    rankResults,
+    type TournamentOptions
+} from './ai_tournament_lib';
 
-type CliOptions = {
-    seed: number;
+type CliOptions = TournamentOptions & {
     rounds: number;
-    matchesPerAi2p: number;
-    matchesPerAi4p: number;
-    matchesPerAi8p: number;
-    maxTurns2p: number;
-    maxTurns4p: number;
-    maxTurns8p: number;
-    winBonus2p: number;
-    winBonus4p: number;
-    winBonus8p: number;
-    mapTypes: MapType[];
     baseVariantRange: number;
     defaultVariantRange: number;
-    diversityWeight: number;
     outDir: string;
-    quiet: boolean;
     writeProfile: boolean;
-};
-
-type Individual = {
-    profile: AIProfile;
-    games: number;
-    wins: number;
-    decisiveGames: number;
-    games2p: number;
-    games4p: number;
-    games8p: number;
-    wins2p: number;
-    wins4p: number;
-    wins8p: number;
-    decisiveGames2p: number;
-    decisiveGames4p: number;
-    decisiveGames8p: number;
-    totalPoints: number;
-    avgPointsRaw: number;
-    avgPointsRaw2p: number;
-    avgPointsRaw4p: number;
-    avgPointsRaw8p: number;
-    avgDecisiveBonus2p: number;
-    avgDecisiveBonus4p: number;
-    avgDecisiveBonus8p: number;
-    avgPointsNorm: number;
-    avgPointsNorm2p: number;
-    avgPointsNorm4p: number;
-    avgPointsNorm8p: number;
-    avgTurns: number;
-    decisiveRate: number;
-    avgDecisiveBonus: number;
-    avgDecisiveBonusNorm: number;
-    avgDecisiveBonusNorm2p: number;
-    avgDecisiveBonusNorm4p: number;
-    avgDecisiveBonusNorm8p: number;
-};
-
-type MatchResult = {
-    seed: number;
-    mapType: MapType;
-    turns: number;
-    profiles: Record<string, string>;
-    placements: string[];
-    landCounts: Record<string, number>;
-    decisiveWin: boolean;
 };
 
 const MUTATION_KEYS = Object.keys(DefaultAIWeights) as (keyof AIWeights)[];
@@ -192,27 +139,6 @@ const parseArgs = (): CliOptions => {
     return options;
 };
 
-const createSeededRandom = (seed: number) => {
-    let t = seed >>> 0;
-    return () => {
-        t += 0x6D2B79F5;
-        let r = Math.imul(t ^ (t >>> 15), 1 | t);
-        r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
-        return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-    };
-};
-
-const withSeededRandom = <T>(seed: number, fn: (rng: () => number) => T): T => {
-    const original = Math.random;
-    const rng = createSeededRandom(seed);
-    Math.random = rng;
-    try {
-        return fn(rng);
-    } finally {
-        Math.random = original;
-    }
-};
-
 const clampPositive = (value: number) => Math.max(0.01, value);
 
 const cloneProfile = (profile: AIProfile, id: string): AIProfile => {
@@ -242,145 +168,6 @@ const createVariantProfile = (baseProfile: AIProfile, rng: () => number, mutatio
     };
 };
 
-const calculateDistance = (profile1: AIProfile, profile2: AIProfile): number => {
-    const w1 = profile1.weights || {};
-    const w2 = profile2.weights || {};
-    let distance = 0;
-    let count = 0;
-    for (const key of MUTATION_KEYS) {
-        const v1 = w1[key] ?? DefaultAIWeights[key];
-        const v2 = w2[key] ?? DefaultAIWeights[key];
-        const base = DefaultAIWeights[key];
-        const normalizedDiff = Math.abs(v1 - v2) / (base || 1);
-        distance += normalizedDiff;
-        count++;
-    }
-    return count > 0 ? distance / count : 0;
-};
-
-const calculateMinDistance = (profile: AIProfile, selected: Individual[]): number => {
-    let minDistance = Infinity;
-    for (const other of selected) {
-        const distance = calculateDistance(profile, other.profile);
-        if (distance < minDistance) {
-            minDistance = distance;
-        }
-    }
-    return Number.isFinite(minDistance) ? minDistance : 0;
-};
-
-const countLandByPlayer = (grid: { owner: string | null }[][]): Record<string, number> => {
-    const counts: Record<string, number> = {};
-    for (let r = 0; r < grid.length; r++) {
-        for (let c = 0; c < grid[r].length; c++) {
-            const owner = grid[r][c].owner;
-            if (!owner) continue;
-            counts[owner] = (counts[owner] || 0) + 1;
-        }
-    }
-    return counts;
-};
-
-const runMatch = (
-    profilesByPlayer: Record<string, AIProfile>,
-    seed: number,
-    mapType: MapType,
-    width: number,
-    height: number,
-    playerCount: number,
-    maxTurns: number,
-    options: CliOptions,
-    positionRotation: number = 0
-): MatchResult => {
-    return withSeededRandom(seed, (rng) => {
-        (GameConfig as any).GRID_WIDTH = width;
-        (GameConfig as any).GRID_HEIGHT = height;
-
-        // Create players array with rotation
-        // Rotate player positions so each AI gets to play each starting position
-        const basePlayerIds = Array.from({ length: playerCount }, (_, index) => `P${index + 1}`);
-        const rotatedPlayerIds: string[] = [];
-        for (let i = 0; i < basePlayerIds.length; i++) {
-            const rotatedIndex = (i + positionRotation) % basePlayerIds.length;
-            rotatedPlayerIds.push(basePlayerIds[rotatedIndex]);
-        }
-
-        const players = rotatedPlayerIds.map((id) => ({
-            id,
-            isAI: true,
-            color: GameConfig.COLORS[id as keyof typeof GameConfig.COLORS]
-        }));
-
-        // Create rotated profile mapping: map rotated player ID to original profile
-        const rotatedProfilesByPlayer: Record<string, AIProfile> = {};
-        for (let i = 0; i < rotatedPlayerIds.length; i++) {
-            const rotatedPlayerId = rotatedPlayerIds[i];
-            // The profile that should be at position i after rotation
-            // is the profile that was originally at position (i - positionRotation + length) % length
-            const originalPositionIndex = (i - positionRotation + basePlayerIds.length) % basePlayerIds.length;
-            const originalPlayerId = basePlayerIds[originalPositionIndex];
-            rotatedProfilesByPlayer[rotatedPlayerId] = profilesByPlayer[originalPlayerId];
-        }
-
-        const engine = new GameEngine(players, mapType, rng, { randomizeAiProfiles: false });
-        (engine as any).triggerAiTurn = () => {};
-        engine.setAiProfiles(rotatedProfilesByPlayer);
-
-        engine.startGame();
-
-        const maxSteps = maxTurns * engine.state.playerOrder.length;
-        let steps = 0;
-        let lastOrder = [...engine.state.playerOrder];
-        const eliminationOrder: string[] = [];
-        while (!engine.isGameOver && steps < maxSteps) {
-            engine.ai.playTurn();
-            const currentOrder = [...engine.state.playerOrder];
-            const eliminated = lastOrder.filter((id) => !currentOrder.includes(id));
-            for (const id of eliminated) {
-                eliminationOrder.push(id);
-            }
-            lastOrder = currentOrder;
-            steps++;
-        }
-
-        // Map rotated player IDs back to original profiles for result tracking
-        const profiles: Record<string, string> = {};
-        for (const player of players) {
-            const profile = rotatedProfilesByPlayer[player.id];
-            profiles[player.id] = profile?.id ?? 'baseline';
-        }
-
-        const landCounts = countLandByPlayer(engine.state.grid);
-        const survivors = [...engine.state.playerOrder];
-        let survivorOrder = survivors;
-
-        if (!engine.isGameOver && steps >= maxSteps && survivors.length > 1) {
-            // Max turns reached: rank survivors by land count (desc), tie-breaker by current order
-            const orderIndex = new Map<string, number>();
-            survivors.forEach((id, index) => orderIndex.set(id, index));
-            survivorOrder = survivors.slice().sort((a, b) => {
-                const landDiff = (landCounts[b] || 0) - (landCounts[a] || 0);
-                if (landDiff !== 0) return landDiff;
-                return (orderIndex.get(a) ?? 0) - (orderIndex.get(b) ?? 0);
-            });
-        }
-
-        // placements: best -> worst
-        const placements = [...survivorOrder, ...eliminationOrder.slice().reverse()];
-        const decisiveWin = engine.isGameOver && steps < maxSteps;
-
-        return {
-            seed,
-            mapType,
-            turns: engine.state.turnCount,
-            profiles,
-            placements,
-            landCounts,
-            decisiveWin
-        };
-    });
-};
-
 const buildRoundProfiles = (baseProfiles: AIProfile[], rng: () => number, options: CliOptions, roundIndex: number): AIProfile[] => {
     const bases: AIProfile[] = [];
     for (let i = 0; i < 4; i++) {
@@ -408,16 +195,8 @@ const buildRoundProfiles = (baseProfiles: AIProfile[], rng: () => number, option
     return profiles;
 };
 
-const selectGroup = (profiles: AIProfile[], groupCounts: Map<string, number>, rng: () => number, groupSize: number): AIProfile[] => {
-    const shuffled = profiles.slice();
-    for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(rng() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    shuffled.sort((a, b) => (groupCounts.get(a.id) ?? 0) - (groupCounts.get(b.id) ?? 0));
-    return shuffled.slice(0, groupSize);
-};
 
+/* Tournament scoring extracted to ai_tournament_lib.ts
 const evaluateRound = (
     profiles: AIProfile[],
     options: CliOptions,
@@ -494,11 +273,11 @@ const evaluateRound = (
         { key: '8p', players: 8, width: 20, height: 20, matchesPerAi: options.matchesPerAi8p, maxTurns: options.maxTurns8p, winBonusMultiplier: options.winBonus8p }
     ].filter((mode) => mode.matchesPerAi > 0);
 
-    const activeModes = {
-        use2p: options.matchesPerAi2p > 0,
-        use4p: options.matchesPerAi4p > 0,
-        use8p: options.matchesPerAi8p > 0
-    };
+    const activeModes = getActiveModes(options);
+    if (!activeModes.use2p && !activeModes.use4p && !activeModes.use8p) {
+        console.error('No match modes enabled. Set at least one of --m2/--m4/--m8 to a value greater than 0.');
+        process.exit(1);
+    }
     if (!activeModes.use2p && !activeModes.use4p && !activeModes.use8p) {
         console.error('No match modes enabled. Set at least one of --m2/--m4/--m8 to a value greater than 0.');
         process.exit(1);
@@ -771,6 +550,7 @@ const rankResults = (
     return { ranked, diversityById };
 };
 
+*/
 // Profile writer moved to scripts/ai_profile_writer.ts
 
 const main = async () => {
@@ -810,7 +590,7 @@ const main = async () => {
         if (!options.quiet) {
             console.log(`\nRound ${round + 1}: ${participants.length} profiles`);
         }
-        const { results, mapCounts } = evaluateRound(participants, options, round, rng);
+        const { results, mapCounts } = evaluateTournament(participants, options, round, rng, activeModes);
         const { ranked, diversityById } = rankResults(results, rng, options.diversityWeight, activeModes);
         const top4 = ranked.slice(0, 4);
 

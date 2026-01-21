@@ -15,6 +15,7 @@
     "ai:selfplay:benchmark": "tsx scripts/ai_selfplay_benchmark.ts",
     "ai:evolve": "tsx scripts/ai_evolve.ts",
     "ai:label": "tsx scripts/ai_profile_label_run.ts",
+    "ai:tournament": "tsx scripts/ai_tournament.ts",
     "prepare": "husky"
   },
   "devDependencies": {
