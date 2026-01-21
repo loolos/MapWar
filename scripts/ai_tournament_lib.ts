@@ -144,71 +144,30 @@ const calculateMinDistance = (profile: AIProfile, selected: Individual[]): numbe
     return Number.isFinite(minDistance) ? minDistance : 0;
 };
 
-const getPairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
-
-const getPairCount = (pairCounts: Map<string, number>, a: string, b: string) => {
-    return pairCounts.get(getPairKey(a, b)) ?? 0;
+const shuffleProfiles = (profiles: AIProfile[], rng: () => number): AIProfile[] => {
+    const shuffled = profiles.slice();
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
 };
 
-const selectGroup = (
-    profiles: AIProfile[],
-    groupCounts: Map<string, number>,
-    pairCounts: Map<string, number>,
-    rng: () => number,
+const buildRotationGroup = (
+    order: AIProfile[],
+    groupIndex: number,
     groupSize: number,
-    maxGroupsPerAi: number
+    step: number,
+    offset: number
 ): AIProfile[] => {
-    const eligible = profiles.filter((profile) => (groupCounts.get(profile.id) ?? 0) < maxGroupsPerAi);
-    if (eligible.length <= groupSize) {
-        for (let i = eligible.length - 1; i > 0; i--) {
-            const j = Math.floor(rng() * (i + 1));
-            [eligible[i], eligible[j]] = [eligible[j], eligible[i]];
-        }
-        return eligible.slice(0, groupSize);
+    const group: AIProfile[] = [];
+    const total = order.length;
+    if (total === 0) return group;
+    const start = (groupIndex * step + offset) % total;
+    for (let i = 0; i < groupSize; i++) {
+        group.push(order[(start + i) % total]);
     }
-
-    const selected: AIProfile[] = [];
-    const remaining = eligible.slice();
-    for (let i = remaining.length - 1; i > 0; i--) {
-        const j = Math.floor(rng() * (i + 1));
-        [remaining[i], remaining[j]] = [remaining[j], remaining[i]];
-    }
-
-    const minCount = Math.min(...remaining.map((profile) => groupCounts.get(profile.id) ?? 0));
-    const starters = remaining.filter((profile) => (groupCounts.get(profile.id) ?? 0) === minCount);
-    selected.push(starters[Math.floor(rng() * starters.length)]);
-
-    while (selected.length < groupSize) {
-        let bestScore = Infinity;
-        let bestCandidates: AIProfile[] = [];
-        for (const candidate of remaining) {
-            if (selected.includes(candidate)) continue;
-            const pairScore = selected.reduce((sum, member) => sum + getPairCount(pairCounts, candidate.id, member.id), 0);
-            const gamesScore = groupCounts.get(candidate.id) ?? 0;
-            const score = pairScore * 1000 + gamesScore;
-            if (score < bestScore) {
-                bestScore = score;
-                bestCandidates = [candidate];
-            } else if (score === bestScore) {
-                bestCandidates.push(candidate);
-            }
-        }
-        if (!bestCandidates.length) {
-            break;
-        }
-        selected.push(bestCandidates[Math.floor(rng() * bestCandidates.length)]);
-    }
-
-    if (selected.length < groupSize) {
-        for (const candidate of remaining) {
-            if (selected.length >= groupSize) break;
-            if (!selected.includes(candidate)) {
-                selected.push(candidate);
-            }
-        }
-    }
-
-    return selected;
+    return group;
 };
 
 const countLandByPlayer = (grid: { owner: string | null }[][]): Record<string, number> => {
@@ -391,19 +350,17 @@ export const evaluateTournament = (
 
     for (const mode of modes) {
         const groupCounts = new Map<string, number>();
-        const pairCounts = new Map<string, number>();
         for (const profile of profiles) {
             groupCounts.set(profile.id, 0);
         }
 
+        const order = shuffleProfiles(profiles, rng);
+        const step = mode.players + 1;
+        const offset = roundIndex % Math.max(1, order.length);
+
         while ([...groupCounts.values()].some((count) => count < mode.matchesPerAi)) {
-            const group = selectGroup(profiles, groupCounts, pairCounts, rng, mode.players, mode.matchesPerAi);
-            for (let i = 0; i < group.length; i++) {
-                for (let j = i + 1; j < group.length; j++) {
-                    const key = getPairKey(group[i].id, group[j].id);
-                    pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
-                }
-            }
+            const groupIndex = modeCompleted[mode.key];
+            const group = buildRotationGroup(order, groupIndex, mode.players, step, offset);
             const profilesByPlayer: Record<string, AIProfile> = {};
             const playerIds: string[] = [];
             for (let i = 0; i < group.length; i++) {
@@ -411,8 +368,9 @@ export const evaluateTournament = (
                 playerIds.push(playerId);
                 profilesByPlayer[playerId] = group[i];
             }
-
-            const groupIndex = modeCompleted[mode.key];
+            for (const member of group) {
+                groupCounts.set(member.id, (groupCounts.get(member.id) ?? 0) + 1);
+            }
 
             for (let mapIndex = 0; mapIndex < options.mapTypes.length; mapIndex++) {
                 const mapType = options.mapTypes[mapIndex];
@@ -495,10 +453,6 @@ export const evaluateTournament = (
                         mapCounts[profileId][mapType] = (mapCounts[profileId][mapType] || 0) + 1;
                     }
                 }
-            }
-
-            for (const member of group) {
-                groupCounts.set(member.id, (groupCounts.get(member.id) ?? 0) + 1);
             }
 
             modeCompleted[mode.key] += 1;
