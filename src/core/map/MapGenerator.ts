@@ -93,14 +93,25 @@ export class MapGenerator {
         }
 
         // GUARANTEE: Starting Islands for Each Player using exact spawn logic
+        const spawnPoints: { r: number; c: number }[] = [];
         for (let i = 0; i < playerCount; i++) {
             const spawn = this.getSpawnPoint(i, playerCount, width, height);
+            spawnPoints.push(spawn);
             // Ensure island at spawn (Size 15 is substantial)
             this.growClusterAt(grid, spawn.r, spawn.c, 'plain', 15, 'water');
         }
 
         // Add some hills on islands
         this.scatterTerrain(grid, 'hill', 0.2, 'plain'); // 20% of plains become hills
+
+        // Ensure each spawn island is reasonably sized
+        const minIslandSize = Math.max(18, Math.floor((width * height) / 40));
+        for (const spawn of spawnPoints) {
+            this.ensureSpawnIslandSize(grid, spawn, minIslandSize);
+        }
+
+        // Encourage separate islands per spawn
+        this.separateSpawnIslands(grid, width, height, spawnPoints);
     }
 
     private static generatePangaea(grid: Cell[][], width: number, height: number, playerCount: number = 2) {
@@ -204,6 +215,199 @@ export class MapGenerator {
 
         // 5. Add Texture (Hills, Forests?)
         this.scatterTerrain(grid, 'hill', 0.15, 'plain');
+
+        // Ensure each spawn is connected to the main landmass
+        this.ensureSpawnsOnMainland(grid, width, height, spawnPoints);
+    }
+
+    private static ensureSpawnIslandSize(
+        grid: Cell[][],
+        spawn: { r: number; c: number },
+        minSize: number
+    ) {
+        const { size } = this.getLandmassAt(grid, spawn.r, spawn.c);
+        if (size >= minSize) return;
+        const growBy = Math.max(6, minSize - size);
+        this.growClusterAt(grid, spawn.r, spawn.c, 'plain', growBy, 'water');
+    }
+
+    private static ensureSpawnsOnMainland(
+        grid: Cell[][],
+        width: number,
+        height: number,
+        spawnPoints: { r: number; c: number }[]
+    ) {
+        const { masses } = this.getLandmasses(grid, width, height);
+        if (masses.length === 0) return;
+        masses.sort((a, b) => b.cells.length - a.cells.length);
+        const main = masses[0];
+        const mainSet = new Set(main.cells.map((c) => `${c.r},${c.c}`));
+
+        for (const spawn of spawnPoints) {
+            const key = `${spawn.r},${spawn.c}`;
+            if (mainSet.has(key)) continue;
+
+            const target = this.findClosestCell(spawn, main.cells);
+            if (!target) continue;
+            this.carvePath(grid, spawn, target);
+        }
+    }
+
+    private static getLandmassAt(grid: Cell[][], r: number, c: number) {
+        if (!this.isValid(grid, r, c)) return { size: 0, cells: [] as { r: number; c: number }[] };
+        if (grid[r][c].type === 'water') return { size: 0, cells: [] as { r: number; c: number }[] };
+        const visited = new Set<string>();
+        const queue: { r: number; c: number }[] = [{ r, c }];
+        const cells: { r: number; c: number }[] = [];
+
+        while (queue.length > 0) {
+            const current = queue.pop()!;
+            const key = `${current.r},${current.c}`;
+            if (visited.has(key)) continue;
+            visited.add(key);
+            cells.push(current);
+            const neighbors = [
+                { r: current.r + 1, c: current.c },
+                { r: current.r - 1, c: current.c },
+                { r: current.r, c: current.c + 1 },
+                { r: current.r, c: current.c - 1 }
+            ];
+            for (const n of neighbors) {
+                if (!this.isValid(grid, n.r, n.c)) continue;
+                if (grid[n.r][n.c].type === 'water') continue;
+                const nKey = `${n.r},${n.c}`;
+                if (!visited.has(nKey)) queue.push(n);
+            }
+        }
+
+        return { size: cells.length, cells };
+    }
+
+    private static getLandmasses(grid: Cell[][], width: number, height: number) {
+        const visited = new Set<string>();
+        const masses: { cells: { r: number; c: number }[] }[] = [];
+
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
+                if (grid[r][c].type === 'water') continue;
+                const key = `${r},${c}`;
+                if (visited.has(key)) continue;
+
+                const queue: { r: number; c: number }[] = [{ r, c }];
+                const cells: { r: number; c: number }[] = [];
+                while (queue.length > 0) {
+                    const current = queue.pop()!;
+                    const currentKey = `${current.r},${current.c}`;
+                    if (visited.has(currentKey)) continue;
+                    visited.add(currentKey);
+                    cells.push(current);
+                    const neighbors = [
+                        { r: current.r + 1, c: current.c },
+                        { r: current.r - 1, c: current.c },
+                        { r: current.r, c: current.c + 1 },
+                        { r: current.r, c: current.c - 1 }
+                    ];
+                    for (const n of neighbors) {
+                        if (!this.isValid(grid, n.r, n.c)) continue;
+                        if (grid[n.r][n.c].type === 'water') continue;
+                        const nKey = `${n.r},${n.c}`;
+                        if (!visited.has(nKey)) queue.push(n);
+                    }
+                }
+
+                masses.push({ cells });
+            }
+        }
+
+        return { masses };
+    }
+
+    private static findClosestCell(origin: { r: number; c: number }, cells: { r: number; c: number }[]) {
+        let best: { r: number; c: number } | null = null;
+        let bestDist = Infinity;
+        for (const cell of cells) {
+            const dist = Math.abs(origin.r - cell.r) + Math.abs(origin.c - cell.c);
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = cell;
+            }
+        }
+        return best;
+    }
+
+    private static carvePath(
+        grid: Cell[][],
+        start: { r: number; c: number },
+        target: { r: number; c: number }
+    ) {
+        let currR = start.r;
+        let currC = start.c;
+        while (currR !== target.r || currC !== target.c) {
+            const dr = target.r - currR;
+            const dc = target.c - currC;
+            if (Math.abs(dr) > Math.abs(dc)) {
+                currR += Math.sign(dr);
+            } else {
+                currC += Math.sign(dc);
+            }
+            if (!this.isValid(grid, currR, currC)) break;
+            grid[currR][currC].type = 'plain';
+            this.growClusterAt(grid, currR, currC, 'plain', 4, 'water');
+        }
+    }
+
+    private static separateSpawnIslands(
+        grid: Cell[][],
+        width: number,
+        height: number,
+        spawnPoints: { r: number; c: number }[]
+    ) {
+        let safety = 0;
+        while (safety < 8) {
+            safety++;
+            let changed = false;
+
+            for (const spawn of spawnPoints) {
+                const { cells } = this.getLandmassAt(grid, spawn.r, spawn.c);
+                if (cells.length === 0) continue;
+                const cellSet = new Set(cells.map((c) => `${c.r},${c.c}`));
+                const neighbors = spawnPoints.filter((p) => (p.r !== spawn.r || p.c !== spawn.c) && cellSet.has(`${p.r},${p.c}`));
+
+                for (const other of neighbors) {
+                    this.carveWaterPath(grid, width, height, spawn, other);
+                    changed = true;
+                }
+            }
+
+            if (!changed) break;
+        }
+    }
+
+    private static carveWaterPath(
+        grid: Cell[][],
+        width: number,
+        height: number,
+        start: { r: number; c: number },
+        target: { r: number; c: number }
+    ) {
+        let currR = start.r;
+        let currC = start.c;
+        let guard = 0;
+        const limit = width * height;
+
+        while ((currR !== target.r || currC !== target.c) && guard < limit) {
+            guard++;
+            const dr = target.r - currR;
+            const dc = target.c - currC;
+            if (Math.abs(dr) > Math.abs(dc)) {
+                currR += Math.sign(dr);
+            } else {
+                currC += Math.sign(dc);
+            }
+            if (!this.isValid(grid, currR, currC)) break;
+            if (currR === target.r && currC === target.c) break;
+            grid[currR][currC].type = 'water';
+        }
     }
 
     private static generateMountains(grid: Cell[][], width: number, height: number) {
