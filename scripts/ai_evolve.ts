@@ -117,15 +117,15 @@ const parseArgs = (): CliOptions => {
                 i++;
                 break;
             case '--m2':
-                options.matchesPerAi2p = Math.max(1, parseInt(next, 10));
+                options.matchesPerAi2p = Math.max(0, parseInt(next, 10));
                 i++;
                 break;
             case '--m4':
-                options.matchesPerAi4p = Math.max(1, parseInt(next, 10));
+                options.matchesPerAi4p = Math.max(0, parseInt(next, 10));
                 i++;
                 break;
             case '--m8':
-                options.matchesPerAi8p = Math.max(1, parseInt(next, 10));
+                options.matchesPerAi8p = Math.max(0, parseInt(next, 10));
                 i++;
                 break;
             case '--t2':
@@ -492,7 +492,17 @@ const evaluateRound = (
         { key: '2p', players: 2, width: 10, height: 10, matchesPerAi: options.matchesPerAi2p, maxTurns: options.maxTurns2p, winBonusMultiplier: options.winBonus2p },
         { key: '4p', players: 4, width: 15, height: 15, matchesPerAi: options.matchesPerAi4p, maxTurns: options.maxTurns4p, winBonusMultiplier: options.winBonus4p },
         { key: '8p', players: 8, width: 20, height: 20, matchesPerAi: options.matchesPerAi8p, maxTurns: options.maxTurns8p, winBonusMultiplier: options.winBonus8p }
-    ];
+    ].filter((mode) => mode.matchesPerAi > 0);
+
+    const activeModes = {
+        use2p: options.matchesPerAi2p > 0,
+        use4p: options.matchesPerAi4p > 0,
+        use8p: options.matchesPerAi8p > 0
+    };
+    if (!activeModes.use2p && !activeModes.use4p && !activeModes.use8p) {
+        console.error('No match modes enabled. Set at least one of --m2/--m4/--m8 to a value greater than 0.');
+        process.exit(1);
+    }
 
     const modeTotals: Record<ModeKey, number> = { '2p': 0, '4p': 0, '8p': 0 };
     const modeCompleted: Record<ModeKey, number> = { '2p': 0, '4p': 0, '8p': 0 };
@@ -611,9 +621,9 @@ const evaluateRound = (
             modeCompleted[mode.key] += 1;
             const totalCompleted = Object.values(modeCompleted).reduce((sum, value) => sum + value, 0);
             if (!options.quiet && totalCompleted % 5 === 0) {
-                const m2 = `${modeCompleted['2p']}/${Math.ceil(modeTotals['2p'])}`;
-                const m4 = `${modeCompleted['4p']}/${Math.ceil(modeTotals['4p'])}`;
-                const m8 = `${modeCompleted['8p']}/${Math.ceil(modeTotals['8p'])}`;
+                const m2 = activeModes.use2p ? `${modeCompleted['2p']}/${Math.ceil(modeTotals['2p'])}` : '-';
+                const m4 = activeModes.use4p ? `${modeCompleted['4p']}/${Math.ceil(modeTotals['4p'])}` : '-';
+                const m8 = activeModes.use8p ? `${modeCompleted['8p']}/${Math.ceil(modeTotals['8p'])}` : '-';
                 process.stdout.write(`\rRound ${roundIndex + 1}: m2 ${m2} | m4 ${m4} | m8 ${m8} groups...`);
             }
         }
@@ -679,7 +689,8 @@ const evaluateRound = (
 const rankResults = (
     results: Individual[],
     rng: () => number,
-    diversityWeight: number
+    diversityWeight: number,
+    activeModes: { use2p: boolean; use4p: boolean; use8p: boolean }
 ): { ranked: Individual[]; diversityById: Map<string, number> } => {
     const pool = results.slice();
     const avgPoints2p = pool.map((ind) => ind.avgPointsRaw2p);
@@ -698,14 +709,28 @@ const rankResults = (
         candidate.avgPointsNorm2p = std2p > 1e-6 ? (candidate.avgPointsRaw2p - mean2p) / std2p : 0;
         candidate.avgPointsNorm4p = std4p > 1e-6 ? (candidate.avgPointsRaw4p - mean4p) / std4p : 0;
         candidate.avgPointsNorm8p = std8p > 1e-6 ? (candidate.avgPointsRaw8p - mean8p) / std8p : 0;
-        candidate.avgPointsNorm = (candidate.avgPointsNorm2p + candidate.avgPointsNorm4p + candidate.avgPointsNorm8p) / 3;
+        const normParts = [
+            activeModes.use2p ? candidate.avgPointsNorm2p : null,
+            activeModes.use4p ? candidate.avgPointsNorm4p : null,
+            activeModes.use8p ? candidate.avgPointsNorm8p : null
+        ].filter((value): value is number => value !== null);
+        candidate.avgPointsNorm = normParts.length > 0
+            ? normParts.reduce((sum, value) => sum + value, 0) / normParts.length
+            : 0;
         const bonus2p = std2p > 1e-6 ? candidate.avgDecisiveBonus2p / std2p : 0;
         const bonus4p = std4p > 1e-6 ? candidate.avgDecisiveBonus4p / std4p : 0;
         const bonus8p = std8p > 1e-6 ? candidate.avgDecisiveBonus8p / std8p : 0;
         candidate.avgDecisiveBonusNorm2p = bonus2p;
         candidate.avgDecisiveBonusNorm4p = bonus4p;
         candidate.avgDecisiveBonusNorm8p = bonus8p;
-        candidate.avgDecisiveBonusNorm = (bonus2p + bonus4p + bonus8p) / 3;
+        const bonusParts = [
+            activeModes.use2p ? bonus2p : null,
+            activeModes.use4p ? bonus4p : null,
+            activeModes.use8p ? bonus8p : null
+        ].filter((value): value is number => value !== null);
+        candidate.avgDecisiveBonusNorm = bonusParts.length > 0
+            ? bonusParts.reduce((sum, value) => sum + value, 0) / bonusParts.length
+            : 0;
     }
     for (let i = pool.length - 1; i > 0; i--) {
         const j = Math.floor(rng() * (i + 1));
@@ -773,6 +798,12 @@ const main = async () => {
         console.log(`Maps: ${options.mapTypes.join(', ')}`);
     }
 
+    const activeModes = {
+        use2p: options.matchesPerAi2p > 0,
+        use4p: options.matchesPerAi4p > 0,
+        use8p: options.matchesPerAi8p > 0
+    };
+
     for (let round = 0; round < options.rounds; round++) {
         const rng = createSeededRandom(options.seed + round * 100000);
         const participants = buildRoundProfiles(currentBases, rng, options, round);
@@ -780,7 +811,7 @@ const main = async () => {
             console.log(`\nRound ${round + 1}: ${participants.length} profiles`);
         }
         const { results, mapCounts } = evaluateRound(participants, options, round, rng);
-        const { ranked, diversityById } = rankResults(results, rng, options.diversityWeight);
+        const { ranked, diversityById } = rankResults(results, rng, options.diversityWeight, activeModes);
         const top4 = ranked.slice(0, 4);
 
         if (!options.quiet) {
@@ -790,11 +821,11 @@ const main = async () => {
                 const winRate = ind.games > 0 ? ind.wins / ind.games : 0;
                 const decisiveRate = ind.decisiveRate || 0;
                 const diversityScore = diversityById.get(ind.profile.id) ?? 0;
-                const normStr = `${ind.avgPointsNorm2p.toFixed(2)},${ind.avgPointsNorm4p.toFixed(2)},${ind.avgPointsNorm8p.toFixed(2)}`;
-                const bonusStr = `${ind.avgDecisiveBonusNorm2p.toFixed(2)},${ind.avgDecisiveBonusNorm4p.toFixed(2)},${ind.avgDecisiveBonusNorm8p.toFixed(2)}`;
+                const normStr = `${activeModes.use2p ? ind.avgPointsNorm2p.toFixed(2) : '-'},${activeModes.use4p ? ind.avgPointsNorm4p.toFixed(2) : '-'},${activeModes.use8p ? ind.avgPointsNorm8p.toFixed(2) : '-'}`;
+                const bonusStr = `${activeModes.use2p ? ind.avgDecisiveBonusNorm2p.toFixed(2) : '-'},${activeModes.use4p ? ind.avgDecisiveBonusNorm4p.toFixed(2) : '-'},${activeModes.use8p ? ind.avgDecisiveBonusNorm8p.toFixed(2) : '-'}`;
                 const formatRate = (value: number, total: number) => Math.round(total > 0 ? (value / total) * 100 : 0).toString();
-                const winStr = `${formatRate(ind.wins2p, ind.games2p)},${formatRate(ind.wins4p, ind.games4p)},${formatRate(ind.wins8p, ind.games8p)}`;
-                const decisStr = `${formatRate(ind.decisiveGames2p, ind.games2p)},${formatRate(ind.decisiveGames4p, ind.games4p)},${formatRate(ind.decisiveGames8p, ind.games8p)}`;
+                const winStr = `${activeModes.use2p ? formatRate(ind.wins2p, ind.games2p) : '-'},${activeModes.use4p ? formatRate(ind.wins4p, ind.games4p) : '-'},${activeModes.use8p ? formatRate(ind.wins8p, ind.games8p) : '-'}`;
+                const decisStr = `${activeModes.use2p ? formatRate(ind.decisiveGames2p, ind.games2p) : '-'},${activeModes.use4p ? formatRate(ind.decisiveGames4p, ind.games4p) : '-'},${activeModes.use8p ? formatRate(ind.decisiveGames8p, ind.games8p) : '-'}`;
                 console.log(`  ${i + 1}. ${ind.profile.id} | Norm=${normStr} | Bonus=${bonusStr} | WinRate=${winStr}% | Decisive=${decisStr}% | Diversity=${diversityScore.toFixed(3)}`);
             }
         }
