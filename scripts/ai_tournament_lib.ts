@@ -153,6 +153,28 @@ const shuffleProfiles = (profiles: AIProfile[], rng: () => number): AIProfile[] 
     return shuffled;
 };
 
+const gcd = (a: number, b: number): number => {
+    let x = Math.abs(a);
+    let y = Math.abs(b);
+    while (y !== 0) {
+        const t = y;
+        y = x % y;
+        x = t;
+    }
+    return x;
+};
+
+const getCoprimeStep = (base: number, total: number): number => {
+    if (total <= 1) return 1;
+    let step = base % total;
+    if (step === 0) step = 1;
+    while (gcd(step, total) !== 1) {
+        step = (step + 1) % total;
+        if (step === 0) step = 1;
+    }
+    return step;
+};
+
 const buildRotationGroup = (
     order: AIProfile[],
     groupIndex: number,
@@ -357,13 +379,17 @@ export const evaluateTournament = (
     }
 
     for (const mode of modes) {
+        if (profiles.length < mode.players) {
+            throw new Error(`Not enough profiles for ${mode.key} (${profiles.length} < ${mode.players}).`);
+        }
+
         const groupCounts = new Map<string, number>();
         for (const profile of profiles) {
             groupCounts.set(profile.id, 0);
         }
 
         const order = shuffleProfiles(profiles, rng);
-        const step = mode.players + 1;
+        const step = getCoprimeStep(mode.players + 1, order.length);
         const offset = roundIndex % Math.max(1, order.length);
 
         while ([...groupCounts.values()].some((count) => count < mode.matchesPerAi)) {
