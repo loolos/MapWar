@@ -264,9 +264,11 @@ export class GameState {
         }
         if (this.turnCount >= GameConfig.ATTACK_DOMINANCE_TURN_MIN && totalOwnableCount > 0) {
             const ratio = ownedCount / totalOwnableCount;
-            if (ratio > GameConfig.ATTACK_DOMINANCE_MIN_RATIO) {
+            // Dynamic threshold: 1/sqrt(起始玩家数量)
+            const minRatio = 1 / Math.sqrt(this.allPlayerIds.length);
+            if (ratio > minRatio) {
                 const t = Math.min(1, Math.max(0,
-                    (ratio - GameConfig.ATTACK_DOMINANCE_MIN_RATIO) / (1 - GameConfig.ATTACK_DOMINANCE_MIN_RATIO)
+                    (ratio - minRatio) / (1 - minRatio)
                 ));
                 const factor = 1 + (GameConfig.ATTACK_DOMINANCE_MAX_FACTOR - 1) * t;
                 this.players[playerId].attackCostFactor = Math.max(1, Math.min(GameConfig.ATTACK_DOMINANCE_MAX_FACTOR, factor));
