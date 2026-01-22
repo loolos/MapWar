@@ -697,12 +697,22 @@ const main = async () => {
         if (!options.quiet) {
             console.log(`\nRound ${round + 1}: ${participants.length} profiles`);
         }
-        const { results, mapCounts } = evaluateTournament(participants, options, round, rng, activeModes);
+        const { results, mapCounts, avgMatchMs, avgMatchTurns } = evaluateTournament(participants, options, round, rng, activeModes);
         const { ranked, diversityById } = rankResults(results, rng, options.diversityWeight, activeModes);
         const top4 = ranked.slice(0, 4);
 
         if (!options.quiet) {
+            const formatAvg = (key: '2p' | '4p' | '8p') => {
+                const value = avgMatchMs[key];
+                return value !== null ? `${Math.round(value)}ms` : '-';
+            };
+            const formatTurns = (key: '2p' | '4p' | '8p') => {
+                const value = avgMatchTurns[key];
+                return value !== null ? value.toFixed(1) : '-';
+            };
             console.log(`Round ${round + 1} Results:`);
+            console.log(`  AvgMatchMs: ${activeModes.use2p ? formatAvg('2p') : '-'},${activeModes.use4p ? formatAvg('4p') : '-'},${activeModes.use8p ? formatAvg('8p') : '-'}`);
+            console.log(`  AvgMatchTurns: ${activeModes.use2p ? formatTurns('2p') : '-'},${activeModes.use4p ? formatTurns('4p') : '-'},${activeModes.use8p ? formatTurns('8p') : '-'}`);
             for (let i = 0; i < ranked.length; i++) {
                 const ind = ranked[i];
                 const winRate = ind.games > 0 ? ind.wins / ind.games : 0;

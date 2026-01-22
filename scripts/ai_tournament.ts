@@ -132,10 +132,20 @@ const main = () => {
 
     const profiles = loadProfiles(options.profilesPath);
     const rng = createSeededRandom(options.seed);
-    const { results } = evaluateTournament(profiles, options, 0, rng, activeModes);
+    const { results, avgMatchMs, avgMatchTurns } = evaluateTournament(profiles, options, 0, rng, activeModes);
     const { ranked, diversityById } = rankResults(results, rng, options.diversityWeight, activeModes);
 
     console.log('=== AI Tournament Rankings ===');
+    const formatAvg = (key: '2p' | '4p' | '8p') => {
+        const value = avgMatchMs[key];
+        return value !== null ? `${Math.round(value)}ms` : '-';
+    };
+    const formatTurns = (key: '2p' | '4p' | '8p') => {
+        const value = avgMatchTurns[key];
+        return value !== null ? value.toFixed(1) : '-';
+    };
+    console.log(`AvgMatchMs: ${activeModes.use2p ? formatAvg('2p') : '-'},${activeModes.use4p ? formatAvg('4p') : '-'},${activeModes.use8p ? formatAvg('8p') : '-'}`);
+    console.log(`AvgMatchTurns: ${activeModes.use2p ? formatTurns('2p') : '-'},${activeModes.use4p ? formatTurns('4p') : '-'},${activeModes.use8p ? formatTurns('8p') : '-'}`);
     for (let i = 0; i < ranked.length; i++) {
         const ind = ranked[i];
         const diversityScore = diversityById.get(ind.profile.id) ?? 0;

@@ -283,7 +283,12 @@ export const evaluateTournament = (
     roundIndex: number,
     rng: () => number,
     activeModes: TournamentActiveModes
-): { results: Individual[]; mapCounts: Record<string, Record<string, number>> } => {
+): {
+    results: Individual[];
+    mapCounts: Record<string, Record<string, number>>;
+    avgMatchMs: Record<ModeKey, number | null>;
+    avgMatchTurns: Record<ModeKey, number | null>;
+} => {
     const stats = new Map<string, {
         wins: number;
         games: number;
@@ -342,6 +347,9 @@ export const evaluateTournament = (
     const modes = getTournamentModes(options);
     const modeTotals: Record<ModeKey, number> = { '2p': 0, '4p': 0, '8p': 0 };
     const modeCompleted: Record<ModeKey, number> = { '2p': 0, '4p': 0, '8p': 0 };
+    const modeMatchCounts: Record<ModeKey, number> = { '2p': 0, '4p': 0, '8p': 0 };
+    const modeMatchMs: Record<ModeKey, number> = { '2p': 0, '4p': 0, '8p': 0 };
+    const modeMatchTurns: Record<ModeKey, number> = { '2p': 0, '4p': 0, '8p': 0 };
     for (const mode of modes) {
         const total = profiles.length * mode.matchesPerAi / mode.players;
         modeTotals[mode.key] = total;
@@ -382,6 +390,7 @@ export const evaluateTournament = (
                         + mapIndex * 100
                         + rotation * 10
                         + mode.players;
+                    const matchStart = Date.now();
                     const result = runMatch(
                         profilesByPlayer,
                         matchSeed,
@@ -392,6 +401,10 @@ export const evaluateTournament = (
                         mode.maxTurns,
                         rotation
                     );
+                    modeMatchCounts[mode.key] += 1;
+                    modeMatchMs[mode.key] += Date.now() - matchStart;
+                    const matchTurns = result.decisiveWin ? result.turns : mode.maxTurns;
+                    modeMatchTurns[mode.key] += matchTurns;
 
                     const totalPlayers = playerIds.length;
                     const winnerId = result.placements[0];
@@ -470,6 +483,17 @@ export const evaluateTournament = (
         process.stdout.write('\r' + ' '.repeat(60) + '\r');
     }
 
+    const avgMatchMs: Record<ModeKey, number | null> = {
+        '2p': modeMatchCounts['2p'] > 0 ? modeMatchMs['2p'] / modeMatchCounts['2p'] : null,
+        '4p': modeMatchCounts['4p'] > 0 ? modeMatchMs['4p'] / modeMatchCounts['4p'] : null,
+        '8p': modeMatchCounts['8p'] > 0 ? modeMatchMs['8p'] / modeMatchCounts['8p'] : null
+    };
+    const avgMatchTurns: Record<ModeKey, number | null> = {
+        '2p': modeMatchCounts['2p'] > 0 ? modeMatchTurns['2p'] / modeMatchCounts['2p'] : null,
+        '4p': modeMatchCounts['4p'] > 0 ? modeMatchTurns['4p'] / modeMatchCounts['4p'] : null,
+        '8p': modeMatchCounts['8p'] > 0 ? modeMatchTurns['8p'] / modeMatchCounts['8p'] : null
+    };
+
     const results: Individual[] = profiles.map((profile) => {
         const stat = stats.get(profile.id)!;
         const avgPointsRaw = stat.games > 0 ? stat.totalPoints / stat.games : 0;
@@ -518,7 +542,7 @@ export const evaluateTournament = (
         };
     });
 
-    return { results, mapCounts };
+    return { results, mapCounts, avgMatchMs, avgMatchTurns };
 };
 
 export const rankResults = (
