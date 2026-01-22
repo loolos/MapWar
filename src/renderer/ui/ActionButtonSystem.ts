@@ -10,7 +10,7 @@ export class ActionButtonSystem {
     private rows = 2;
     private cols = 4;
     private buttonWidth = 140;
-    private buttonHeight = 50;
+    private buttonHeight = 40; // 80% of original 50, to reduce overlap with interaction menu
     private gapX = 10;
     private gapY = 10;
 

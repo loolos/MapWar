@@ -1092,7 +1092,7 @@ describe('GameEngine', () => {
             GameConfig.TURN_EVENT_FLOOD_RECEDE_CHANCE = 1;
 
             const target = engine.state.grid[5][4];
-            target.type = 'hill';
+            target.type = 'plain';
             target.owner = 'P2';
             target.building = 'farm';
 
@@ -1116,7 +1116,7 @@ describe('GameEngine', () => {
             expect(event?.eventId).toBe('flood_recede');
 
             (engine as any).applyTurnEvent(event);
-            expect(target.type).toBe('hill');
+            expect(target.type).toBe('plain');
             expect(target.owner).toBe(null);
             expect(target.building).toBe('none');
         });
@@ -1128,7 +1128,7 @@ describe('GameEngine', () => {
             GameConfig.TURN_EVENT_FLOOD_RECEDE_CHANCE = 1;
 
             const firstTarget = engine.state.grid[5][4];
-            firstTarget.type = 'hill';
+            firstTarget.type = 'plain';
             firstTarget.owner = 'P2';
             firstTarget.building = 'farm';
 
@@ -1157,7 +1157,7 @@ describe('GameEngine', () => {
             expect(event?.eventId).toBe('flood_recede');
 
             (engine as any).applyTurnEvent(event);
-            expect(firstTarget.type).toBe('hill');
+            expect(firstTarget.type).toBe('plain');
             expect(secondTarget.type).toBe('plain');
             expect(firstTarget.owner).toBe(null);
             expect(secondTarget.owner).toBe(null);

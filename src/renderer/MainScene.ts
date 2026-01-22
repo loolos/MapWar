@@ -317,16 +317,9 @@ export class MainScene extends Phaser.Scene {
                 this.infoSystem.update(this.engine, this.selectedRow, this.selectedCol);
             }
 
-            // Refresh Interaction Menu if still selected
+            // Refresh Interaction Menu if still selected (re-show so first-option default stays visible)
             if (this.selectedRow !== null && this.selectedCol !== null) {
-                // Calculate Screen Pos (Re-use logic from handleInput or simpler?)
-                // We don't have screen pos here easily without recalculating.
-                // Ideally, we just call show again with same pos?
-                // But show requires x, y.
-                // Let's just hide for now? Or keep it if we store x/y?
-                this.interactionMenu.hide();
-                // Actually, if we plan an interaction, we probably want to see the updated state (e.g. cost paid).
-                // But usually interaction consumes the action.
+                this.interactionMenu.show(this.selectedRow, this.selectedCol);
             }
         });
 
@@ -901,7 +894,7 @@ export class MainScene extends Phaser.Scene {
                 // --- BOTTOM RIGHT: Buttons & Interaction Menu ---
                 // Vertical Split: Menu on Top, Buttons on Bottom
                 const brW = midX - 15;
-                const btnH = 80; // 2 rows: 35px each + 10px gap
+                const btnH = 64; // 2 rows: 28px each (80% of 35px) + 10px gap = 64px total (80% of 80px)
                 const menuH = barHeight - btnH - 10; // Allowing for padding
 
                 // Buttons (Bottom)
@@ -977,7 +970,7 @@ export class MainScene extends Phaser.Scene {
                 // Button Anchor
                 // Vertical Stack: Center in Sidebar
                 this.buttonSystem.setScale(1);
-                const btnAreaH = 80; // 2 rows: 35px each + 10px gap
+                const btnAreaH = 64; // 2 rows: 28px each (80% of 35px) + 10px gap = 64px total (80% of 80px)
                 this.buttonSystem.resize(sidebarW - 20, btnAreaH);
                 this.buttonSystem.setPosition(width - sidebarW + 10, height - btnAreaH - 10);
 
@@ -1453,9 +1446,7 @@ export class MainScene extends Phaser.Scene {
             this.selectedCol = col;
             this.drawMap(); // Refresh aura visualization
 
-            // Auto-Select Logic
-            // If valid tile and NOT already selected/planned
-            // Check options
+            // Auto-Select Logic: default to first option when multiple
             const options = this.engine.interactionRegistry.getAvailableActions(this.engine, row, col);
 
             const isPlanned = this.engine.pendingInteractions.some(i => i.r === row && i.c === col) ||
@@ -1464,16 +1455,35 @@ export class MainScene extends Phaser.Scene {
             const pendingAction = this.engine.pendingInteractions.find(i => i.r === row && i.c === col);
             const pendingMove = this.engine.pendingMoves.find(m => m.r === row && m.c === col);
 
-            if (options.length === 1 && !isPlanned) {
-                const opt = options[0];
-                const def = this.engine.interactionRegistry.get(opt.id);
-                if (def) {
-                    const desc = typeof def.description === 'function' ? def.description(this.engine, row, col) : def.description;
+            if (options.length >= 1 && !isPlanned) {
+                // Find first affordable option (not necessarily the first in list)
+                let selectedOpt = null;
+                let selectedDef = null;
+                for (const opt of options) {
+                    const def = this.engine.interactionRegistry.get(opt.id);
+                    if (def) {
+                        const costVal = typeof def.cost === 'function' ? def.cost(this.engine, row, col) : def.cost;
+                        const canAfford = this.engine.state.getCurrentPlayer().gold >= costVal;
+                        if (canAfford) {
+                            selectedOpt = opt;
+                            selectedDef = def;
+                            break;
+                        }
+                    }
+                }
+                
+                // If found affordable option, plan it and set description
+                if (selectedOpt && selectedDef) {
+                    const desc = typeof selectedDef.description === 'function' ? selectedDef.description(this.engine, row, col) : selectedDef.description;
                     this.setInfoActionDescription(desc);
-                    const costVal = typeof def.cost === 'function' ? def.cost(this.engine, row, col) : def.cost;
-                    const canAfford = this.engine.state.getCurrentPlayer().gold >= costVal;
-                    if (canAfford) {
-                        this.engine.planInteraction(row, col, opt.id);
+                    this.engine.planInteraction(row, col, selectedOpt.id);
+                } else if (options.length > 0) {
+                    // No affordable option, but show description of first option
+                    const firstOpt = options[0];
+                    const firstDef = this.engine.interactionRegistry.get(firstOpt.id);
+                    if (firstDef) {
+                        const desc = typeof firstDef.description === 'function' ? firstDef.description(this.engine, row, col) : firstDef.description;
+                        this.setInfoActionDescription(desc);
                     }
                 }
                 this.interactionMenu.show(row, col);
@@ -1493,7 +1503,6 @@ export class MainScene extends Phaser.Scene {
                 } else {
                     this.setInfoActionDescription(null);
                 }
-                // Multiple options or already planned: Show Menu to see status
                 this.interactionMenu.show(row, col);
             } else {
                 // No options

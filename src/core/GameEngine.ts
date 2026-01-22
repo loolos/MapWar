@@ -507,6 +507,8 @@ export class GameEngine {
                 const distRaw = distanceToLand[r][c];
                 const dist = distRaw >= 0 ? Math.max(0, distRaw - 1) : Math.max(height, width);
                 chance = Math.min(1, floodChanceBase + dist * floodBridgeDistanceBonus);
+            } else if (cell.type === 'hill') {
+                chance *= 0.25; // hills 1/4 as likely to flood as plains
             }
             if (this.random() > chance) continue;
             this.floodedCells.set(`${r},${c}`, { r, c, type: cell.type });
@@ -739,7 +741,14 @@ export class GameEngine {
 
         const label = typeof action.label === 'function' ? action.label(this, row, col) : action.label;
 
-        // Cost Check
+        // Remove any existing interaction at this tile BEFORE cost check (Replace strategy)
+        // This ensures cost check uses the correct total (without the old action's cost)
+        const existingAtTile = this.pendingInteractions.findIndex(i => i.r === row && i.c === col);
+        if (existingAtTile >= 0) {
+            this.pendingInteractions.splice(existingAtTile, 1);
+        }
+
+        // Cost Check (now that old action is removed, currentCost won't include it)
         const player = this.state.getCurrentPlayer();
         const currentCost = this.calculatePlannedCost();
         if (player.gold < currentCost + cost) {
@@ -762,11 +771,6 @@ export class GameEngine {
         }
 
         // Add New Interaction
-        // Ensure no other interaction exists at this tile (Replace strategy)
-        const existingAtTile = this.pendingInteractions.findIndex(i => i.r === row && i.c === col);
-        if (existingAtTile >= 0) {
-            this.pendingInteractions.splice(existingAtTile, 1);
-        }
 
         this.pendingInteractions.push({ r: row, c: col, actionId });
 

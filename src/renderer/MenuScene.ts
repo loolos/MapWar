@@ -254,8 +254,6 @@ export class MenuScene extends Phaser.Scene {
         // Audio: majestic start fanfare on scene load
         this.soundManager = new SoundManager();
 
-        const FANFARE_CONTEXT_TIMEOUT_MS = 1500;
-
         const playMenuFanfare = async () => {
             if (this.menuFanfarePlayed) return;
             if (this.fanfarePromise) {
@@ -265,13 +263,20 @@ export class MenuScene extends Phaser.Scene {
 
             this.fanfarePromise = (async () => {
                 try {
-                    const started = await this.soundManager.startContextWithTimeout(FANFARE_CONTEXT_TIMEOUT_MS);
-                    if (!started) return;
+                    // Try to start context (non-blocking - don't wait for it)
+                    // This allows autoplay on browsers that support it
+                    this.soundManager.startContext().catch(() => {
+                        // Context start may fail on iOS/autoplay-blocked browsers, that's OK
+                    });
+                    // Mark as played and schedule fanfare immediately
+                    // playStartFanfare will handle AudioContext state internally
                     this.menuFanfarePlayed = true;
                     // Use setTimeout so fanfare survives scene switch (Start/Tutorial → MainScene)
                     setTimeout(() => {
                         this.soundManager.playStartFanfare();
                     }, GameConfig.UI_MENU_FANFARE_DELAY);
+                } catch (e) {
+                    console.warn("Menu fanfare autoplay failed, will play on user interaction:", e);
                 } finally {
                     this.fanfarePromise = null;
                 }
@@ -295,10 +300,10 @@ export class MenuScene extends Phaser.Scene {
             document.addEventListener('pointerdown', handler, { once: true });
         };
 
-        // Bind interaction unlock first so we don't miss the initial gesture.
-        bindMenuAudioUnlock();
-        // Try auto-play: if blocked, user interaction will trigger.
+        // Try auto-play immediately (will work on browsers that allow autoplay)
         void playMenuFanfare();
+        // Also bind interaction unlock as fallback for browsers that block autoplay
+        bindMenuAudioUnlock();
 
         // --- Logic Binding ---
 

@@ -29,7 +29,7 @@ export class InteractionMenu extends Phaser.GameObjects.Container {
     private isHorizontal: boolean = false;
 
     // Style
-    private readonly btnHeight = 40;
+    private readonly btnHeight = 32; // 80% of original 40, for better fit on small screens
     private readonly padding = 5;
     private readonly arrowHeight = 24;
 
@@ -135,7 +135,8 @@ export class InteractionMenu extends Phaser.GameObjects.Container {
         // Calculate total needed height
         const totalNeeded = this.currentOptions.length * (this.btnHeight + this.padding) + this.padding;
 
-        if (totalNeeded > availableH) {
+        // Only show pagination arrows if there are more than 2 options AND content doesn't fit
+        if (this.currentOptions.length > 2 && totalNeeded > availableH) {
             usePagination = true;
             // Reserve space for arrows
             const contentH = availableH - (this.arrowHeight * 2) - (this.padding * 2);
@@ -242,10 +243,11 @@ export class InteractionMenu extends Phaser.GameObjects.Container {
                     label: labelVal
                 });
             }
-            if (canAfford) {
-                this.engine.planInteraction(this.currentR!, this.currentC!, opt.id);
-                this.render();
-            }
+            // Always try to plan interaction - let planInteraction handle cancellation and cost checks
+            // This ensures that if there's an existing action on this tile, it gets cancelled first
+            // before checking if the new action is affordable
+            this.engine.planInteraction(this.currentR!, this.currentC!, opt.id);
+            this.render();
         });
 
         // Hover
