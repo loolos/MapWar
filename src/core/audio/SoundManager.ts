@@ -78,11 +78,22 @@ export class SoundManager {
         this.isInitialized = true;
     }
 
-    public async startContext() {
-        if (Tone.context.state !== 'running') {
-            await Tone.start();
-            console.log("Tone.js Context Started");
+    public async startContext(): Promise<boolean> {
+        try {
+            if (Tone.context.state !== 'running') {
+                await Tone.start();
+            }
+        } catch (error) {
+            console.warn("Tone.js Context Start Failed:", error);
+            return false;
         }
+
+        if (Tone.context.state === 'running') {
+            console.log("Tone.js Context Started");
+            return true;
+        }
+
+        return false;
     }
 
     public playSfx(key: string) {

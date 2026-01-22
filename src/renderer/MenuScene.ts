@@ -253,29 +253,19 @@ export class MenuScene extends Phaser.Scene {
         // Audio: majestic start fanfare on scene load
         this.soundManager = new SoundManager();
 
-        const playMenuFanfare = () => {
+        const playMenuFanfare = async () => {
             if (this.menuFanfarePlayed) return;
+            const started = await this.soundManager.startContext();
+            if (!started) return;
             this.menuFanfarePlayed = true;
-            this.soundManager.startContext().then(() => {
-                this.time.delayedCall(GameConfig.UI_MENU_FANFARE_DELAY, () => {
-                    this.soundManager.playStartFanfare();
-                });
-            }).catch((err) => {
-                console.warn("Could not start audio context:", err);
+            this.time.delayedCall(GameConfig.UI_MENU_FANFARE_DELAY, () => {
                 this.soundManager.playStartFanfare();
             });
         };
 
-        // Try to auto-play start fanfare
-        // Note: Browser autoplay policies may require user interaction first
-        this.soundManager.startContext().then(() => {
-            this.time.delayedCall(GameConfig.UI_MENU_FANFARE_DELAY, () => {
-                playMenuFanfare();
-            });
-        }).catch((err) => {
-            console.warn("Could not auto-play start fanfare:", err);
-            // Fallback: play on first user interaction
+        const bindMenuAudioUnlock = () => {
             this.input.once('pointerdown', playMenuFanfare);
+            this.input.keyboard?.once('keydown', playMenuFanfare);
             const domNode = this.domElement?.node as HTMLElement | null;
             if (domNode) {
                 domNode.addEventListener('pointerdown', playMenuFanfare, { once: true });
@@ -284,7 +274,12 @@ export class MenuScene extends Phaser.Scene {
                 document.addEventListener('pointerdown', playMenuFanfare, { once: true });
                 document.addEventListener('touchstart', playMenuFanfare, { once: true });
             }
-        });
+        };
+
+        // Bind interaction unlock first so we don't miss the initial gesture.
+        bindMenuAudioUnlock();
+        // Try auto-play: if blocked, user interaction will trigger.
+        void playMenuFanfare();
 
         // --- Logic Binding ---
 
