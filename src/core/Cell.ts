@@ -25,6 +25,9 @@ export class Cell {
     // Farm State
     farmLevel: number; // 0 = none
 
+    /** Treasure/flotsam overlay: null = none, number = gold amount (50–200). */
+    treasureGold: number | null;
+
     constructor(row: number, col: number) {
         this.row = row;
         this.col = col;
@@ -41,6 +44,7 @@ export class Cell {
         this.incomeLevel = 0;
         this.watchtowerLevel = 0;
         this.farmLevel = 0;
+        this.treasureGold = null;
     }
 
     isOwnedBy(playerId: PlayerID): boolean {
@@ -60,7 +64,8 @@ export class Cell {
             defenseLevel: this.defenseLevel,
             incomeLevel: this.incomeLevel,
             watchtowerLevel: this.watchtowerLevel,
-            farmLevel: this.farmLevel
+            farmLevel: this.farmLevel,
+            treasureGold: this.treasureGold
         };
     }
 
@@ -76,6 +81,7 @@ export class Cell {
         cell.incomeLevel = data.incomeLevel || 0;
         cell.watchtowerLevel = data.watchtowerLevel || 0;
         cell.farmLevel = data.farmLevel || 0;
+        cell.treasureGold = data.treasureGold ?? null;
         return cell;
     }
 }

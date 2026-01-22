@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GameEngine } from '../../core/GameEngine';
 import { AuraSystem } from '../../core/AuraSystem';
+import { GameConfig } from '../../core/GameConfig';
 
 export class CellInfoSystem extends Phaser.GameObjects.Container {
     bgGraphics: Phaser.GameObjects.Graphics;
@@ -296,6 +297,12 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
                     desc = cell.type;
                     break;
             }
+        }
+
+        // Add Treasure/Flotsam info
+        if (cell.treasureGold !== null && cell.treasureGold > 0) {
+            const treasureType = cell.type === 'water' ? 'Flotsam' : 'Treasure Chest';
+            desc += `\n${treasureType}: Random gold ${GameConfig.TREASURE_GOLD_MIN}~${GameConfig.TREASURE_GOLD_MAX}G.`;
         }
 
         // Add Range info

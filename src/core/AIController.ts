@@ -72,6 +72,17 @@ export class AIController {
                 const myBases: { r: number; c: number }[] = [];
                 const ownedCells: { r: number; c: number }[] = [];
                 const disconnectedOwned = new Set<string>();
+                
+                // Collect all treasure locations for proximity scoring
+                const treasureLocations: { r: number; c: number; gold: number }[] = [];
+                for (let r = 0; r < grid.length; r++) {
+                    for (let c = 0; c < grid[r].length; c++) {
+                        const cell = grid[r][c];
+                        if (cell.treasureGold !== null && cell.treasureGold > 0) {
+                            treasureLocations.push({ r, c, gold: cell.treasureGold });
+                        }
+                    }
+                }
                 const threatByKey = new Map<string, number>();
                 const myFrontLines: { r: number; c: number; cell: any; threat: number }[] = [];
                 const farmSpots: { r: number; c: number; auraBonus: number }[] = [];
@@ -169,6 +180,8 @@ export class AIController {
                     score += this.scoreObjectives(cell, aiPlayer.id as string, weights);
                     score += this.scoreAggression(cell, r, c, aiPlayer.id as string, myBases, weights);
                     score += this.scoreTactical(cell, weights);
+                    score += this.scoreTreasure(cell, weights);
+                    score += this.scoreTreasureProximity(r, c, treasureLocations, weights);
                     score += this.scoreExpansion(cell, turnCount, weights);
                     score += this.scoreAura(r, c, aiPlayer.id as string, weights);
                     score += this.scoreLookAhead(r, c, aiPlayer.id as string, grid, weights);
@@ -412,6 +425,38 @@ export class AIController {
             }
         }
         return score;
+    }
+
+    private scoreTreasure(cell: Cell, weights: AIWeights): number {
+        if (cell.treasureGold === null || cell.treasureGold <= 0) {
+            return 0;
+        }
+        // Use average expected gold from config instead of actual value
+        const avgGold = (GameConfig.TREASURE_GOLD_MIN + GameConfig.TREASURE_GOLD_MAX) / 2;
+        // Base score for treasure + average gold multiplier
+        return weights.SCORE_TREASURE + avgGold * weights.SCORE_TREASURE_GOLD_MULTIPLIER;
+    }
+
+    private scoreTreasureProximity(r: number, c: number, treasureLocations: { r: number; c: number; gold: number }[], weights: AIWeights): number {
+        if (treasureLocations.length === 0) return 0;
+        
+        let bestScore = 0;
+        const maxRange = weights.SCORE_TREASURE_PROXIMITY_RANGE;
+        
+        for (const treasure of treasureLocations) {
+            const dist = Math.abs(r - treasure.r) + Math.abs(c - treasure.c);
+            if (dist > maxRange) continue;
+            
+            // Score decreases with distance only (not based on actual treasure gold value)
+            const distanceFactor = (maxRange - dist + 1) / maxRange; // 1.0 at dist=1, decreasing to 1/maxRange at dist=maxRange
+            const score = weights.SCORE_TREASURE_PROXIMITY * distanceFactor;
+            
+            if (score > bestScore) {
+                bestScore = score;
+            }
+        }
+        
+        return bestScore;
     }
 
     private scoreExpansion(cell: Cell, turnCount: number, weights: AIWeights): number {

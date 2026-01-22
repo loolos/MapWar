@@ -1292,8 +1292,11 @@ export class GameEngine {
                 this.emit('logMessage', { text: `Farm at (${move.r}, ${move.c}) destroyed!`, type: 'combat' });
             }
 
+            // Check for treasure BEFORE converting water to bridge
+            const wasWater = cell && cell.type === 'water';
+            
             // Transformation: Water -> Bridge
-            if (cell && cell.type === 'water') {
+            if (wasWater) {
                 bridgeBuiltCount++;
                 cell.type = 'bridge';
             }
@@ -1321,6 +1324,19 @@ export class GameEngine {
             }
 
             this.state.setOwner(move.r, move.c, pid);
+
+            // Treasure Chest/Flotsam Collection
+            if (cell.treasureGold !== null && cell.treasureGold > 0) {
+                const gold = cell.treasureGold;
+                this.stateManager.addGold(pid, gold);
+                const terrainType = wasWater ? 'flotsam' : 'treasure chest';
+                this.emit('logMessage', { 
+                    text: `${pid} found ${gold}G in a ${terrainType} at (${move.r}, ${move.c})!`, 
+                    type: 'info' 
+                });
+                this.emit('sfx:gold_found');
+                cell.treasureGold = null; // Remove treasure
+            }
 
             // Gold Mine Discovery (Hill + Neutral Capture)
             if (cell.type === 'hill' && !hasCombat) {

@@ -19,6 +19,14 @@ export class GameStateManager {
         }
     }
 
+    public addGold(playerId: PlayerID, amount: number) {
+        if (!playerId) return;
+        const player = this.state.players[playerId];
+        if (player) {
+            player.gold += amount;
+        }
+    }
+
     public eliminatePlayer(playerId: PlayerID) {
         // Remove from order
         this.state.playerOrder = this.state.playerOrder.filter(id => id !== playerId);

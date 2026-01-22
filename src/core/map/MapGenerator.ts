@@ -11,6 +11,7 @@ export class MapGenerator {
                 grid[r][c].type = 'plain';
                 grid[r][c].building = 'none';
                 grid[r][c].owner = null;
+                grid[r][c].treasureGold = null;
             }
         }
 
@@ -38,6 +39,9 @@ export class MapGenerator {
 
         // Post-Processing: Ensure Spawn Accessibility
         this.ensureAccessibility(grid, width, height, playerCount);
+
+        // Post-Processing: Distribute Treasures/Flotsam (fair per-player)
+        this.distributeTreasures(grid, width, height, playerCount);
     }
 
     private static getSpawnPoint(index: number, total: number, width: number, height: number): { r: number, c: number } {
@@ -759,6 +763,124 @@ export class MapGenerator {
                     }
                 }
             }
+        }
+    }
+
+    private static distributeTreasures(grid: Cell[][], width: number, height: number, playerCount: number) {
+        // Minimum distance increased to 1.5x: at least 1.5x the base distance
+        const baseDistance = Math.max(3, Math.floor(Math.min(width, height) / 5));
+        const minDistance = Math.floor(baseDistance * 1.5);
+        const area = width * height;
+        // Reduced to ~50%: at least 1 per player, or ~0.75% of map area
+        const totalCount = Math.max(playerCount * 1, Math.floor(area * 0.0075));
+        const treasuresPerPlayer = Math.floor(totalCount / playerCount);
+        const remainder = totalCount % playerCount;
+
+        const spawns: { r: number; c: number }[] = [];
+        for (let i = 0; i < playerCount; i++) {
+            spawns.push(this.getSpawnPoint(i, playerCount, width, height));
+        }
+
+        const manhattan = (r1: number, c1: number, r2: number, c2: number) =>
+            Math.abs(r1 - r2) + Math.abs(c1 - c2);
+
+        const bucketSize = 4;
+
+        for (let p = 0; p < playerCount; p++) {
+            const spawn = spawns[p];
+            const candidates: { r: number; c: number; dist: number }[] = [];
+
+            for (let r = 0; r < height; r++) {
+                for (let c = 0; c < width; c++) {
+                    const cell = grid[r][c];
+                    if (cell.type !== 'plain' && cell.type !== 'water') continue;
+                    if (cell.owner !== null || cell.building !== 'none') continue;
+                    if (cell.treasureGold !== null) continue;
+
+                    const d = manhattan(r, c, spawn.r, spawn.c);
+                    if (d < minDistance) continue;
+                    let ok = true;
+                    for (let i = 0; i < spawns.length; i++) {
+                        if (manhattan(r, c, spawns[i].r, spawns[i].c) < minDistance) {
+                            ok = false;
+                            break;
+                        }
+                    }
+                    if (!ok) continue;
+                    candidates.push({ r, c, dist: d });
+                }
+            }
+
+            const groups = new Map<number, { r: number; c: number }[]>();
+            for (const { r, c, dist } of candidates) {
+                const bucket = minDistance + bucketSize * Math.floor((dist - minDistance) / bucketSize);
+                if (!groups.has(bucket)) groups.set(bucket, []);
+                groups.get(bucket)!.push({ r, c });
+            }
+
+            const buckets = [...groups.keys()].sort((a, b) => a - b);
+            for (const k of buckets) {
+                const arr = groups.get(k)!;
+                arr.sort(() => Math.random() - 0.5);
+            }
+
+            let remaining = treasuresPerPlayer;
+            const used = new Set<string>();
+            const picks: { r: number; c: number }[] = [];
+
+            while (remaining > 0) {
+                let took = false;
+                for (const b of buckets) {
+                    const arr = groups.get(b)!;
+                    if (arr.length === 0) continue;
+                    const x = arr.shift()!;
+                    const key = `${x.r},${x.c}`;
+                    if (used.has(key)) continue;
+                    used.add(key);
+                    picks.push(x);
+                    remaining--;
+                    took = true;
+                    if (remaining <= 0) break;
+                }
+                if (!took) break;
+            }
+
+            for (const { r, c } of picks) {
+                const minGold = GameConfig.TREASURE_GOLD_MIN;
+                const maxGold = GameConfig.TREASURE_GOLD_MAX;
+                grid[r][c].treasureGold = minGold + Math.floor(Math.random() * (maxGold - minGold + 1));
+            }
+        }
+
+        if (remainder <= 0) return;
+
+        const pool: { r: number; c: number }[] = [];
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
+                const cell = grid[r][c];
+                if (cell.type !== 'plain' && cell.type !== 'water') continue;
+                if (cell.owner !== null || cell.building !== 'none') continue;
+                if (cell.treasureGold !== null) continue;
+                let ok = true;
+                for (const sp of spawns) {
+                    if (manhattan(r, c, sp.r, sp.c) < minDistance) {
+                        ok = false;
+                        break;
+                    }
+                }
+                if (ok) pool.push({ r, c });
+            }
+        }
+
+        pool.sort(() => Math.random() - 0.5);
+        let rem = remainder;
+        for (const { r, c } of pool) {
+            if (rem <= 0) break;
+            if (grid[r][c].treasureGold !== null) continue;
+            const minGold = GameConfig.TREASURE_GOLD_MIN;
+            const maxGold = GameConfig.TREASURE_GOLD_MAX;
+            grid[r][c].treasureGold = minGold + Math.floor(Math.random() * (maxGold - minGold + 1));
+            rem--;
         }
     }
 

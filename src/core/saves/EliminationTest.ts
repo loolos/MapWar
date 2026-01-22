@@ -73,9 +73,28 @@ export const EliminationTest: SaveScenario = {
                     building = 'base';
                 }
 
+                // --- Treasures / Flotsam for Testing ---
+                let treasureGold = null;
+                // Plain treasure at (2, 2) - 50G
+                if (r === 2 && c === 2 && owner === null && building === 'none') {
+                    treasureGold = 50;
+                }
+                // Plain treasure at (6, 6) - 100G
+                if (r === 6 && c === 6 && owner === null && building === 'none') {
+                    treasureGold = 100;
+                }
+                // Water flotsam at (4, 5) - 150G
+                if (r === 4 && c === 5 && type === 'water' && owner === null && building === 'none') {
+                    treasureGold = 150;
+                }
+                // Plain treasure at (7, 3) - 200G
+                if (r === 7 && c === 3 && owner === null && building === 'none') {
+                    treasureGold = 200;
+                }
+
                 row.push({
                     row: r, col: c,
-                    owner, building, isConnected, type
+                    owner, building, isConnected, type, treasureGold
                 });
             }
             grid.push(row);

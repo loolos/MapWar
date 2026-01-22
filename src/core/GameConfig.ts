@@ -120,6 +120,9 @@ export const GameConfig = {
     GOLD_MINE_CHANCE: 0.2, // 20%
     GOLD_MINE_INCOME: 5,
     GOLD_MINE_DEPLETION_RATE: 0.05, // 5% per turn
+    // Treasure Chest/Flotsam Configs
+    TREASURE_GOLD_MIN: 20,
+    TREASURE_GOLD_MAX: 50,
     TERRAIN_COSTS: {
         PLAIN: 1,
         HILL: 2,

@@ -373,6 +373,7 @@ export class MainScene extends Phaser.Scene {
         this.engine.on('sfx:capture_town', () => this.soundManager.playSfx('sfx_capture_town')); // Bell
         this.engine.on('sfx:eliminate', () => this.soundManager.playSfx('sfx_eliminate'));
         this.engine.on('sfx:victory', () => this.soundManager.playSfx('sfx_victory'));
+        this.engine.on('sfx:gold_found', () => this.soundManager.playSfx('sfx:gold_found'));
         this.engine.on('sfx:bridge_build', () => this.soundManager.playSfx('sfx:bridge_build'));
         this.engine.on('sfx:wall_build', () => this.soundManager.playSfx('sfx:wall_build'));
         this.engine.on('sfx:wall_upgrade', () => this.soundManager.playSfx('sfx:wall_upgrade'));
@@ -1537,7 +1538,7 @@ export class MainScene extends Phaser.Scene {
         const allTerrain = this.terrainGroup.getChildren() as Phaser.GameObjects.Image[];
         allTerrain.forEach(img => img.setVisible(false));
 
-        // 2. Cleanup dynamic map elements (Text, special images)
+        // 2. Cleanup dynamic map elements (Text, special images, treasure graphics)
         const children = this.mapContainer.list;
         for (let i = children.length - 1; i >= 0; i--) {
             const child = children[i] as any;
@@ -1550,9 +1551,15 @@ export class MainScene extends Phaser.Scene {
                     || child.texture.key.startsWith('watchtower')
                     || child.texture.key.startsWith('farm')
                     || child.texture.key.startsWith('town_level')
+                    || child.texture.key === 'treasure_chest'
+                    || child.texture.key === 'flotsam'
                 )) {
                     child.destroy();
                 }
+            }
+            else if (child.type === 'Graphics' && child._treasureMarker) {
+                // Mark treasure graphics for cleanup
+                child.destroy();
             }
         }
 
@@ -1760,6 +1767,27 @@ export class MainScene extends Phaser.Scene {
                         }
 
                         this.mapContainer.add(towerSprite);
+                    }
+                }
+
+                // Treasure Chest / Flotsam (overlay on terrain, doesn't change terrain type)
+                if (cell.treasureGold !== null && cell.treasureGold > 0) {
+                    const treasureKey = cell.type === 'water' ? 'flotsam' : 'treasure_chest';
+                    // If texture exists, use it; otherwise create a simple graphic placeholder
+                    if (this.textures.exists(treasureKey)) {
+                        const treasureSprite = this.add.image(x + this.tileSize / 2, y + this.tileSize / 2, treasureKey);
+                        treasureSprite.setDisplaySize(this.tileSize * 0.6, this.tileSize * 0.6);
+                        treasureSprite.setDepth(10); // Ensure it displays above other elements
+                        this.mapContainer.add(treasureSprite);
+                    } else {
+                        // Use graphics to draw a simple icon as placeholder
+                        const g = this.add.graphics();
+                        const treasureColor = cell.type === 'water' ? 0x8B4513 : 0xFFD700; // Brown for flotsam, gold for chest
+                        g.fillStyle(treasureColor, 0.9);
+                        g.fillRect(x + this.tileSize * 0.3, y + this.tileSize * 0.3, this.tileSize * 0.4, this.tileSize * 0.4);
+                        g.setDepth(10); // Ensure it displays above other elements
+                        (g as any)._treasureMarker = true; // Mark for cleanup
+                        this.mapContainer.add(g);
                     }
                 }
 

@@ -127,6 +127,7 @@ vi.mock('phaser', () => {
                         lineBetween: vi.fn(() => g), // Added
                         arc: vi.fn(() => g),
                         setVisible: vi.fn(() => g),
+                        setDepth: vi.fn(() => g), // Added for treasure graphics
                         destroy: vi.fn(),
                         createGeometryMask: vi.fn(), // Added (if used by add.graphics?)
                         generateTexture: vi.fn(), // Added
