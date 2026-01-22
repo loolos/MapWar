@@ -310,6 +310,7 @@ export const evaluateTournament = (
     mapCounts: Record<string, Record<string, number>>;
     avgMatchMs: Record<ModeKey, number | null>;
     avgMatchTurns: Record<ModeKey, number | null>;
+    avgMatchTurnsByMap: Record<ModeKey, Record<string, number | null>>;
 } => {
     const stats = new Map<string, {
         wins: number;
@@ -372,6 +373,14 @@ export const evaluateTournament = (
     const modeMatchCounts: Record<ModeKey, number> = { '2p': 0, '4p': 0, '8p': 0 };
     const modeMatchMs: Record<ModeKey, number> = { '2p': 0, '4p': 0, '8p': 0 };
     const modeMatchTurns: Record<ModeKey, number> = { '2p': 0, '4p': 0, '8p': 0 };
+    const modeMapMatchCounts: Record<ModeKey, Record<string, number>> = { '2p': {}, '4p': {}, '8p': {} };
+    const modeMapMatchTurns: Record<ModeKey, Record<string, number>> = { '2p': {}, '4p': {}, '8p': {} };
+    for (const mode of modes) {
+        for (const mapType of options.mapTypes) {
+            modeMapMatchCounts[mode.key][mapType] = 0;
+            modeMapMatchTurns[mode.key][mapType] = 0;
+        }
+    }
     for (const mode of modes) {
         const total = profiles.length * mode.matchesPerAi / mode.players;
         modeTotals[mode.key] = total;
@@ -431,6 +440,8 @@ export const evaluateTournament = (
                     modeMatchMs[mode.key] += Date.now() - matchStart;
                     const matchTurns = result.decisiveWin ? result.turns : mode.maxTurns;
                     modeMatchTurns[mode.key] += matchTurns;
+                    modeMapMatchCounts[mode.key][mapType] += 1;
+                    modeMapMatchTurns[mode.key][mapType] += matchTurns;
 
                     const totalPlayers = playerIds.length;
                     const winnerId = result.placements[0];
@@ -519,6 +530,15 @@ export const evaluateTournament = (
         '4p': modeMatchCounts['4p'] > 0 ? modeMatchTurns['4p'] / modeMatchCounts['4p'] : null,
         '8p': modeMatchCounts['8p'] > 0 ? modeMatchTurns['8p'] / modeMatchCounts['8p'] : null
     };
+    const avgMatchTurnsByMap: Record<ModeKey, Record<string, number | null>> = { '2p': {}, '4p': {}, '8p': {} };
+    for (const mode of modes) {
+        avgMatchTurnsByMap[mode.key] = {};
+        for (const mapType of options.mapTypes) {
+            const count = modeMapMatchCounts[mode.key][mapType] ?? 0;
+            const total = modeMapMatchTurns[mode.key][mapType] ?? 0;
+            avgMatchTurnsByMap[mode.key][mapType] = count > 0 ? total / count : null;
+        }
+    }
 
     const results: Individual[] = profiles.map((profile) => {
         const stat = stats.get(profile.id)!;
@@ -568,7 +588,7 @@ export const evaluateTournament = (
         };
     });
 
-    return { results, mapCounts, avgMatchMs, avgMatchTurns };
+    return { results, mapCounts, avgMatchMs, avgMatchTurns, avgMatchTurnsByMap };
 };
 
 export const rankResults = (

@@ -132,7 +132,7 @@ const main = () => {
 
     const profiles = loadProfiles(options.profilesPath);
     const rng = createSeededRandom(options.seed);
-    const { results, avgMatchMs, avgMatchTurns } = evaluateTournament(profiles, options, 0, rng, activeModes);
+    const { results, avgMatchMs, avgMatchTurns, avgMatchTurnsByMap } = evaluateTournament(profiles, options, 0, rng, activeModes);
     const { ranked, diversityById } = rankResults(results, rng, options.diversityWeight, activeModes);
 
     console.log('=== AI Tournament Rankings ===');
@@ -146,6 +146,18 @@ const main = () => {
     };
     console.log(`AvgMatchMs: ${activeModes.use2p ? formatAvg('2p') : '-'},${activeModes.use4p ? formatAvg('4p') : '-'},${activeModes.use8p ? formatAvg('8p') : '-'}`);
     console.log(`AvgMatchTurns: ${activeModes.use2p ? formatTurns('2p') : '-'},${activeModes.use4p ? formatTurns('4p') : '-'},${activeModes.use8p ? formatTurns('8p') : '-'}`);
+    if (options.mapTypes.length) {
+        const formatMapTurns = (key: '2p' | '4p' | '8p') => {
+            if (!activeModes[`use${key}` as 'use2p' | 'use4p' | 'use8p']) return '-';
+            return options.mapTypes
+                .map((map) => {
+                    const value = avgMatchTurnsByMap[key]?.[map];
+                    return value !== null && value !== undefined ? `${map}:${value.toFixed(1)}` : `${map}:-`;
+                })
+                .join(' ');
+        };
+        console.log(`AvgMatchTurnsByMap: m2 ${formatMapTurns('2p')} | m4 ${formatMapTurns('4p')} | m8 ${formatMapTurns('8p')}`);
+    }
     for (let i = 0; i < ranked.length; i++) {
         const ind = ranked[i];
         const diversityScore = diversityById.get(ind.profile.id) ?? 0;

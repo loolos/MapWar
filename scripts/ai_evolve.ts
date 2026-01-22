@@ -697,7 +697,7 @@ const main = async () => {
         if (!options.quiet) {
             console.log(`\nRound ${round + 1}: ${participants.length} profiles`);
         }
-        const { results, mapCounts, avgMatchMs, avgMatchTurns } = evaluateTournament(participants, options, round, rng, activeModes);
+        const { results, mapCounts, avgMatchMs, avgMatchTurns, avgMatchTurnsByMap } = evaluateTournament(participants, options, round, rng, activeModes);
         const { ranked, diversityById } = rankResults(results, rng, options.diversityWeight, activeModes);
         const top4 = ranked.slice(0, 4);
 
@@ -713,6 +713,18 @@ const main = async () => {
             console.log(`Round ${round + 1} Results:`);
             console.log(`  AvgMatchMs: ${activeModes.use2p ? formatAvg('2p') : '-'},${activeModes.use4p ? formatAvg('4p') : '-'},${activeModes.use8p ? formatAvg('8p') : '-'}`);
             console.log(`  AvgMatchTurns: ${activeModes.use2p ? formatTurns('2p') : '-'},${activeModes.use4p ? formatTurns('4p') : '-'},${activeModes.use8p ? formatTurns('8p') : '-'}`);
+            if (options.mapTypes.length) {
+                const formatMapTurns = (key: '2p' | '4p' | '8p') => {
+                    if (!activeModes[`use${key}` as 'use2p' | 'use4p' | 'use8p']) return '-';
+                    return options.mapTypes
+                        .map((map) => {
+                            const value = avgMatchTurnsByMap[key]?.[map];
+                            return value !== null && value !== undefined ? `${map}:${value.toFixed(1)}` : `${map}:-`;
+                        })
+                        .join(' ');
+                };
+                console.log(`  AvgMatchTurnsByMap: m2 ${formatMapTurns('2p')} | m4 ${formatMapTurns('4p')} | m8 ${formatMapTurns('8p')}`);
+            }
             for (let i = 0; i < ranked.length; i++) {
                 const ind = ranked[i];
                 const winRate = ind.games > 0 ? ind.wins / ind.games : 0;
