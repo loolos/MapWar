@@ -13,6 +13,7 @@ export class MenuScene extends Phaser.Scene {
     private background!: Phaser.GameObjects.Image;
     private soundManager!: SoundManager;
     private menuFanfarePlayed: boolean = false;
+    private fanfarePromise: Promise<void> | null = null;
 
     preload() {
         this.load.image('war_map_bg', 'assets/war_map_background.png');
@@ -253,39 +254,45 @@ export class MenuScene extends Phaser.Scene {
         // Audio: majestic start fanfare on scene load
         this.soundManager = new SoundManager();
 
+        const FANFARE_CONTEXT_TIMEOUT_MS = 1500;
+
         const playMenuFanfare = async () => {
-            // Set flag immediately to prevent race conditions
             if (this.menuFanfarePlayed) return;
-            this.menuFanfarePlayed = true;
-            
-            const started = await this.soundManager.startContext();
-            if (!started) {
-                this.menuFanfarePlayed = false; // Reset if context failed
+            if (this.fanfarePromise) {
+                await this.fanfarePromise;
                 return;
             }
-            this.time.delayedCall(GameConfig.UI_MENU_FANFARE_DELAY, () => {
-                this.soundManager.playStartFanfare();
-            });
+
+            this.fanfarePromise = (async () => {
+                try {
+                    const started = await this.soundManager.startContextWithTimeout(FANFARE_CONTEXT_TIMEOUT_MS);
+                    if (!started) return;
+                    this.menuFanfarePlayed = true;
+                    // Use setTimeout so fanfare survives scene switch (Start/Tutorial → MainScene)
+                    setTimeout(() => {
+                        this.soundManager.playStartFanfare();
+                    }, GameConfig.UI_MENU_FANFARE_DELAY);
+                } finally {
+                    this.fanfarePromise = null;
+                }
+            })();
+
+            await this.fanfarePromise;
+        };
+
+        const playMenuFanfareFromUserGesture = () => {
+            this.soundManager.startContextSync();
+            void playMenuFanfare();
         };
 
         const bindMenuAudioUnlock = () => {
-            // Use a single handler to avoid duplicate triggers on iOS
-            const handler = () => {
-                playMenuFanfare();
-            };
-            
+            const handler = () => playMenuFanfareFromUserGesture();
             this.input.once('pointerdown', handler);
             this.input.keyboard?.once('keydown', handler);
-            const domNode = this.domElement?.node as HTMLElement | null;
-            if (domNode) {
-                // On iOS, touchstart fires before pointerdown, so prefer touchstart
-                // But both may fire, so the flag in playMenuFanfare prevents duplicates
-                domNode.addEventListener('touchstart', handler, { once: true });
-                domNode.addEventListener('pointerdown', handler, { once: true });
-            } else {
-                document.addEventListener('touchstart', handler, { once: true });
-                document.addEventListener('pointerdown', handler, { once: true });
-            }
+            document.addEventListener('touchstart', handler, { once: true, passive: true });
+            document.addEventListener('touchend', handler, { once: true, passive: true });
+            document.addEventListener('click', handler, { once: true });
+            document.addEventListener('pointerdown', handler, { once: true });
         };
 
         // Bind interaction unlock first so we don't miss the initial gesture.
@@ -346,8 +353,7 @@ export class MenuScene extends Phaser.Scene {
         const btn = this.domElement.getChildByID('startGameBtn');
         if (btn) {
             btn.addEventListener('click', () => {
-                // Ensure fanfare plays at least once on mobile
-                playMenuFanfare();
+                playMenuFanfareFromUserGesture();
                 const presetVal = (this.domElement.getChildByID('presetSelect') as HTMLSelectElement).value;
 
                 if (presetVal) {
@@ -387,7 +393,7 @@ export class MenuScene extends Phaser.Scene {
         const tutorialBtn = this.domElement.getChildByID('tutorialGameBtn');
         if (tutorialBtn) {
             tutorialBtn.addEventListener('click', () => {
-                playMenuFanfare();
+                playMenuFanfareFromUserGesture();
                 const defaultWidth = 10;
                 const defaultHeight = 10;
                 (GameConfig as any).GRID_WIDTH = defaultWidth;

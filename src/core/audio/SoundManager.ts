@@ -79,6 +79,17 @@ export class SoundManager {
         this.isInitialized = true;
     }
 
+    /**
+     * Synchronously trigger Tone.start() in the current call stack.
+     * Call this directly from a user gesture handler (touch/click) so that
+     * iOS Safari allows AudioContext resume. Do not await.
+     */
+    public startContextSync(): void {
+        if (Tone.context.state !== 'running') {
+            Tone.start(); // Fire-and-forget; must run in user gesture stack
+        }
+    }
+
     public async startContext(): Promise<boolean> {
         try {
             if (Tone.context.state !== 'running') {
@@ -95,6 +106,27 @@ export class SoundManager {
         }
 
         return false;
+    }
+
+    /**
+     * startContext with a timeout. Use for autoplay on iOS where await Tone.start()
+     * may never resolve without a user gesture. On timeout, returns false.
+     */
+    public async startContextWithTimeout(ms: number): Promise<boolean> {
+        const timeout = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('startContext timeout')), ms)
+        );
+        try {
+            await Promise.race([this.startContext(), timeout]);
+            return Tone.context.state === 'running';
+        } catch (e) {
+            if ((e as Error)?.message === 'startContext timeout') {
+                console.warn("Tone.js Context Start timed out (e.g. iOS without user gesture).");
+            } else {
+                console.warn("Tone.js Context Start Failed:", e);
+            }
+            return false;
+        }
     }
 
     public playSfx(key: string) {
