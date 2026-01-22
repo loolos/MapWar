@@ -254,25 +254,37 @@ export class MenuScene extends Phaser.Scene {
         this.soundManager = new SoundManager();
 
         const playMenuFanfare = async () => {
+            // Set flag immediately to prevent race conditions
             if (this.menuFanfarePlayed) return;
-            const started = await this.soundManager.startContext();
-            if (!started) return;
             this.menuFanfarePlayed = true;
+            
+            const started = await this.soundManager.startContext();
+            if (!started) {
+                this.menuFanfarePlayed = false; // Reset if context failed
+                return;
+            }
             this.time.delayedCall(GameConfig.UI_MENU_FANFARE_DELAY, () => {
                 this.soundManager.playStartFanfare();
             });
         };
 
         const bindMenuAudioUnlock = () => {
-            this.input.once('pointerdown', playMenuFanfare);
-            this.input.keyboard?.once('keydown', playMenuFanfare);
+            // Use a single handler to avoid duplicate triggers on iOS
+            const handler = () => {
+                playMenuFanfare();
+            };
+            
+            this.input.once('pointerdown', handler);
+            this.input.keyboard?.once('keydown', handler);
             const domNode = this.domElement?.node as HTMLElement | null;
             if (domNode) {
-                domNode.addEventListener('pointerdown', playMenuFanfare, { once: true });
-                domNode.addEventListener('touchstart', playMenuFanfare, { once: true });
+                // On iOS, touchstart fires before pointerdown, so prefer touchstart
+                // But both may fire, so the flag in playMenuFanfare prevents duplicates
+                domNode.addEventListener('touchstart', handler, { once: true });
+                domNode.addEventListener('pointerdown', handler, { once: true });
             } else {
-                document.addEventListener('pointerdown', playMenuFanfare, { once: true });
-                document.addEventListener('touchstart', playMenuFanfare, { once: true });
+                document.addEventListener('touchstart', handler, { once: true });
+                document.addEventListener('pointerdown', handler, { once: true });
             }
         };
 

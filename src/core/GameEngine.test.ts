@@ -101,6 +101,23 @@ describe('GameEngine', () => {
 
             expect(engine.pendingMoves).toHaveLength(2);
         });
+
+        it('clears planned moves and interactions', () => {
+            engine.togglePlan(0, 1);
+            engine.planInteraction(0, 0, 'BASE_UPGRADE_INCOME');
+            engine.lastError = 'Some error';
+            let updated = false;
+            engine.on('planUpdate', () => {
+                updated = true;
+            });
+
+            engine.clearPlan();
+
+            expect(engine.pendingMoves).toHaveLength(0);
+            expect(engine.pendingInteractions).toHaveLength(0);
+            expect(engine.lastError).toBeNull();
+            expect(updated).toBe(true);
+        });
     });
 
     describe('Combat Mechanics check', () => {

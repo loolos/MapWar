@@ -52,10 +52,10 @@ export const NearVictory = {
 
                 // Scenario: P1 owns nearly everything up to P2
                 // Let's say P1 owns rows 0-7
-                // And fill with Level 3 Farms for massive income
+                // All plain tiles with no building (can build walls)
                 else if (r < 8) {
                     owner = 'P1';
-                    building = 'farm_lv3';
+                    building = 'none';
                 }
 
                 // Create a "Bridge Testing" scenario

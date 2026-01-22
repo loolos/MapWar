@@ -18,6 +18,7 @@ export class SoundManager {
     private bassSynth!: Tone.MonoSynth; // For BGM Bass
 
     private isInitialized = false;
+    private fanfarePlaying = false;
 
     // BGM State
     public bgmState: 'PEACE' | 'TENSION' | 'CONFLICT' | 'DOOM' | 'PEACE_DAY' = 'PEACE';
@@ -229,6 +230,8 @@ export class SoundManager {
 
     public playStartFanfare() {
         if (this.isMuted) return;
+        if (this.fanfarePlaying) return; // Prevent overlapping fanfares
+        this.fanfarePlaying = true;
         this.startContext();
 
         try {
@@ -265,8 +268,14 @@ export class SoundManager {
             // Final sustained chord for resolution
             this.bassSynth.triggerAttackRelease("C1", "1n", now + 4.6);
             this.polySynth.triggerAttackRelease(["C2", "G2", "C3", "E3", "G3"], "1n", now + 5.0);
+
+            // Reset flag after fanfare completes (last note at ~5.2s + release time ~1s = ~6.5s total)
+            setTimeout(() => {
+                this.fanfarePlaying = false;
+            }, 7000);
         } catch (e) {
             console.warn("Tone.js Fanfare Error:", e);
+            this.fanfarePlaying = false; // Reset on error
         }
     }
 

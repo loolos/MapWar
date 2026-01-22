@@ -779,6 +779,14 @@ export class GameEngine {
         }
     }
 
+    clearPlan() {
+        if (this.isGameOver) return;
+        this.pendingMoves = [];
+        this.pendingInteractions = [];
+        this.lastError = null;
+        this.emit('planUpdate');
+    }
+
     // Helper to calculate TOTAL cost including moves and interactions
     calculatePlannedCost(): number {
         let total = 0;

@@ -264,7 +264,7 @@ export class MainScene extends Phaser.Scene {
         this.playerStatusSystem = new PlayerStatusSystem(this, 0, 0, 100);
         this.infoSystem = new CellInfoSystem(this, 0, 0, 100);
         this.buttonSystem = new ActionButtonSystem(this, 0, 0);
-        this.buttonSystem.setGrid(1, 2);
+        this.buttonSystem.setGrid(2, 2);
         // this.notificationSystem = new NotificationSystem(this, 0, 0, 100, 100);
         this.logSystem = new LogSystem(this, 0, 0, 200, 100);
         this.interactionMenu = new InteractionMenu(this, this.engine); // NEW
@@ -901,7 +901,7 @@ export class MainScene extends Phaser.Scene {
                 // --- BOTTOM RIGHT: Buttons & Interaction Menu ---
                 // Vertical Split: Menu on Top, Buttons on Bottom
                 const brW = midX - 15;
-                const btnH = 35; // Fixed height for 2 rows of small buttons
+                const btnH = 80; // 2 rows: 35px each + 10px gap
                 const menuH = barHeight - btnH - 10; // Allowing for padding
 
                 // Buttons (Bottom)
@@ -977,7 +977,7 @@ export class MainScene extends Phaser.Scene {
                 // Button Anchor
                 // Vertical Stack: Center in Sidebar
                 this.buttonSystem.setScale(1);
-                const btnAreaH = 35; // Compact buttons
+                const btnAreaH = 80; // 2 rows: 35px each + 10px gap
                 this.buttonSystem.resize(sidebarW - 20, btnAreaH);
                 this.buttonSystem.setPosition(width - sidebarW + 10, height - btnAreaH - 10);
 
@@ -1142,14 +1142,23 @@ export class MainScene extends Phaser.Scene {
     setupButtons() {
         this.buttonSystem.clearButtons();
 
-        // Slot Configuration: Always Horizontal (1 Row, 2 Cols)
+        // Slot Configuration: 2 Rows, 2 Cols (Clear above End Turn)
 
-        // Button 1: End Turn
-        this.buttonSystem.addButton(0, 0, "END TURN", () => {
+        // Button 1: Clear Plan
+        this.buttonSystem.addButton(0, 0, "CLEAR", () => {
+            const currentPlayer = this.engine.state.getCurrentPlayer();
+            if (currentPlayer.isAI) return;
+            this.engine.clearPlan();
+        });
+
+        // Button 2: End Turn
+        this.buttonSystem.addButton(1, 0, "END TURN", () => {
+            const currentPlayer = this.engine.state.getCurrentPlayer();
+            if (currentPlayer.isAI) return;
             this.engine.endTurn();
         });
 
-        // Button 2: Mute
+        // Button 3: Mute
         const isMuted = (this.soundManager as any).isMuted;
         const label = isMuted ? "UNMUTE 🔇" : "MUTE 🔊";
 

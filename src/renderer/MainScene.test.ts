@@ -508,9 +508,10 @@ describe('MainScene', () => {
         addButtonSpy.mockClear();
         scene.setupButtons();
 
-        // Should add End Turn and Mute
-        expect(addButtonSpy).toHaveBeenCalledTimes(2);
-        // Expect (0, 1) Always (Horizontal)
+        // Should add Clear, End Turn, and Mute
+        expect(addButtonSpy).toHaveBeenCalledTimes(3);
+        expect(addButtonSpy).toHaveBeenCalledWith(0, 0, "CLEAR", expect.any(Function));
+        expect(addButtonSpy).toHaveBeenCalledWith(1, 0, "END TURN", expect.any(Function));
         expect(addButtonSpy).toHaveBeenCalledWith(0, 1, "MUTE 🔊", expect.any(Function));
 
         // simulate click logic manually since we can't easily trigger the anonymous callback from here without capturing it
@@ -518,6 +519,8 @@ describe('MainScene', () => {
 
         scene.soundManager.isMuted = true;
         scene.setupButtons();
+        expect(addButtonSpy).toHaveBeenCalledWith(0, 0, "CLEAR", expect.any(Function));
+        expect(addButtonSpy).toHaveBeenCalledWith(1, 0, "END TURN", expect.any(Function));
         expect(addButtonSpy).toHaveBeenCalledWith(0, 1, "UNMUTE 🔇", expect.any(Function));
     });
 });
