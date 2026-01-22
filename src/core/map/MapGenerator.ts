@@ -80,38 +80,80 @@ export class MapGenerator {
         // Start with WATER
         this.fillGrid(grid, 'water');
 
-        // Create Random Islands
         const area = width * height;
-        const islandCount = Math.max(4, Math.floor(area / 25)); // Lots of small islands
+        const targetLand = Math.floor(area * 0.45);
+        const playerIslandRatio = 0.65;
+        const targetPlayerIsland = Math.max(10, Math.floor((targetLand / playerCount) * playerIslandRatio));
+        const minPlayerIsland = Math.max(8, Math.floor(targetPlayerIsland * 0.85));
 
-        for (let i = 0; i < islandCount; i++) {
-            // Random seed
-            const r = Math.floor(Math.random() * height);
-            const c = Math.floor(Math.random() * width);
-            // Grow Island (Plain)
-            this.growClusterAt(grid, r, c, 'plain', Math.floor(Math.random() * 5) + 3, 'water');
-        }
-
-        // GUARANTEE: Starting Islands for Each Player using exact spawn logic
+        // Generate Player Islands first (disconnected)
         const spawnPoints: { r: number; c: number }[] = [];
         for (let i = 0; i < playerCount; i++) {
             const spawn = this.getSpawnPoint(i, playerCount, width, height);
             spawnPoints.push(spawn);
-            // Ensure island at spawn (Size 15 is substantial)
-            this.growClusterAt(grid, spawn.r, spawn.c, 'plain', 15, 'water');
+            const island = this.growIslandFromSeed(
+                grid,
+                spawn,
+                targetPlayerIsland,
+                (r, c, islandSet) => {
+                    if (grid[r][c].type !== 'water') return false;
+                    return !this.hasAdjacentForeignLand(grid, r, c, islandSet);
+                }
+            );
+
+            if (island.cells.length < minPlayerIsland) {
+                this.expandIsland(
+                    grid,
+                    island.cells,
+                    island.set,
+                    minPlayerIsland,
+                    (r, c, islandSet) => {
+                        if (grid[r][c].type !== 'water') return false;
+                        return !this.hasAdjacentForeignLand(grid, r, c, islandSet);
+                    }
+                );
+            }
+        }
+
+        // Ensure player islands are separated (safety pass)
+        this.separateSpawnIslands(grid, width, height, spawnPoints);
+
+        const playerLandSet = this.collectPlayerLand(grid, spawnPoints);
+        let currentLand = this.countLand(grid);
+        let remainingLand = Math.max(0, targetLand - currentLand);
+
+        // Fill remaining land with neutral islands (avoid connecting to players)
+        const maxAttempts = area * 3;
+        let attempts = 0;
+        while (remainingLand > 0 && attempts < maxAttempts) {
+            attempts++;
+            const seed = {
+                r: Math.floor(Math.random() * height),
+                c: Math.floor(Math.random() * width)
+            };
+
+            if (!this.isValid(grid, seed.r, seed.c)) continue;
+            if (grid[seed.r][seed.c].type !== 'water') continue;
+            if (this.isAdjacentToSet(seed, playerLandSet)) continue;
+
+            const islandSize = Math.min(remainingLand, Math.floor(Math.random() * 5) + 3);
+            const island = this.growIslandFromSeed(
+                grid,
+                seed,
+                islandSize,
+                (r, c) => {
+                    if (grid[r][c].type !== 'water') return false;
+                    return !this.isAdjacentToSet({ r, c }, playerLandSet);
+                }
+            );
+
+            if (island.cells.length > 0) {
+                remainingLand -= island.cells.length;
+            }
         }
 
         // Add some hills on islands
         this.scatterTerrain(grid, 'hill', 0.2, 'plain'); // 20% of plains become hills
-
-        // Ensure each spawn island is reasonably sized
-        const minIslandSize = Math.max(18, Math.floor((width * height) / 40));
-        for (const spawn of spawnPoints) {
-            this.ensureSpawnIslandSize(grid, spawn, minIslandSize);
-        }
-
-        // Encourage separate islands per spawn
-        this.separateSpawnIslands(grid, width, height, spawnPoints);
     }
 
     private static generatePangaea(grid: Cell[][], width: number, height: number, playerCount: number = 2) {
@@ -220,15 +262,124 @@ export class MapGenerator {
         this.ensureSpawnsOnMainland(grid, width, height, spawnPoints);
     }
 
-    private static ensureSpawnIslandSize(
+    private static growIslandFromSeed(
         grid: Cell[][],
-        spawn: { r: number; c: number },
-        minSize: number
+        seed: { r: number; c: number },
+        targetSize: number,
+        canPlace: (r: number, c: number, islandSet: Set<string>) => boolean
     ) {
-        const { size } = this.getLandmassAt(grid, spawn.r, spawn.c);
-        if (size >= minSize) return;
-        const growBy = Math.max(6, minSize - size);
-        this.growClusterAt(grid, spawn.r, spawn.c, 'plain', growBy, 'water');
+        const cells: { r: number; c: number }[] = [];
+        const islandSet = new Set<string>();
+
+        if (!this.isValid(grid, seed.r, seed.c)) return { cells, set: islandSet };
+
+        if (grid[seed.r][seed.c].type === 'water') {
+            grid[seed.r][seed.c].type = 'plain';
+        }
+        const seedKey = `${seed.r},${seed.c}`;
+        islandSet.add(seedKey);
+        cells.push({ r: seed.r, c: seed.c });
+
+        this.expandIsland(grid, cells, islandSet, targetSize, canPlace);
+
+        return { cells, set: islandSet };
+    }
+
+    private static expandIsland(
+        grid: Cell[][],
+        cells: { r: number; c: number }[],
+        islandSet: Set<string>,
+        targetSize: number,
+        canPlace: (r: number, c: number, islandSet: Set<string>) => boolean
+    ) {
+        const frontier = [...cells];
+        let guard = 0;
+        const limit = grid.length * grid[0].length * 4;
+
+        while (cells.length < targetSize && frontier.length > 0 && guard < limit) {
+            guard++;
+            const index = Math.floor(Math.random() * frontier.length);
+            const current = frontier.splice(index, 1)[0];
+            const neighbors = [
+                { r: current.r + 1, c: current.c },
+                { r: current.r - 1, c: current.c },
+                { r: current.r, c: current.c + 1 },
+                { r: current.r, c: current.c - 1 }
+            ].sort(() => Math.random() - 0.5);
+
+            for (const n of neighbors) {
+                if (cells.length >= targetSize) break;
+                if (!this.isValid(grid, n.r, n.c)) continue;
+                const key = `${n.r},${n.c}`;
+                if (islandSet.has(key)) continue;
+                if (!canPlace(n.r, n.c, islandSet)) continue;
+
+                grid[n.r][n.c].type = 'plain';
+                islandSet.add(key);
+                cells.push({ r: n.r, c: n.c });
+                frontier.push({ r: n.r, c: n.c });
+            }
+        }
+    }
+
+    private static hasAdjacentForeignLand(
+        grid: Cell[][],
+        r: number,
+        c: number,
+        islandSet: Set<string>
+    ) {
+        const neighbors = [
+            { r: r + 1, c },
+            { r: r - 1, c },
+            { r, c: c + 1 },
+            { r, c: c - 1 }
+        ];
+
+        for (const n of neighbors) {
+            if (!this.isValid(grid, n.r, n.c)) continue;
+            const key = `${n.r},${n.c}`;
+            if (grid[n.r][n.c].type !== 'water' && !islandSet.has(key)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static isAdjacentToSet(
+        cell: { r: number; c: number },
+        cellSet: Set<string>
+    ) {
+        const neighbors = [
+            { r: cell.r + 1, c: cell.c },
+            { r: cell.r - 1, c: cell.c },
+            { r: cell.r, c: cell.c + 1 },
+            { r: cell.r, c: cell.c - 1 }
+        ];
+
+        for (const n of neighbors) {
+            if (cellSet.has(`${n.r},${n.c}`)) return true;
+        }
+
+        return false;
+    }
+
+    private static collectPlayerLand(
+        grid: Cell[][],
+        spawnPoints: { r: number; c: number }[]
+    ) {
+        const land = new Set<string>();
+        for (const spawn of spawnPoints) {
+            const { cells } = this.getLandmassAt(grid, spawn.r, spawn.c);
+            for (const cell of cells) {
+                land.add(`${cell.r},${cell.c}`);
+            }
+        }
+        return land;
+    }
+
+    private static countLand(grid: Cell[][]) {
+        return grid.flat().filter((cell) => cell.type !== 'water').length;
     }
 
     private static ensureSpawnsOnMainland(
