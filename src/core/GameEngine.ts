@@ -498,6 +498,7 @@ export class GameEngine {
 
         if (candidates.length === 0) return 0;
 
+        const affectedPlayers = new Set<string>(); // Track players whose lands were flooded
         let flooded = 0;
         for (const { r, c, isBridge } of candidates) {
             const cell = grid[r][c];
@@ -511,6 +512,10 @@ export class GameEngine {
                 chance *= 0.25; // hills 1/4 as likely to flood as plains
             }
             if (this.random() > chance) continue;
+            const previousOwner = cell.owner; // Store before clearing
+            if (previousOwner) {
+                affectedPlayers.add(previousOwner);
+            }
             this.floodedCells.set(`${r},${c}`, { r, c, type: cell.type });
             cell.owner = null;
             cell.building = 'none';
@@ -523,6 +528,12 @@ export class GameEngine {
             cell.type = 'water';
             flooded++;
         }
+
+        // Update connectivity for players whose lands were flooded
+        affectedPlayers.forEach(playerId => {
+            this.state.updateConnectivity(playerId);
+            this.checkForEnclaves(playerId);
+        });
 
         if (flooded > 0) {
             this.turnEventSystem.setPersistentEvent({
@@ -1221,6 +1232,7 @@ export class GameEngine {
         let captureCount = 0;
         let conquerCount = 0;
         let bridgeBuiltCount = 0;
+        const ownershipChangedPlayers = new Set<string>(); // Track players whose land ownership changed
 
 
         // Snapshot costs BEFORE execution to ensure consistency with the Plan
@@ -1268,9 +1280,13 @@ export class GameEngine {
             if (cell.owner && cell.owner !== pid) {
                 hasCombat = true;
                 hasConquer = true; // Capturing enemy land
+                ownershipChangedPlayers.add(cell.owner); // Track player who lost land
+                ownershipChangedPlayers.add(pid); // Track attacker who gained land
                 conquerCount++;
                 captureCount++;
             } else if (cell.owner === null) {
+                // Neutral capture - only attacker gains land
+                ownershipChangedPlayers.add(pid);
                 captureCount++;
             }
 
@@ -1298,6 +1314,7 @@ export class GameEngine {
             // Transformation: Water -> Bridge
             if (wasWater) {
                 bridgeBuiltCount++;
+                ownershipChangedPlayers.add(pid); // Bridge building gives ownership, affects connectivity
                 cell.type = 'bridge';
             }
 
@@ -1336,6 +1353,7 @@ export class GameEngine {
                 });
                 this.emit('sfx:gold_found');
                 cell.treasureGold = null; // Remove treasure
+                this.ai.invalidateTreasureCache(); // Invalidate cache
             }
 
             // Gold Mine Discovery (Hill + Neutral Capture)
@@ -1445,17 +1463,19 @@ export class GameEngine {
             this.emit('sfx:victory');
         }
 
+        // Update connectivity for all players whose land ownership changed
+        // This includes: attackers, defenders, bridge builders, and any player who gained/lost land
+        // (Update regardless of totalCost, as ownership changes affect connectivity)
+        if (ownershipChangedPlayers.size > 0) {
+            ownershipChangedPlayers.forEach(playerId => {
+                this.state.updateConnectivity(playerId);
+                this.checkForEnclaves(playerId);
+            });
+        }
+
         if (totalCost > 0) {
             // Already spent incrementally.
             // this.stateManager.spendGold(pid, totalCost);
-
-            // Update Connectivity for ALL players
-            // Check for enclaves for ALL players
-            this.state.playerOrder.forEach(p => {
-                this.state.updateConnectivity(p);
-                this.checkForEnclaves(p);
-            });
-
             this.emit('mapUpdate');
         }
 

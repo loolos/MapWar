@@ -7,6 +7,8 @@ import { DefaultAIProfile, mergeAIWeights, type AIProfile, type AIWeights } from
 export class AIController {
     engine: GameEngine;
     private profileByPlayerId: Map<string, AIProfile> = new Map();
+    private cachedTreasureLocations: { r: number; c: number; gold: number }[] = [];
+    private treasureCacheValid: boolean = false;
 
     constructor(engine: GameEngine) {
         this.engine = engine;
@@ -24,6 +26,10 @@ export class AIController {
         const profile = this.profileByPlayerId.get(playerId);
         if (!profile) return null;
         return profile.label || profile.id;
+    }
+
+    public invalidateTreasureCache() {
+        this.treasureCacheValid = false;
     }
 
     private getWeightsForPlayer(playerId: string): AIWeights {
@@ -73,16 +79,20 @@ export class AIController {
                 const ownedCells: { r: number; c: number }[] = [];
                 const disconnectedOwned = new Set<string>();
                 
-                // Collect all treasure locations for proximity scoring
-                const treasureLocations: { r: number; c: number; gold: number }[] = [];
-                for (let r = 0; r < grid.length; r++) {
-                    for (let c = 0; c < grid[r].length; c++) {
-                        const cell = grid[r][c];
-                        if (cell.treasureGold !== null && cell.treasureGold > 0) {
-                            treasureLocations.push({ r, c, gold: cell.treasureGold });
+                // Use cached treasure locations if available
+                if (!this.treasureCacheValid) {
+                    this.cachedTreasureLocations = [];
+                    for (let r = 0; r < grid.length; r++) {
+                        for (let c = 0; c < grid[r].length; c++) {
+                            const cell = grid[r][c];
+                            if (cell.treasureGold !== null && cell.treasureGold > 0) {
+                                this.cachedTreasureLocations.push({ r, c, gold: cell.treasureGold });
+                            }
                         }
                     }
+                    this.treasureCacheValid = true;
                 }
+                const treasureLocations = this.cachedTreasureLocations;
                 const threatByKey = new Map<string, number>();
                 const myFrontLines: { r: number; c: number; cell: any; threat: number }[] = [];
                 const farmSpots: { r: number; c: number; auraBonus: number }[] = [];
