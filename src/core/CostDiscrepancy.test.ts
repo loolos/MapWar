@@ -178,10 +178,21 @@ describe('Cost Discrepancy Reproduction', () => {
 
 
 
+        // Debug: Check individual move costs before commit
+        const move1Cost = engine.getMoveCost(0, 1);
+        const move2Cost = engine.getMoveCost(0, 2);
+        const move3Cost = engine.getMoveCost(0, 3);
+        console.log(`Debug - Move costs: (0,1)=${move1Cost}, (0,2)=${move2Cost}, (0,3)=${move3Cost}, Total=${move1Cost + move2Cost + move3Cost}`);
+        console.log(`Debug - Pending moves count: ${engine.pendingMoves.length}`);
+        console.log(`Debug - Pending moves: ${JSON.stringify(engine.pendingMoves)}`);
+
+        const goldBeforeCommit = p1.gold;
         engine.commitMoves();
 
         const deducted = initialGold - p1.gold;
-        console.log(`Mixed Terrain - Planned: ${plannedCost}, Deducted: ${deducted}`);
+        const goldAfterCommit = p1.gold;
+        console.log(`Mixed Terrain - Planned: ${plannedCost}, Deducted: ${deducted}, Final Gold: ${p1.gold}`);
+        console.log(`Debug - Gold before commit: ${goldBeforeCommit}, after: ${goldAfterCommit}, difference: ${goldBeforeCommit - goldAfterCommit}`);
 
         expect(deducted).toBe(plannedCost);
         expect(deducted).toBeGreaterThan(0);
