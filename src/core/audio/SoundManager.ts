@@ -327,6 +327,10 @@ export class SoundManager {
         Tone.Transport.start();
     }
 
+    public isBgmPlaying(): boolean {
+        return Tone.Transport.state === 'started';
+    }
+
     public stopBgm() {
         Tone.Transport.stop();
         if (this.bgmLoop) this.bgmLoop.stop();

@@ -74,6 +74,7 @@ vi.mock('phaser', () => {
                 emit: vi.fn()
             };
 
+
             this.cameras = {
                 main: {
                     setBackgroundColor: vi.fn(),
@@ -193,22 +194,34 @@ vi.mock('phaser', () => {
                 }
             };
             this.make = {
-                graphics: vi.fn(() => ({
-                    fillStyle: vi.fn(),
-                    fillRect: vi.fn(),
-                    generateTexture: vi.fn(),
-                    destroy: vi.fn(),
-                    createGeometryMask: vi.fn(), // Added
-                    lineStyle: vi.fn(), // Added for castle
-                    beginPath: vi.fn(),
-                    moveTo: vi.fn(),
-                    lineTo: vi.fn(),
-                    strokePath: vi.fn(),
-                    fillEllipse: vi.fn(),
-                    fillTriangle: vi.fn(),
-                    closePath: vi.fn(), // Added
-                    fillPath: vi.fn() // Added
-                }))
+                graphics: vi.fn(() => {
+                    const g = {
+                        fillStyle: vi.fn(() => g),
+                        fillRect: vi.fn(() => g),
+                        fillRoundedRect: vi.fn(() => g), // Added for treasure textures
+                        strokeRoundedRect: vi.fn(() => g), // Added
+                        fillCircle: vi.fn(() => g), // Added
+                        generateTexture: vi.fn(),
+                        destroy: vi.fn(),
+                        createGeometryMask: vi.fn(), // Added
+                        lineStyle: vi.fn(() => g), // Added for castle
+                        beginPath: vi.fn(() => g),
+                        moveTo: vi.fn(() => g),
+                        lineTo: vi.fn(() => g),
+                        strokePath: vi.fn(() => g),
+                        fillEllipse: vi.fn(() => g),
+                        fillTriangle: vi.fn(() => g),
+                        closePath: vi.fn(() => g), // Added
+                        fillPath: vi.fn(() => g), // Added
+                        clear: vi.fn(() => g),
+                        strokeRect: vi.fn(() => g),
+                        lineBetween: vi.fn(() => g),
+                        arc: vi.fn(() => g),
+                        setVisible: vi.fn(() => g),
+                        setDepth: vi.fn(() => g)
+                    };
+                    return g;
+                })
             };
             this.time = {
                 delayedCall: vi.fn((_delay, callback) => callback())
@@ -384,7 +397,7 @@ describe('MainScene', () => {
     });
 
     it('refreshes terrain visuals on game restart', () => {
-        const initSpy = vi.spyOn(scene, 'initializeTerrainVisuals');
+        const initSpy = vi.spyOn(scene as any, 'initializeTerrainVisuals');
 
         // Trigger Restart
         scene.engine.restartGame();

@@ -52,6 +52,8 @@ export class MainScene extends Phaser.Scene {
     private tutorialBlocker?: Phaser.GameObjects.Zone;
 
     soundManager!: SoundManager; // NEW
+    // Track if BGM has been started (used to prevent duplicate start attempts)
+    private bgmStarted: boolean = false;
     interactionMenu!: InteractionMenu; // NEW
     auraVisualizer!: AuraVisualizer; // NEW
 
@@ -213,6 +215,20 @@ export class MainScene extends Phaser.Scene {
 
         // Input
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+            // Try to start BGM if not already playing (for autoplay-blocked browsers)
+            if (this.soundManager && !this.soundManager.isBgmPlaying()) {
+                // Use synchronous method for user gesture
+                this.soundManager.startContextSync();
+                this.soundManager.playBgm('bgm_main').then(() => {
+                    // Only mark as started if BGM is actually playing
+                    if (this.soundManager?.isBgmPlaying?.()) {
+                        this.bgmStarted = true;
+                    }
+                }).catch((err) => {
+                    console.warn("Could not start BGM on user interaction:", err);
+                });
+            }
+            
             if (this.tutorialActive) {
                 return;
             }
@@ -384,18 +400,8 @@ export class MainScene extends Phaser.Scene {
         this.engine.on('sfx:base_upgrade_income', () => this.soundManager.playSfx('sfx:base_upgrade_income'));
         this.engine.on('sfx:base_upgrade_defense', () => this.soundManager.playSfx('sfx:base_upgrade_defense'));
 
-        // Start BGM only (fanfare plays in menu scene)
-        this.soundManager.startContext().then(() => {
-            this.soundManager.playBgm('bgm_main').catch((err) => {
-                console.warn("Could not start BGM:", err);
-            });
-        }).catch((err) => {
-            console.warn("Could not start audio context:", err);
-            // Try to start BGM anyway
-            this.soundManager.playBgm('bgm_main').catch((e) => {
-                console.warn("Could not start BGM:", e);
-            });
-        });
+        // Start BGM automatically (fanfare plays in menu scene)
+        this.tryStartBgm();
 
         this.engine.on('gameRestart', () => {
             if (this.overlayContainer) {
@@ -630,6 +636,9 @@ export class MainScene extends Phaser.Scene {
         this.createFarmTexture(1);
         this.createFarmTexture(2);
         this.createFarmTexture(3);
+
+        // Create Treasure Textures
+        this.createTreasureTextures();
     }
 
     private createFarmTexture(level: number) {
@@ -791,11 +800,14 @@ export class MainScene extends Phaser.Scene {
             gfx.lineTo(poleBaseX, poleBaseY - 12);
             gfx.strokePath();
 
-            // Flag (Red)
-            gfx.fillStyle(0xFF0000);
+            gfx.closePath();
+            gfx.fillPath();
+
+            // Flag on pole
+            gfx.fillStyle(0xFF0000); // Red
             gfx.beginPath();
             gfx.moveTo(poleBaseX, poleBaseY - 12);
-            gfx.lineTo(poleBaseX + 12, poleBaseY - 8);
+            gfx.lineTo(poleBaseX + 12, poleBaseY - 8); // Triangle pointing right
             gfx.lineTo(poleBaseX, poleBaseY - 4);
             gfx.closePath();
             gfx.fillPath();
@@ -804,6 +816,65 @@ export class MainScene extends Phaser.Scene {
         gfx.generateTexture(key, 64, 64);
         gfx.destroy();
     }
+
+    private createTreasureTextures() {
+        // 1. Treasure Chest (Land)
+        if (!this.textures.exists('treasure_chest')) {
+            const gfx = this.make.graphics({ x: 0, y: 0 });
+            const size = 32;
+            const x = (64 - size) / 2;
+            const y = (64 - size) / 2;
+
+            // Base chest - Dark Gold/Wood
+            gfx.fillStyle(0xD4AF37); // Gold color
+            gfx.fillRoundedRect(x, y + 8, size, size - 8, 4);
+
+            // Lid - Lighter Gold (Curved top simulated by rect for now + shading)
+            gfx.fillStyle(0xFFD700);
+            gfx.fillRoundedRect(x, y, size, 12, 4);
+
+            // Bands - Darker
+            gfx.fillStyle(0x8B4513);
+            gfx.fillRect(x + 4, y, 4, size);
+            gfx.fillRect(x + size - 8, y, 4, size);
+
+            // Lock
+            gfx.fillStyle(0xC0C0C0); // Silver
+            gfx.fillCircle(x + size / 2, y + 10, 3);
+
+            // Sparkle
+            gfx.fillStyle(0xFFFFFF);
+            gfx.fillCircle(x + 6, y + 4, 1);
+
+            gfx.generateTexture('treasure_chest', 64, 64);
+            gfx.destroy();
+        }
+
+        // 2. Flotsam (Water) - Crate / Barrel
+        if (!this.textures.exists('flotsam')) {
+            const gfx = this.make.graphics({ x: 0, y: 0 });
+            const size = 32;
+            const x = (64 - size) / 2;
+            const y = (64 - size) / 2;
+
+            // Wooden Crate
+            gfx.fillStyle(0x8B4513); // SaddleBrown
+            gfx.fillRect(x, y + 4, size, size - 4); // Submerged slightly? No, simple box
+
+            // Planks details
+            gfx.lineStyle(2, 0x5c2e0b); // Darker brown frame
+            gfx.strokeRect(x, y + 4, size, size - 4);
+            gfx.moveTo(x, y + 4);
+            gfx.lineTo(x + size, y + size);
+            gfx.moveTo(x + size, y + 4);
+            gfx.lineTo(x, y + size);
+            gfx.strokePath();
+
+            gfx.generateTexture('flotsam', 64, 64);
+            gfx.destroy();
+        }
+    }
+
 
     resize(gameSize: Phaser.Structs.Size) {
         try {
@@ -1163,6 +1234,35 @@ export class MainScene extends Phaser.Scene {
         });
     }
 
+    /**
+     * Try to start BGM. If autoplay is blocked, it will start on first user interaction.
+     */
+    private tryStartBgm() {
+        // Check if soundManager is initialized and BGM is already playing
+        if (this.soundManager?.isBgmPlaying?.()) {
+            this.bgmStarted = true;
+            return;
+        }
+        
+        // Prevent duplicate attempts
+        if (this.bgmStarted) return;
+
+        // Try to start audio context and play BGM
+            this.soundManager.startContext().then(() => {
+            this.soundManager.playBgm('bgm_main').then(() => {
+                // Only mark as started if BGM is actually playing
+                if (this.soundManager?.isBgmPlaying?.()) {
+                    this.bgmStarted = true;
+                }
+            }).catch((err) => {
+                console.warn("Could not start BGM:", err);
+            });
+        }).catch((err) => {
+            console.warn("Could not start audio context (autoplay may be blocked):", err);
+            // BGM will start on first user interaction (pointerdown handler)
+        });
+    }
+
     private beginTutorial() {
         this.tutorialActive = true;
         this.tutorialStepIndex = 0;
@@ -1472,7 +1572,7 @@ export class MainScene extends Phaser.Scene {
                         }
                     }
                 }
-                
+
                 // If found affordable option, plan it and set description
                 if (selectedOpt && selectedDef) {
                     const desc = typeof selectedDef.description === 'function' ? selectedDef.description(this.engine, row, col) : selectedDef.description;
@@ -1526,9 +1626,12 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
+    private floatingSprites: { sprite: Phaser.GameObjects.Image, startY: number, offsetInfo: number }[] = [];
+
     drawMap() {
         if (!this.engine) return;
 
+        this.floatingSprites = [];
         this.terrainGraphics.clear();
         this.selectionGraphics.clear();
         this.highlightGraphics.clear();
@@ -1778,6 +1881,15 @@ export class MainScene extends Phaser.Scene {
                         const treasureSprite = this.add.image(x + this.tileSize / 2, y + this.tileSize / 2, treasureKey);
                         treasureSprite.setDisplaySize(this.tileSize * 0.6, this.tileSize * 0.6);
                         treasureSprite.setDepth(10); // Ensure it displays above other elements
+
+                        if (treasureKey === 'flotsam') {
+                            this.floatingSprites.push({
+                                sprite: treasureSprite,
+                                startY: y + this.tileSize / 2,
+                                offsetInfo: Math.random() * Math.PI * 2 // Random start phase
+                            });
+                        }
+
                         this.mapContainer.add(treasureSprite);
                     } else {
                         // Use graphics to draw a simple icon as placeholder
@@ -1823,7 +1935,7 @@ export class MainScene extends Phaser.Scene {
         }
     }
 
-    initializeTerrainVisuals() {
+    private initializeTerrainVisuals() {
         const grid = this.engine.state.grid;
         if (!grid || grid.length === 0) {
             console.error("initializeTerrainVisuals: GRID IS EMPTY OR NULL");
@@ -1983,8 +2095,18 @@ export class MainScene extends Phaser.Scene {
             // this.updateUI(); // Removed to avoid potential log spam/duplication if logic is moved
             // Actually updateUI logic regarding logs might be useful?
             // Let's keep updateUI() call specific to events if possible, or leave it here for initial check.
-            this.updateUI();
             this.hasRenderedOnce = true;
+        }
+
+        // Animated Flotsam
+        const time = this.time.now / 1000;
+        const bobAmplitude = 4; // px
+        const bobSpeed = 2;
+
+        for (const float of this.floatingSprites) {
+            if (float.sprite.active) {
+                float.sprite.y = float.startY + Math.sin(time * bobSpeed + float.offsetInfo) * bobAmplitude;
+            }
         }
 
         // Update Audio Intensity
@@ -1996,26 +2118,26 @@ export class MainScene extends Phaser.Scene {
         if (this.isViewportMode && this.scrollKeys) {
             // Rate limit scrolling (e.g. every 100ms) - simplistic approach: check JustDown
             // Better: Timer based?
-            const now = this.time.now;
-            const scrollDelay = 100;
-            if (now > this.lastScrollTime + scrollDelay) {
-                let dr = 0;
-                let dc = 0;
+        const now = this.time.now;
+        const scrollDelay = 100;
+        if (now > this.lastScrollTime + scrollDelay) {
+            let dr = 0;
+            let dc = 0;
 
-                if (this.scrollKeys.up.isDown || (this.cursors && this.cursors.up.isDown)) dr = -1;
-                else if (this.scrollKeys.down.isDown || (this.cursors && this.cursors.down.isDown)) dr = 1;
+            if (this.scrollKeys.up.isDown || (this.cursors && this.cursors.up.isDown)) dr = -1;
+            else if (this.scrollKeys.down.isDown || (this.cursors && this.cursors.down.isDown)) dr = 1;
 
-                if (this.scrollKeys.left.isDown || (this.cursors && this.cursors.left.isDown)) dc = -1;
-                else if (this.scrollKeys.right.isDown || (this.cursors && this.cursors.right.isDown)) dc = 1;
+            if (this.scrollKeys.left.isDown || (this.cursors && this.cursors.left.isDown)) dc = -1;
+            else if (this.scrollKeys.right.isDown || (this.cursors && this.cursors.right.isDown)) dc = 1;
 
-                if (dr !== 0 || dc !== 0) {
-                    this.panView(dr, dc);
-                    this.lastScrollTime = now;
-                }
+            if (dr !== 0 || dc !== 0) {
+                this.panView(dr, dc);
+                this.lastScrollTime = now;
             }
         }
-
     }
+
+}
 
 
 
