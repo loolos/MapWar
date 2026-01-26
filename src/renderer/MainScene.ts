@@ -131,6 +131,10 @@ export class MainScene extends Phaser.Scene {
         this.load.audio('sfx_eliminate', 'assets/audio/sfx_eliminate.mp3');
         this.load.audio('sfx_victory', 'assets/audio/sfx_victory.mp3');
         */
+
+        // Treasure and Debris
+        this.load.image('treasure_chest', 'assets/treasure_chest.png');
+        this.load.image('flotsam', 'assets/flotsam.png');
     }
 
     create(data?: any) {
@@ -204,12 +208,16 @@ export class MainScene extends Phaser.Scene {
             processTransparency('town_level_1');
             processTransparency('town_level_2');
             processTransparency('town_level_3');
+            processTransparency('treasure_chest');
+            processTransparency('flotsam');
         });
 
         // Trigger manual check if already loaded
         if (this.textures.exists('town_level_1')) processTransparency('town_level_1');
         if (this.textures.exists('town_level_2')) processTransparency('town_level_2');
         if (this.textures.exists('town_level_3')) processTransparency('town_level_3');
+        if (this.textures.exists('treasure_chest')) processTransparency('treasure_chest');
+        if (this.textures.exists('flotsam')) processTransparency('flotsam');
 
         this.cameras.main.setBackgroundColor(GameConfig.COLORS.BG);
 
@@ -228,7 +236,7 @@ export class MainScene extends Phaser.Scene {
                     console.warn("Could not start BGM on user interaction:", err);
                 });
             }
-            
+
             if (this.tutorialActive) {
                 return;
             }
@@ -312,6 +320,9 @@ export class MainScene extends Phaser.Scene {
 
         // Initialize Procedural Textures
         this.createProceduralTextures();
+
+
+
 
         // Initial Resize to set layout
         this.resize(this.scale.gameSize);
@@ -637,8 +648,7 @@ export class MainScene extends Phaser.Scene {
         this.createFarmTexture(2);
         this.createFarmTexture(3);
 
-        // Create Treasure Textures
-        this.createTreasureTextures();
+        // Treasure and Flotsam are now loaded assets, no longer procedural.
     }
 
     private createFarmTexture(level: number) {
@@ -817,63 +827,9 @@ export class MainScene extends Phaser.Scene {
         gfx.destroy();
     }
 
-    private createTreasureTextures() {
-        // 1. Treasure Chest (Land)
-        if (!this.textures.exists('treasure_chest')) {
-            const gfx = this.make.graphics({ x: 0, y: 0 });
-            const size = 32;
-            const x = (64 - size) / 2;
-            const y = (64 - size) / 2;
+    // Procedural generation methods for Treasure/Flotsam removed.
 
-            // Base chest - Dark Gold/Wood
-            gfx.fillStyle(0xD4AF37); // Gold color
-            gfx.fillRoundedRect(x, y + 8, size, size - 8, 4);
 
-            // Lid - Lighter Gold (Curved top simulated by rect for now + shading)
-            gfx.fillStyle(0xFFD700);
-            gfx.fillRoundedRect(x, y, size, 12, 4);
-
-            // Bands - Darker
-            gfx.fillStyle(0x8B4513);
-            gfx.fillRect(x + 4, y, 4, size);
-            gfx.fillRect(x + size - 8, y, 4, size);
-
-            // Lock
-            gfx.fillStyle(0xC0C0C0); // Silver
-            gfx.fillCircle(x + size / 2, y + 10, 3);
-
-            // Sparkle
-            gfx.fillStyle(0xFFFFFF);
-            gfx.fillCircle(x + 6, y + 4, 1);
-
-            gfx.generateTexture('treasure_chest', 64, 64);
-            gfx.destroy();
-        }
-
-        // 2. Flotsam (Water) - Crate / Barrel
-        if (!this.textures.exists('flotsam')) {
-            const gfx = this.make.graphics({ x: 0, y: 0 });
-            const size = 32;
-            const x = (64 - size) / 2;
-            const y = (64 - size) / 2;
-
-            // Wooden Crate
-            gfx.fillStyle(0x8B4513); // SaddleBrown
-            gfx.fillRect(x, y + 4, size, size - 4); // Submerged slightly? No, simple box
-
-            // Planks details
-            gfx.lineStyle(2, 0x5c2e0b); // Darker brown frame
-            gfx.strokeRect(x, y + 4, size, size - 4);
-            gfx.moveTo(x, y + 4);
-            gfx.lineTo(x + size, y + size);
-            gfx.moveTo(x + size, y + 4);
-            gfx.lineTo(x, y + size);
-            gfx.strokePath();
-
-            gfx.generateTexture('flotsam', 64, 64);
-            gfx.destroy();
-        }
-    }
 
 
     resize(gameSize: Phaser.Structs.Size) {
@@ -1243,12 +1199,12 @@ export class MainScene extends Phaser.Scene {
             this.bgmStarted = true;
             return;
         }
-        
+
         // Prevent duplicate attempts
         if (this.bgmStarted) return;
 
         // Try to start audio context and play BGM
-            this.soundManager.startContext().then(() => {
+        this.soundManager.startContext().then(() => {
             this.soundManager.playBgm('bgm_main').then(() => {
                 // Only mark as started if BGM is actually playing
                 if (this.soundManager?.isBgmPlaying?.()) {
@@ -1875,20 +1831,24 @@ export class MainScene extends Phaser.Scene {
 
                 // Treasure Chest / Flotsam (overlay on terrain, doesn't change terrain type)
                 if (cell.treasureGold !== null && cell.treasureGold > 0) {
-                    const treasureKey = cell.type === 'water' ? 'flotsam' : 'treasure_chest';
+                    let treasureKey = cell.type === 'water' ? 'flotsam' : 'treasure_chest';
+
+                    // Use transparent version if available
+                    if (this.textures.exists(treasureKey + '_transparent')) {
+                        treasureKey += '_transparent';
+                    }
+
                     // If texture exists, use it; otherwise create a simple graphic placeholder
                     if (this.textures.exists(treasureKey)) {
                         const treasureSprite = this.add.image(x + this.tileSize / 2, y + this.tileSize / 2, treasureKey);
-                        treasureSprite.setDisplaySize(this.tileSize * 0.6, this.tileSize * 0.6);
+                        const scale = treasureKey.includes('flotsam') ? 0.94 : 0.6;
+                        treasureSprite.setDisplaySize(this.tileSize * scale, this.tileSize * scale);
                         treasureSprite.setDepth(10); // Ensure it displays above other elements
 
-                        if (treasureKey === 'flotsam') {
-                            this.floatingSprites.push({
-                                sprite: treasureSprite,
-                                startY: y + this.tileSize / 2,
-                                offsetInfo: Math.random() * Math.PI * 2 // Random start phase
-                            });
-                        }
+                        // User requested flotsam to be static
+                        // if (treasureKey.includes('flotsam')) {
+                        //     this.floatingSprites.push({ ... });
+                        // }
 
                         this.mapContainer.add(treasureSprite);
                     } else {
@@ -2118,26 +2078,26 @@ export class MainScene extends Phaser.Scene {
         if (this.isViewportMode && this.scrollKeys) {
             // Rate limit scrolling (e.g. every 100ms) - simplistic approach: check JustDown
             // Better: Timer based?
-        const now = this.time.now;
-        const scrollDelay = 100;
-        if (now > this.lastScrollTime + scrollDelay) {
-            let dr = 0;
-            let dc = 0;
+            const now = this.time.now;
+            const scrollDelay = 100;
+            if (now > this.lastScrollTime + scrollDelay) {
+                let dr = 0;
+                let dc = 0;
 
-            if (this.scrollKeys.up.isDown || (this.cursors && this.cursors.up.isDown)) dr = -1;
-            else if (this.scrollKeys.down.isDown || (this.cursors && this.cursors.down.isDown)) dr = 1;
+                if (this.scrollKeys.up.isDown || (this.cursors && this.cursors.up.isDown)) dr = -1;
+                else if (this.scrollKeys.down.isDown || (this.cursors && this.cursors.down.isDown)) dr = 1;
 
-            if (this.scrollKeys.left.isDown || (this.cursors && this.cursors.left.isDown)) dc = -1;
-            else if (this.scrollKeys.right.isDown || (this.cursors && this.cursors.right.isDown)) dc = 1;
+                if (this.scrollKeys.left.isDown || (this.cursors && this.cursors.left.isDown)) dc = -1;
+                else if (this.scrollKeys.right.isDown || (this.cursors && this.cursors.right.isDown)) dc = 1;
 
-            if (dr !== 0 || dc !== 0) {
-                this.panView(dr, dc);
-                this.lastScrollTime = now;
+                if (dr !== 0 || dc !== 0) {
+                    this.panView(dr, dc);
+                    this.lastScrollTime = now;
+                }
             }
         }
-    }
 
-}
+    }
 
 
 
