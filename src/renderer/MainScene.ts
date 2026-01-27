@@ -248,6 +248,7 @@ export class MainScene extends Phaser.Scene {
             this.input.keyboard.addCapture('SPACE'); // Prevent scrolling
             this.input.keyboard.on('keydown-SPACE', () => {
                 if (this.tutorialActive) return;
+                if (this.engine.state.getCurrentPlayer().isAI) return; // Do not end computer's turn
                 this.engine.endTurn();
             });
             // Setup Arrow Keys for Map Scroll
@@ -335,6 +336,7 @@ export class MainScene extends Phaser.Scene {
         this.engine.on('turnChange', () => {
             this.drawMap();
             this.updateUI();
+            this.setupButtons(); // Refresh End Turn button (disabled during AI turn)
         });
         this.engine.on('planUpdate', () => {
             this.drawMap();
@@ -1162,22 +1164,23 @@ export class MainScene extends Phaser.Scene {
 
     setupButtons() {
         this.buttonSystem.clearButtons();
+        const currentPlayer = this.engine.state.getCurrentPlayer();
 
         // Slot Configuration: 2 Rows, 2 Cols (Clear above End Turn)
 
-        // Button 1: Clear Plan
+        // Button 1: Clear Plan (disabled during AI turn)
         this.buttonSystem.addButton(0, 0, "CLEAR", () => {
-            const currentPlayer = this.engine.state.getCurrentPlayer();
-            if (currentPlayer.isAI) return;
+            const cur = this.engine.state.getCurrentPlayer();
+            if (cur.isAI) return;
             this.engine.clearPlan();
-        });
+        }, { disabled: currentPlayer.isAI });
 
-        // Button 2: End Turn
+        // Button 2: End Turn (disabled during AI turn so player cannot end computer's turn)
         this.buttonSystem.addButton(1, 0, "END TURN", () => {
-            const currentPlayer = this.engine.state.getCurrentPlayer();
-            if (currentPlayer.isAI) return;
+            const cur = this.engine.state.getCurrentPlayer();
+            if (cur.isAI) return;
             this.engine.endTurn();
-        });
+        }, { disabled: currentPlayer.isAI });
 
         // Button 3: Mute
         const isMuted = (this.soundManager as any).isMuted;
@@ -1610,8 +1613,8 @@ export class MainScene extends Phaser.Scene {
                     || child.texture.key.startsWith('watchtower')
                     || child.texture.key.startsWith('farm')
                     || child.texture.key.startsWith('town_level')
-                    || child.texture.key === 'treasure_chest'
-                    || child.texture.key === 'flotsam'
+                    || child.texture.key.startsWith('treasure_chest')
+                    || child.texture.key.startsWith('flotsam')
                 )) {
                     child.destroy();
                 }

@@ -93,14 +93,15 @@ export class ActionButtonSystem {
      * @param c Column index (0 to 3)
      * @param label Button text label
      * @param callback Function to call on click
-     * @param texture (Unused now) Texture key for the button background
+     * @param options Optional: { disabled: true } to show as grayed out and not clickable
      */
-    public addButton(r: number, c: number, label: string, callback: () => void) {
+    public addButton(r: number, c: number, label: string, callback: () => void, options?: { disabled?: boolean }) {
         if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) {
             console.warn(`Button slot [${r}, ${c}] is out of bounds.`);
             return;
         }
 
+        const disabled = options?.disabled ?? false;
         const xPos = c * (this.buttonWidth + this.gapX);
         const yPos = r * (this.buttonHeight + this.gapY);
 
@@ -110,30 +111,33 @@ export class ActionButtonSystem {
         // Initial Draw
         this.drawButton(btn, this.buttonWidth, this.buttonHeight, 'idle');
 
-        // Interactive
-        btn.setInteractive(new Phaser.Geom.Rectangle(0, 0, this.buttonWidth, this.buttonHeight), Phaser.Geom.Rectangle.Contains);
-        btn.setData('gridPos', { r, c });
-        btn.setData('state', 'idle');
-
-        // Button Interactions
-        btn.on('pointerover', () => {
-            btn.setData('state', 'hover');
-            this.drawButton(btn, this.buttonWidth, this.buttonHeight, 'hover');
-            // Tint? No, logic handled by drawButton
-        });
-        btn.on('pointerout', () => {
+        if (!disabled) {
+            // Interactive
+            btn.setInteractive(new Phaser.Geom.Rectangle(0, 0, this.buttonWidth, this.buttonHeight), Phaser.Geom.Rectangle.Contains);
+            btn.setData('gridPos', { r, c });
             btn.setData('state', 'idle');
-            this.drawButton(btn, this.buttonWidth, this.buttonHeight, 'idle');
-        });
-        btn.on('pointerdown', () => {
-            btn.setData('state', 'down');
-            this.drawButton(btn, this.buttonWidth, this.buttonHeight, 'down');
-            callback();
-        });
-        btn.on('pointerup', () => {
-            btn.setData('state', 'hover'); // Return to hover on release if still over
-            this.drawButton(btn, this.buttonWidth, this.buttonHeight, 'hover');
-        });
+
+            // Button Interactions
+            btn.on('pointerover', () => {
+                btn.setData('state', 'hover');
+                this.drawButton(btn, this.buttonWidth, this.buttonHeight, 'hover');
+            });
+            btn.on('pointerout', () => {
+                btn.setData('state', 'idle');
+                this.drawButton(btn, this.buttonWidth, this.buttonHeight, 'idle');
+            });
+            btn.on('pointerdown', () => {
+                btn.setData('state', 'down');
+                this.drawButton(btn, this.buttonWidth, this.buttonHeight, 'down');
+                callback();
+            });
+            btn.on('pointerup', () => {
+                btn.setData('state', 'hover');
+                this.drawButton(btn, this.buttonWidth, this.buttonHeight, 'hover');
+            });
+        } else {
+            btn.setAlpha(0.45);
+        }
 
         this.container.add(btn);
         this.buttons.push(btn);
@@ -141,12 +145,13 @@ export class ActionButtonSystem {
         // Button Label
         const text = this.scene.add.text(xPos + this.buttonWidth / 2, yPos + this.buttonHeight / 2, label, {
             fontFamily: 'Arial',
-            color: '#e0e6ed', // Softer white
+            color: disabled ? '#888888' : '#e0e6ed',
             fontStyle: 'bold',
             shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 0, stroke: false, fill: true }
         }).setOrigin(0.5);
 
         text.setData('gridPos', { r, c });
+        if (disabled) text.setAlpha(0.45);
 
         this.container.add(text);
         this.texts.push(text);
