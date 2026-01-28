@@ -78,7 +78,7 @@ export class AIController {
                 const myBases: { r: number; c: number }[] = [];
                 const ownedCells: { r: number; c: number }[] = [];
                 const disconnectedOwned = new Set<string>();
-                
+
                 // Use cached treasure locations if available
                 if (!this.treasureCacheValid) {
                     this.cachedTreasureLocations = [];
@@ -390,6 +390,7 @@ export class AIController {
         let score = 0;
         if (cell.building === 'base' && cell.owner !== aiPlayerId) score += weights.SCORE_WIN_CONDITION;
         else if (cell.building === 'town' && cell.owner !== aiPlayerId) score += weights.SCORE_TOWN;
+        else if (cell.building === 'gold_mine' && cell.owner !== aiPlayerId) score += weights.SCORE_GOLD_MINE;
         return score;
     }
 
@@ -449,23 +450,23 @@ export class AIController {
 
     private scoreTreasureProximity(r: number, c: number, treasureLocations: { r: number; c: number; gold: number }[], weights: AIWeights): number {
         if (treasureLocations.length === 0) return 0;
-        
+
         let bestScore = 0;
         const maxRange = weights.SCORE_TREASURE_PROXIMITY_RANGE;
-        
+
         for (const treasure of treasureLocations) {
             const dist = Math.abs(r - treasure.r) + Math.abs(c - treasure.c);
             if (dist > maxRange) continue;
-            
+
             // Score decreases with distance only (not based on actual treasure gold value)
             const distanceFactor = (maxRange - dist + 1) / maxRange; // 1.0 at dist=1, decreasing to 1/maxRange at dist=maxRange
             const score = weights.SCORE_TREASURE_PROXIMITY * distanceFactor;
-            
+
             if (score > bestScore) {
                 bestScore = score;
             }
         }
-        
+
         return bestScore;
     }
 

@@ -4,6 +4,14 @@ import { GameConfig } from '../GameConfig';
 export type MapType = 'default' | 'archipelago' | 'pangaea' | 'mountains' | 'rivers';
 
 export class MapGenerator {
+    private static getSpawnPoints(count: number, width: number, height: number) {
+        const spawns: { r: number; c: number }[] = [];
+        for (let i = 0; i < count; i++) {
+            spawns.push(this.getSpawnPoint(i, count, width, height));
+        }
+        return spawns;
+    }
+
     static generate(grid: Cell[][], type: MapType, width: number, height: number, playerCount: number = 2) {
         // Reset to default state
         for (let r = 0; r < height; r++) {
@@ -23,7 +31,7 @@ export class MapGenerator {
                 this.generatePangaea(grid, width, height);
                 break;
             case 'mountains':
-                this.generateMountains(grid, width, height);
+                this.generateMountains(grid, width, height, playerCount);
                 break;
             case 'rivers':
                 this.generateRivers(grid, width, height);
@@ -565,7 +573,7 @@ export class MapGenerator {
         }
     }
 
-    private static generateMountains(grid: Cell[][], width: number, height: number) {
+    private static generateMountains(grid: Cell[][], width: number, height: number, playerCount: number) {
         // Default land gen
         this.generateDefault(grid, width, height);
 
@@ -579,6 +587,9 @@ export class MapGenerator {
 
         // Scatter more
         this.scatterTerrain(grid, 'hill', 0.2, 'plain');
+
+        // Gold Mines: Fair distribution replacing Hills
+        this.distributeGoldMines(grid, width, height, this.getSpawnPoints(playerCount, width, height));
     }
 
     private static generateRivers(grid: Cell[][], width: number, height: number, playerCount: number = 2) {
@@ -776,10 +787,7 @@ export class MapGenerator {
         const treasuresPerPlayer = Math.floor(totalCount / playerCount);
         const remainder = totalCount % playerCount;
 
-        const spawns: { r: number; c: number }[] = [];
-        for (let i = 0; i < playerCount; i++) {
-            spawns.push(this.getSpawnPoint(i, playerCount, width, height));
-        }
+        const spawns = this.getSpawnPoints(playerCount, width, height);
 
         const manhattan = (r1: number, c1: number, r2: number, c2: number) =>
             Math.abs(r1 - r2) + Math.abs(c1 - c2);
@@ -975,6 +983,98 @@ export class MapGenerator {
                     cell.building = 'town';
                     cell.townIncome = GameConfig.TOWN_INCOME_BASE;
                     placed++;
+                }
+            }
+        }
+    }
+
+    private static distributeGoldMines(
+        grid: Cell[][],
+        width: number,
+        height: number,
+        spawnPoints: { r: number; c: number }[]
+    ) {
+        // Configuration for Fair Bands
+        // Band: [minDist, maxDist, count]
+        const bands = [
+            { min: 3, max: 7, count: 1 },   // Early game boost
+            { min: 8, max: 14, count: 2 },  // Mid game expansion
+            { min: 15, max: 25, count: 2 }  // Contestable/Late
+        ];
+
+        const manhattan = (r1: number, c1: number, r2: number, c2: number) =>
+            Math.abs(r1 - r2) + Math.abs(c1 - c2);
+
+        for (let i = 0; i < spawnPoints.length; i++) {
+            const spawn = spawnPoints[i];
+
+            for (const band of bands) {
+                const candidates: { r: number; c: number }[] = [];
+
+                for (let r = 0; r < height; r++) {
+                    for (let c = 0; c < width; c++) {
+                        if (grid[r][c].type !== 'hill') continue;
+                        if (grid[r][c].building !== 'none') continue;
+
+                        const dist = manhattan(r, c, spawn.r, spawn.c);
+                        if (dist >= band.min && dist <= band.max) {
+                            // Verify it's not significantly closer to another player
+                            let isCloserToOther = false;
+                            for (let j = 0; j < spawnPoints.length; j++) {
+                                if (i === j) continue;
+                                const otherDist = manhattan(r, c, spawnPoints[j].r, spawnPoints[j].c);
+                                if (otherDist < dist * 0.8) { // If it's >20% closer to someone else, skip
+                                    isCloserToOther = true;
+                                    break;
+                                }
+                            }
+
+                            if (!isCloserToOther) {
+                                candidates.push({ r, c });
+                            }
+                        }
+                    }
+                }
+
+                // Randomly select 'count' candidates
+                // Shuffle
+                candidates.sort(() => Math.random() - 0.5);
+
+                let placedCount = 0;
+                for (let k = 0; k < candidates.length && placedCount < band.count; k++) {
+                    const target = candidates[k];
+
+                    // Ensure no adjacent gold mine (from previous placements)
+                    let hasAdjacentMine = false;
+                    const neighbors = [
+                        { r: target.r + 1, c: target.c },
+                        { r: target.r - 1, c: target.c },
+                        { r: target.r, c: target.c + 1 },
+                        { r: target.r, c: target.c - 1 },
+                        // Check diagonals too for better separation? User said "dispersed", non-adjacent usually means 4-neighbors.
+                        // Let's stick to 4-neighbors for "not adjacent".
+                        // Actually, let's include diagonals to make them "more dispersed" as requested ("起码不会彼此相邻").
+                        // Standard adjacency is 4. "Slightly dispersed" might benefit from 8-check or just 4.
+                        // Let's use 8-way check to ensure they aren't touching at corners either, making them strictly non-adjacent visually.
+                        { r: target.r + 1, c: target.c + 1 },
+                        { r: target.r + 1, c: target.c - 1 },
+                        { r: target.r - 1, c: target.c + 1 },
+                        { r: target.r - 1, c: target.c - 1 }
+                    ];
+
+                    for (const n of neighbors) {
+                        if (n.r >= 0 && n.r < height && n.c >= 0 && n.c < width) {
+                            if (grid[n.r][n.c].building === 'gold_mine') {
+                                hasAdjacentMine = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!hasAdjacentMine) {
+                        grid[target.r][target.c].building = 'gold_mine';
+                        placedCount++;
+                    }
                 }
             }
         }

@@ -1240,7 +1240,7 @@ export class GameEngine {
         // This prevents "Cheaper than planned" issues where capturing A makes B closer/cheaper during execution.
         const movesWithCost = this.pendingMoves.map(m => ({
             move: m,
-            cost: this.getMoveCost(m.r, m.c)
+            cost: this.getMoveCost(m.r, m.c) // Snapshot
         }));
 
         for (const { move, cost } of movesWithCost) {
@@ -1310,7 +1310,7 @@ export class GameEngine {
 
             // Check for treasure BEFORE converting water to bridge
             const wasWater = cell && cell.type === 'water';
-            
+
             // Transformation: Water -> Bridge
             if (wasWater) {
                 bridgeBuiltCount++;
@@ -1347,9 +1347,9 @@ export class GameEngine {
                 const gold = cell.treasureGold;
                 this.stateManager.addGold(pid, gold);
                 const terrainType = wasWater ? 'flotsam' : 'treasure chest';
-                this.emit('logMessage', { 
-                    text: `${pid} found ${gold}G in a ${terrainType} at (${move.r}, ${move.c})!`, 
-                    type: 'info' 
+                this.emit('logMessage', {
+                    text: `${pid} found ${gold}G in a ${terrainType} at (${move.r}, ${move.c})!`,
+                    type: 'info'
                 });
                 this.emit('sfx:gold_found');
                 cell.treasureGold = null; // Remove treasure
