@@ -143,7 +143,14 @@ describe('Cost Discrepancy Reproduction', () => {
     it('should deduct correct cost for Mixed Terrain Chain (Plain -> Hill -> Plain)', () => {
         const engine = new GameEngine();
         const p1 = engine.state.players['P1'];
-        engine.state.grid.forEach(row => row.forEach(cell => { cell.type = 'plain'; cell.owner = null; cell.building = 'none'; }));
+        // Reset map state deterministically to avoid flakiness from random treasure placement.
+        // commitMoves() will auto-collect treasureGold on capture, which can make deducted != planned.
+        engine.state.grid.forEach(row => row.forEach(cell => {
+            cell.type = 'plain';
+            cell.owner = null;
+            cell.building = 'none';
+            cell.treasureGold = null;
+        }));
 
         // P1 at (0,0)
         engine.state.setOwner(0, 0, 'P1');
