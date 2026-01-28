@@ -28,7 +28,8 @@ export class MapGenerator {
                 this.generateArchipelago(grid, width, height, playerCount);
                 break;
             case 'pangaea':
-                this.generatePangaea(grid, width, height);
+                this.generatePangaea(grid, width, height, playerCount);
+                this.placePangaeaCitadel(grid, width, height);
                 break;
             case 'mountains':
                 this.generateMountains(grid, width, height, playerCount);
@@ -272,6 +273,16 @@ export class MapGenerator {
 
         // Ensure each spawn is connected to the main landmass
         this.ensureSpawnsOnMainland(grid, width, height, spawnPoints);
+    }
+
+    private static placePangaeaCitadel(grid: Cell[][], width: number, height: number) {
+        const centerR = Math.floor(height / 2);
+        const centerC = Math.floor(width / 2);
+        if (this.isValid(grid, centerR, centerC)) {
+            grid[centerR][centerC].type = 'plain';
+            grid[centerR][centerC].building = 'citadel';
+            grid[centerR][centerC].owner = null;
+        }
     }
 
     private static growIslandFromSeed(

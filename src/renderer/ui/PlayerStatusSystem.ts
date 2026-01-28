@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import type { GameEngine } from '../../core/GameEngine'; // For Move type if needed? Or just pass primitives
-import { GameConfig } from '../../core/GameConfig';
+
 
 export class PlayerStatusSystem {
     private container!: Phaser.GameObjects.Container;
@@ -139,7 +139,7 @@ export class PlayerStatusSystem {
 
             const dominanceTxt = row.getAt(6) as Phaser.GameObjects.Text;
             const attackFactor = Math.max(1, player.attackCostFactor ?? 1);
-            const showDominance = state.turnCount >= GameConfig.ATTACK_DOMINANCE_TURN_MIN && attackFactor > 1;
+            const showDominance = attackFactor > 1;
             if (showDominance) {
                 dominanceTxt.setText(`P x${attackFactor.toFixed(1)}`);
                 dominanceTxt.setVisible(true);

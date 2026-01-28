@@ -1227,6 +1227,7 @@ export class GameEngine {
 
         let hasCombat = false;
         let hasTownCapture = false;
+        let hasCitadelCapture = false;
         let hasConquer = false;
         let hasBaseCapture = false;
         let captureCount = 0;
@@ -1288,6 +1289,15 @@ export class GameEngine {
                 // Neutral capture - only attacker gains land
                 ownershipChangedPlayers.add(pid);
                 captureCount++;
+            }
+
+            // Citadel capture: reset previous owner's dominance counter
+            // Check capture logic (Neutral OR Enemy)
+            if (cell.building === 'citadel' && cell.owner !== pid) {
+                hasCitadelCapture = true;
+                if (cell.owner) {
+                    this.state.players[cell.owner].citadelTurnsHeld = 0;
+                }
             }
 
             // Check for Town Capture
@@ -1375,6 +1385,8 @@ export class GameEngine {
         const captureTier = captureCount >= 5 ? 'large' : captureCount >= 3 ? 'medium' : captureCount >= 1 ? 'small' : null;
         if (hasBaseCapture) {
             this.emit('sfx:base_capture');
+        } else if (hasCitadelCapture) {
+            this.emit('sfx:capture_citadel');
         } else if (hasTownCapture) {
             this.emit('sfx:capture_town');
         } else if (hasConquer) {
@@ -1524,6 +1536,13 @@ export class GameEngine {
                 ? incomeReport.attackCostFactor.toFixed(1)
                 : '1.0';
             this.emit('logMessage', { text: `Power surge! Attack costs reduced (x${factor}).`, type: 'info' });
+        }
+
+        if (incomeReport.citadelDominanceActive && incomeReport.attackCostFactor > 1) {
+            const factor = Number.isFinite(incomeReport.attackCostFactor)
+                ? incomeReport.attackCostFactor.toFixed(1)
+                : '1.0';
+            this.emit('logMessage', { text: `Citadel Dominance Active! Attack Power x${factor}`, type: 'warning' });
         }
 
         if (incomeReport.depletedMines && incomeReport.depletedMines.length > 0) {

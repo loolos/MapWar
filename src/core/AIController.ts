@@ -128,6 +128,8 @@ export class AIController {
                     ? weights.ECONOMY_BASE_BALANCE_BONUS
                     : 0;
 
+                const citadelCell = this.engine.state.citadelLocation;
+
                 const countEnemyAdjacent = (r: number, c: number) => {
                     let enemies = 0;
                     const neighbors = [
@@ -195,6 +197,7 @@ export class AIController {
                     score += this.scoreExpansion(cell, turnCount, weights);
                     score += this.scoreAura(r, c, aiPlayer.id as string, weights);
                     score += this.scoreLookAhead(r, c, aiPlayer.id as string, grid, weights);
+                    score += this.scoreCitadelProximity(r, c, citadelCell, weights);
                     score += this.scoreReconnect(r, c, disconnectedOwned, weights);
                     const enemyAdj = countEnemyAdjacent(r, c);
                     if (enemyAdj > 0) {
@@ -389,7 +392,10 @@ export class AIController {
     private scoreObjectives(cell: Cell, aiPlayerId: string, weights: AIWeights): number {
         let score = 0;
         if (cell.building === 'base' && cell.owner !== aiPlayerId) score += weights.SCORE_WIN_CONDITION;
-        else if (cell.building === 'town' && cell.owner !== aiPlayerId) score += weights.SCORE_TOWN;
+        else if (cell.building === 'citadel' && cell.owner !== aiPlayerId) {
+            score += weights.SCORE_CITADEL;
+            if (cell.owner) score += weights.SCORE_CITADEL; // Extra when enemy-held (take-back priority)
+        } else if (cell.building === 'town' && cell.owner !== aiPlayerId) score += weights.SCORE_TOWN;
         else if (cell.building === 'gold_mine' && cell.owner !== aiPlayerId) score += weights.SCORE_GOLD_MINE;
         return score;
     }
@@ -504,6 +510,48 @@ export class AIController {
                 }
             }
         }
+        return score;
+    }
+
+    private scoreCitadelProximity(r: number, c: number, citadel: { r: number; c: number } | null, weights: AIWeights): number {
+        if (!citadel) return 0;
+
+        const citadelCell = this.engine.state.getCell(citadel.r, citadel.c);
+        if (!citadelCell) return 0;
+
+        const maxRange = 6; // Increased from 3 to 6 to detect it earlier
+        const dist = Math.abs(r - citadel.r) + Math.abs(c - citadel.c);
+        if (dist > maxRange) return 0;
+
+        let score = weights.SCORE_CITADEL_PROXIMITY * (1 - dist / maxRange);
+
+        // STRATEGY: SEEK AND DESTROY
+        // If Citadel is owned by someone else (Enemy or Neutral), prioritizing moving closer/capturing
+        if (citadelCell.owner !== this.engine.state.currentPlayerId) {
+            score *= weights.CITADEL_SEEK_MULTIPLIER; // Seek behavior
+
+            // If owned by Enemy, urgency increases
+            if (citadelCell.owner) {
+                const holder = this.engine.state.players[citadelCell.owner];
+                const held = holder.citadelTurnsHeld ?? 0;
+
+                // Panic Mode: If they define dominance soon
+                if (held >= 1) { // They have held it for at least 1 turn
+                    score += weights.CITADEL_URGENCY_HELD_SCORE; // Major urgency
+                }
+                if (held >= GameConfig.CITADEL_DOMINANCE_TURNS_MIN - 1) {
+                    score += weights.CITADEL_URGENCY_DOMINANCE_SCORE; // Critical urgency (prevent dominance)
+                }
+            } else {
+                // Neutral: Good to take, but not panic
+                score += weights.CITADEL_NEUTRAL_CAPTURE_SCORE;
+            }
+        } else {
+            // I own it: Defend it (Score for staying close?)
+            // Maybe less critical if safe, but we want to form a buffer.
+            score *= weights.CITADEL_OWNED_DEFENSE_MULTIPLIER;
+        }
+
         return score;
     }
 

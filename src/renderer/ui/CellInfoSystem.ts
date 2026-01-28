@@ -191,6 +191,7 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
                 let typeStr = cell.type.charAt(0).toUpperCase() + cell.type.slice(1);
                 if (cell.building === 'gold_mine') { typeStr = "Gold Mine"; }
                 else if (cell.building === 'town') { typeStr = "Town"; }
+                else if (cell.building === 'citadel') { typeStr = "Citadel"; }
                 else if (cell.building === 'base') {
                     typeStr = "Base";
                     if (cell.defenseLevel > 0) typeStr += ` (Def Lvl ${cell.defenseLevel})`;
@@ -235,7 +236,7 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
                 // Show Breakdown
                 // User requirement: "Explain how cost is calculated"
                 // Ensure text wraps properly in layout
-                let desc = this.generateDescription(cell);
+                let desc = this.generateDescription(cell, engine);
 
                 // Add Income Info (New Feature)
                 // Only if owned? Or potential income?
@@ -273,11 +274,19 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
         this.layout(this.viewportWidth, this.viewportHeight);
     }
 
-    private generateDescription(cell: any): string {
+    private generateDescription(cell: any, engine?: GameEngine): string {
         let desc = "";
         if (cell.building === 'gold_mine') desc = "Generates +5 G.";
         else if (cell.building === 'town') desc = `Generates +${this.formatNumber(cell.townIncome)} G.`;
-        else if (cell.building === 'base') desc = "Main Base.";
+        else if (cell.building === 'citadel') {
+            desc = `Citadel. +${GameConfig.CITADEL_INCOME_PER_TURN} G.`;
+            desc += `\n* DOMINANCE: Hold ${GameConfig.CITADEL_DOMINANCE_TURNS_MIN} turns for Attack x${GameConfig.CITADEL_DOMINANCE_FACTOR}.`;
+            desc += `\n* FORTIFIED: Capture Cost 100 (Unoccupied) / 200 (Occupied).`;
+            if (cell.owner && engine?.state?.players?.[cell.owner]) {
+                const held = (engine.state.players[cell.owner] as { citadelTurnsHeld?: number }).citadelTurnsHeld ?? 0;
+                desc += `\n(Held: ${held}/${GameConfig.CITADEL_DOMINANCE_TURNS_MIN} turns)`;
+            }
+        } else if (cell.building === 'base') desc = "Main Base.";
         else if (cell.building === 'wall') desc = `Wall (Lv ${cell.defenseLevel}).`;
         else {
             switch (cell.type) {

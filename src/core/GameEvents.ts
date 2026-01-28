@@ -26,6 +26,7 @@ export interface GameEventMap {
     'sfx:capture_small': void;
     'sfx:capture_medium': void;
     'sfx:capture_large': void;
+    'sfx:capture_citadel': void;
     'sfx:capture_town': void;
     'sfx:conquer': void;
     'sfx:conquer_large': void;

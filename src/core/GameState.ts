@@ -12,6 +12,7 @@ export class GameState {
     turnCount: number;
     turnsTakenInRound: number;
     currentMapType: MapType = 'default';
+    citadelLocation: { r: number; c: number } | null = null;
 
     constructor(playerConfigs: { id: string, isAI: boolean, color: number }[] = [], mapType: MapType = 'default') {
         this.grid = [];
@@ -34,7 +35,8 @@ export class GameState {
                 color: cfg.color,
                 gold: GameConfig.INITIAL_GOLD,
                 isAI: cfg.isAI,
-                attackCostFactor: 1
+                attackCostFactor: 1,
+                citadelTurnsHeld: 0
             };
             this.playerOrder.push(cfg.id);
         });
@@ -60,7 +62,22 @@ export class GameState {
         // 2. Delegate to Generator
         MapGenerator.generate(this.grid, this.currentMapType, GameConfig.GRID_WIDTH, GameConfig.GRID_HEIGHT, this.playerOrder.length);
 
+        // 3. Cache Citadel Location
+        this.cacheCitadelLocation();
+
         this.setupBases();
+    }
+
+    private cacheCitadelLocation() {
+        this.citadelLocation = null;
+        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+                if (this.grid[r][c].building === 'citadel') {
+                    this.citadelLocation = { r, c };
+                    return;
+                }
+            }
+        }
     }
 
     private setupBases() {
@@ -99,6 +116,12 @@ export class GameState {
             r = Math.max(0, Math.min(h - 1, r));
             c = Math.max(0, Math.min(w - 1, c));
 
+            // If spawn lands on citadel, use nearest plain non-citadel cell
+            if (this.grid[r][c].building === 'citadel') {
+                const alt = this.findNearestPlainNonCitadel(r, c);
+                if (alt) { r = alt.r; c = alt.c; }
+            }
+
             // Set Base - Ensure Valid (If water, make plain or bridge?)
             // Force Plain for base
             this.grid[r][c].type = 'plain';
@@ -106,6 +129,26 @@ export class GameState {
             this.setOwner(r, c, playerId);
             this.setBuilding(r, c, 'base');
         }
+    }
+
+    private findNearestPlainNonCitadel(fromR: number, fromC: number): { r: number; c: number } | null {
+        const w = GameConfig.GRID_WIDTH;
+        const h = GameConfig.GRID_HEIGHT;
+        for (let d = 1; d <= Math.max(w, h); d++) {
+            for (let dr = -d; dr <= d; dr++) {
+                for (let dc = -d; dc <= d; dc++) {
+                    if (Math.abs(dr) + Math.abs(dc) !== d) continue;
+                    const r = fromR + dr;
+                    const c = fromC + dc;
+                    if (r < 0 || r >= h || c < 0 || c >= w) continue;
+                    const cell = this.grid[r][c];
+                    if (cell.type !== 'water' && cell.type !== 'bridge' && cell.building !== 'citadel') {
+                        return { r, c };
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     // Reset Game State
@@ -125,7 +168,8 @@ export class GameState {
                     color: cfg.color,
                     gold: GameConfig.INITIAL_GOLD,
                     isAI: cfg.isAI,
-                    attackCostFactor: 1
+                    attackCostFactor: 1,
+                    citadelTurnsHeld: 0
                 };
                 this.playerOrder.push(cfg.id);
             });
@@ -139,6 +183,7 @@ export class GameState {
                 if (this.players[pid]) {
                     this.players[pid].gold = GameConfig.INITIAL_GOLD;
                     this.players[pid].attackCostFactor = 1;
+                    this.players[pid].citadelTurnsHeld = 0;
                 }
             });
         }
@@ -156,20 +201,17 @@ export class GameState {
                     cell.isConnected = false;
                     cell.unit = null;
 
-                    // Reset Buildings but KEEP TOWNS (and potentially other map features)
-                    // If it was a base, remove it (setupBases will restore).
-                    // If it was a town, keep it.
-                    if (cell.building !== 'town') {
+                    // Reset Buildings but KEEP TOWNS and CITADEL
+                    if (cell.building === 'town') {
+                        cell.townIncome = GameConfig.TOWN_INCOME_BASE;
+                        cell.townTurnCount = 0;
+                    } else if (cell.building !== 'citadel') {
                         cell.building = 'none';
                         cell.defenseLevel = 0;
                         cell.incomeLevel = 0;
                         cell.watchtowerLevel = 0;
                         cell.farmLevel = 0;
-                    } else {
-                        cell.townIncome = GameConfig.TOWN_INCOME_BASE;
-                        cell.townTurnCount = 0;
                     }
-                    // If building is town, leave it.
 
                     // Revert bridges to water
                     if (cell.type === 'bridge') {
@@ -212,7 +254,7 @@ export class GameState {
         if (cell) cell.owner = owner;
     }
 
-    setBuilding(row: number, col: number, type: 'base' | 'town' | 'gold_mine' | 'wall' | 'farm' | 'none') {
+    setBuilding(row: number, col: number, type: 'base' | 'town' | 'gold_mine' | 'wall' | 'farm' | 'citadel' | 'none') {
         const cell = this.getCell(row, col);
         if (cell) cell.building = type;
     }
@@ -243,6 +285,18 @@ export class GameState {
 
         // User Request: Determine connectivity state BEFORE calculating income
         this.updateConnectivity(playerId);
+
+        // Citadel: update turns held for accruing player
+        for (let r = 0; r < this.grid.length; r++) {
+            for (let c = 0; c < (this.grid[0]?.length ?? 0); c++) {
+                const cell = this.grid[r][c];
+                if (cell.building === 'citadel' && cell.owner === playerId) {
+                    const held = (this.players[playerId].citadelTurnsHeld ?? 0) + 1;
+                    this.players[playerId].citadelTurnsHeld = held;
+                    break;
+                }
+            }
+        }
 
         const previousAttackFactor = Math.max(1, this.players[playerId].attackCostFactor ?? 1);
         const height = this.grid.length;
@@ -277,6 +331,12 @@ export class GameState {
             }
         } else {
             this.players[playerId].attackCostFactor = 1;
+        }
+        // Citadel dominance: if held 3+ turns, multiply attack factor (capped)
+        const held = this.players[playerId].citadelTurnsHeld ?? 0;
+        if (held >= GameConfig.CITADEL_DOMINANCE_TURNS_MIN) {
+            const f = Math.max(1, this.players[playerId].attackCostFactor ?? 1) * GameConfig.CITADEL_DOMINANCE_FACTOR;
+            this.players[playerId].attackCostFactor = Math.min(GameConfig.ATTACK_DOMINANCE_MAX_FACTOR, f);
         }
         const currentAttackFactor = Math.max(1, this.players[playerId].attackCostFactor ?? 1);
         const powerActivated = previousAttackFactor <= 1 && currentAttackFactor > 1;
@@ -399,7 +459,8 @@ export class GameState {
             depletedMines,
             upgradeBonus: 0,
             powerActivated,
-            attackCostFactor: currentAttackFactor
+            attackCostFactor: currentAttackFactor,
+            citadelDominanceActive: held >= GameConfig.CITADEL_DOMINANCE_TURNS_MIN
         };
     }
 
@@ -531,6 +592,8 @@ export class GameState {
             income = cell.townIncome;
         } else if (cell.building === 'gold_mine') {
             income = GameConfig.GOLD_MINE_INCOME;
+        } else if (cell.building === 'citadel') {
+            income = GameConfig.CITADEL_INCOME_PER_TURN;
         } else if (cell.building === 'farm') {
             const level = Math.min(cell.farmLevel, GameConfig.FARM_MAX_LEVEL);
             income = GameConfig.FARM_INCOME[level];

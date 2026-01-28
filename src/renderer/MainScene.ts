@@ -112,6 +112,7 @@ export class MainScene extends Phaser.Scene {
 
         // Gold Mine Asset
         this.load.image('gold_mine', 'assets/gold_mine.png');
+        this.load.image('citadel', 'assets/citadel.png');
 
         // Avatar Assets (Direct Load)
         this.load.image('icon_human_cartoon', 'assets/cartoon_human.png');
@@ -210,6 +211,7 @@ export class MainScene extends Phaser.Scene {
             processTransparency('town_level_3');
             processTransparency('treasure_chest');
             processTransparency('flotsam');
+            processTransparency('citadel');
         });
 
         // Trigger manual check if already loaded
@@ -218,6 +220,7 @@ export class MainScene extends Phaser.Scene {
         if (this.textures.exists('town_level_3')) processTransparency('town_level_3');
         if (this.textures.exists('treasure_chest')) processTransparency('treasure_chest');
         if (this.textures.exists('flotsam')) processTransparency('flotsam');
+        if (this.textures.exists('citadel')) processTransparency('citadel');
 
         this.cameras.main.setBackgroundColor(GameConfig.COLORS.BG);
 
@@ -400,6 +403,7 @@ export class MainScene extends Phaser.Scene {
         this.engine.on('sfx:capture', () => this.soundManager.playSfx('sfx_capture'));
         this.engine.on('sfx:base_capture', () => this.soundManager.playSfx('sfx_base_capture'));
         this.engine.on('sfx:capture_town', () => this.soundManager.playSfx('sfx_capture_town')); // Bell
+        this.engine.on('sfx:capture_citadel', () => this.soundManager.playSfx('sfx_conquer_large')); // Epic Capture 
         this.engine.on('sfx:eliminate', () => this.soundManager.playSfx('sfx_eliminate'));
         this.engine.on('sfx:victory', () => this.soundManager.playSfx('sfx_victory'));
         this.engine.on('sfx:gold_found', () => this.soundManager.playSfx('sfx:gold_found'));
@@ -1734,6 +1738,11 @@ export class MainScene extends Phaser.Scene {
 
                     const baseText = this.add.text(x + this.tileSize / 2, y + this.tileSize / 2, '🏰', { fontSize: '32px' }).setOrigin(0.5);
                     this.mapContainer.add(baseText);
+                } else if (cell.building === 'citadel') {
+                    const key = this.textures.exists('citadel_transparent') ? 'citadel_transparent' : 'citadel';
+                    const sprite = this.add.image(x + this.tileSize / 2, y + this.tileSize / 2, key);
+                    sprite.setDisplaySize(this.tileSize * 0.9, this.tileSize * 0.9);
+                    this.mapContainer.add(sprite);
                 } else if (cell.building === 'town') {
                     let key = 'town_level_1';
                     if (cell.townIncome >= 8) {

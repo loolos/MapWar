@@ -11,6 +11,11 @@ export const GameConfig = {
     COST_BUILD_BRIDGE: 30,
     // Town Configs
     COST_CAPTURE_TOWN: 30,
+    // Citadel (Pangaea center)
+    COST_CAPTURE_CITADEL: 100,
+    CITADEL_INCOME_PER_TURN: 10,
+    CITADEL_DOMINANCE_TURNS_MIN: 3,
+    CITADEL_DOMINANCE_FACTOR: 1.5,
     TOWN_INCOME_BASE: 1,
     TOWN_INCOME_GROWTH: 1,
     TOWN_INCOME_CAP: 10,
@@ -204,4 +209,5 @@ export interface Player {
     gold: number;
     isAI: boolean;
     attackCostFactor?: number;
+    citadelTurnsHeld?: number;
 }

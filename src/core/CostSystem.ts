@@ -15,7 +15,10 @@ export class CostSystem {
         let baseCost = GameConfig.COST_CAPTURE;
 
         // 1. Base Cost Determination
-        if (cell.building === 'town' && (cell.owner === null || cell.owner === 'neutral')) {
+        if (cell.building === 'citadel' && (cell.owner === null || cell.owner !== state.currentPlayerId)) {
+            baseCost = GameConfig.COST_CAPTURE_CITADEL;
+            breakdownParts.push(`Citadel(${baseCost})`);
+        } else if (cell.building === 'town' && (cell.owner === null || cell.owner === 'neutral')) {
             baseCost = GameConfig.COST_CAPTURE_TOWN; // 30
             breakdownParts.push(`Capture Town(${baseCost})`);
         } else {
@@ -37,16 +40,20 @@ export class CostSystem {
             isAttack = true;
             // Overwrite base with Attack Base
             const isBase = cell.building === 'base';
+            const isCitadel = cell.building === 'citadel';
             if (isBase) {
                 baseCost = GameConfig.COST_CAPTURE_BASE;
                 breakdownParts = [`Attack Base(${baseCost})`];
+            } else if (isCitadel) {
+                baseCost = GameConfig.COST_CAPTURE_CITADEL * 2;
+                breakdownParts = [`Attack Citadel(${baseCost})`];
             } else {
                 baseCost = GameConfig.COST_ATTACK; // 20
                 breakdownParts = [`Attack(${baseCost})`];
             }
 
             // Adjust for Terrain in Attack
-            if (!isBase) {
+            if (!isBase && !isCitadel) {
                 if (cell.type === 'hill' || cell.type === 'bridge') {
                     baseCost = GameConfig.COST_ATTACK * 2;
                     breakdownParts = [`Attack Hill/Bridge(${baseCost})`];
@@ -209,6 +216,9 @@ export class CostSystem {
         if (cell.building === 'base') {
             baseCost = GameConfig.COST_CAPTURE_BASE;
             breakdownParts = [`Attack Base(${baseCost})`];
+        } else if (cell.building === 'citadel') {
+            baseCost = GameConfig.COST_CAPTURE_CITADEL * 2;
+            breakdownParts = [`Attack Citadel(${baseCost})`];
         } else if (cell.type === 'hill' || cell.type === 'bridge') {
             baseCost = GameConfig.COST_ATTACK * 2;
             breakdownParts = [`Attack Hill/Bridge(${baseCost})`];
