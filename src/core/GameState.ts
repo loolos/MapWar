@@ -243,7 +243,9 @@ export class GameState {
 
 
     getCell(row: number, col: number): Cell | null {
-        if (row < 0 || row >= GameConfig.GRID_HEIGHT || col < 0 || col >= GameConfig.GRID_WIDTH) {
+        const height = this.grid.length;
+        const width = height > 0 ? this.grid[0].length : 0;
+        if (row < 0 || row >= height || col < 0 || col >= width) {
             return null;
         }
         return this.grid[row][col];
@@ -260,7 +262,14 @@ export class GameState {
     }
 
     getCurrentPlayer(): Player {
-        return this.players[this.currentPlayerId!];
+        if (!this.currentPlayerId) {
+            throw new Error('No current player set');
+        }
+        const player = this.players[this.currentPlayerId];
+        if (!player) {
+            throw new Error(`Player ${this.currentPlayerId} not found`);
+        }
+        return player;
     }
 
     endTurn(): { total: number, base: number, land: number, town: number, mine: number, farm: number, landCount: number, depletedMines: { r: number, c: number }[] } | null {
@@ -347,23 +356,11 @@ export class GameState {
         let landCount = 0;
         const depletedMines: { r: number, c: number }[] = [];
 
-        // Explicitly calculate breakdown
-        let calculatedBaseIncome = 0;
-        let calculatedLandIncome = 0;
-
-        // Iterate for side effects AND income breakdown
+        // Iterate for side effects (town growth, mine depletion) and count land
         for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
             for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
                 const cell = this.grid[r][c];
                 if (cell.owner === playerId) {
-                    const inc = this.getTileIncome(r, c); // Reuse logic
-
-                    if (cell.building === 'base') {
-                        calculatedBaseIncome += inc;
-                    } else {
-                        calculatedLandIncome += inc;
-                    }
-
                     if (cell.building === 'town') {
                         // Town Growth Logic (Side Effect)
                         cell.townTurnCount++;
@@ -388,50 +385,19 @@ export class GameState {
             }
         }
 
-        // Validate Total (Sanity Check)
-        // We now allow fractional gold to persist (e.g. 11.5 + 11.5 = 23)
-        const checkTotal = calculatedBaseIncome + calculatedLandIncome;
-        // Total should match calculateIncome?
-        // calculateIncome might have been slightly different if state changed? No.
-
-        // Apply Income
-        this.players[playerId].gold += checkTotal;
-
-        // Ensure reported land + base = total
-        // We use the calculated Base sum as the "Base" component, and the rest is "Land".
-        // This handles rounding correctly (e.g. 10.5 -> 10. Land=0).
-        // const reportedLand = checkTotal - calculatedBaseIncome;
-
-        // Detailed Breakdown for Logging
+        // Detailed Breakdown for Logging (calculated in single pass)
         let farmIncome = 0;
         let mineIncome = 0;
         let townIncome = 0;
         let landIncome = 0; // Pure land
         let baseIncome = 0;
 
-        // Re-iterate to categorize (Optimization: could do in one pass above)
-        // Since we need to match `checkTotal`, let's trust the logic:
-        // Income = Base + Land + Town + Mine + Farm
-        // We already have `calculatedBaseIncome`.
-        baseIncome = calculatedBaseIncome;
-
-        // Let's recalculate breakdown cleanly to be safe or use what we summarized?
-        // Above loop mixed them into `calculatedLandIncome`.
-        // Let's just do a clean pass for reporting if performance allows (10x10 grid is tiny).
-        // Or refactor the loop above. Let's refactor the loop above to be cleaner.
-
-        // Reset and re-calculate breakdown
-        baseIncome = 0;
-        townIncome = 0;
-        mineIncome = 0;
-        farmIncome = 0;
-        landIncome = 0;
-
+        // Single pass: calculate breakdown and total simultaneously
         for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
             for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
                 const cell = this.grid[r][c];
                 if (cell.owner === playerId) {
-                    let inc = this.getTileIncome(r, c);
+                    const inc = this.getTileIncome(r, c);
 
                     if (cell.building === 'base') {
                         baseIncome += inc;
@@ -447,6 +413,12 @@ export class GameState {
                 }
             }
         }
+
+        // Validate Total (Sanity Check)
+        const checkTotal = baseIncome + landIncome + townIncome + mineIncome + farmIncome;
+
+        // Apply Income
+        this.players[playerId].gold += checkTotal;
 
         return {
             total: checkTotal,
@@ -652,7 +624,13 @@ export class GameState {
 
         for (let r = 0; r < height; r++) {
             this.grid[r] = [];
+            if (!data.grid[r] || !Array.isArray(data.grid[r])) {
+                throw new Error(`Invalid grid data at row ${r}`);
+            }
             for (let c = 0; c < width; c++) {
+                if (data.grid[r][c] === undefined || data.grid[r][c] === null) {
+                    throw new Error(`Invalid grid data at row ${r}, col ${c}`);
+                }
                 this.grid[r][c] = Cell.deserialize(data.grid[r][c]);
             }
         }

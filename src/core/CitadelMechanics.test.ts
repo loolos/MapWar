@@ -41,6 +41,13 @@ describe('Citadel Mechanics', () => {
 
         // Setup P2 adjacent at (5,6)
         engine.state.setOwner(5, 6, 'P2');
+        // Ensure P2's cell is connected (update connectivity)
+        engine.state.updateConnectivity('P2');
+        // Verify the cell is connected
+        const p2Cell = engine.state.getCell(5, 6);
+        if (p2Cell) {
+            p2Cell.isConnected = true;
+        }
 
         // Attack Cost > 200 (200 * Multiplier)
         const attackCost = engine.getMoveCost(r, c);

@@ -148,7 +148,6 @@ export class GameEngine {
 
         // Pass undefined for configs (keep existing players), and keepMap
         // Pass current mapType to ensure same generator is used if map is reset
-        // Pass current mapType to ensure same generator is used if map is reset
         this.stateManager.reset(undefined, keepMap, this.state.currentMapType);
         // Reset pending
         this.pendingMoves = [];
@@ -159,6 +158,12 @@ export class GameEngine {
         if (this.peaceDayActive) this.endPeaceDay();
         if (this.bloodMoonActive) this.endBloodMoon();
         this.isGameOver = false;
+        
+        // Clear any pending AI turn timeout
+        if (this.aiTurnTimeout !== null) {
+            clearTimeout(this.aiTurnTimeout);
+            this.aiTurnTimeout = null;
+        }
 
         // Update Audio State (React to changes)
         this.checkAudioState();
@@ -195,7 +200,8 @@ export class GameEngine {
         // For now, assume preset matches or update Config here if needed.
         // The preset is 10x10. If current config is different, deserialize loop might fail or clip.
         // Let's force update config dimensions based on loaded grid.
-        if (this.state.grid.length > 0) {
+        // NOTE: This mutates GameConfig globally - intentional design for dynamic map sizes
+        if (this.state.grid.length > 0 && this.state.grid[0]?.length > 0) {
             (GameConfig as any).GRID_HEIGHT = this.state.grid.length;
             (GameConfig as any).GRID_WIDTH = this.state.grid[0].length;
         }
@@ -216,8 +222,13 @@ export class GameEngine {
                     this.setPersistentTurnEvent(events.persistent.event, events.persistent.chancePerRound);
                 }
             }
-        } catch {
-            // Ignore invalid preset event metadata.
+        } catch (err) {
+            // Ignore invalid preset event metadata, but log in development
+            // Note: In browser environment, we can't reliably detect dev mode
+            // Consider using a build-time flag or configuration if needed
+            if (typeof console !== 'undefined' && console.warn) {
+                console.warn('Failed to parse event metadata from save:', err);
+            }
         }
 
         this.emit('mapUpdate');
@@ -675,15 +686,25 @@ export class GameEngine {
         return false;
     }
 
+    private aiTurnTimeout: ReturnType<typeof setTimeout> | null = null;
+
     private triggerAiTurn() {
         if (this.isGameOver) return;
-        setTimeout(() => {
-            if (!this.isGameOver && this.state.getCurrentPlayer().isAI) {
-                try {
-                    this.ai.playTurn();
-                } catch (err) {
-                    console.error("Critical AI Error:", err);
-                    this.endTurn();
+        // Clear any existing timeout to prevent multiple AI turns
+        if (this.aiTurnTimeout !== null) {
+            clearTimeout(this.aiTurnTimeout);
+        }
+        this.aiTurnTimeout = setTimeout(() => {
+            this.aiTurnTimeout = null;
+            if (!this.isGameOver && this.state.currentPlayerId) {
+                const player = this.state.getCurrentPlayer();
+                if (player.isAI) {
+                    try {
+                        this.ai.playTurn();
+                    } catch (err) {
+                        console.error("Critical AI Error:", err);
+                        this.endTurn();
+                    }
                 }
             }
         }, GameConfig.AI_TURN_DELAY_MS);
@@ -1218,7 +1239,7 @@ export class GameEngine {
 
     commitMoves() {
         const pid = this.state.currentPlayerId;
-        if (!pid) return;
+        if (!pid || this.isGameOver) return;
 
         // Snapshot costs BEFORE execution to ensure consistency with the Plan
 
@@ -1245,6 +1266,9 @@ export class GameEngine {
         }));
 
         for (const { move, cost } of movesWithCost) {
+            // Check if game ended during execution
+            if (this.isGameOver) break;
+            
             if (this.hasActedThisTurn(move.r, move.c)) {
                 continue;
             }
@@ -1273,6 +1297,7 @@ export class GameEngine {
                     // Check Win Condition: Last Man Standing
                     if (this.state.playerOrder.length === 1) {
                         gameWon = true;
+                        this.isGameOver = true; // Set immediately to prevent further moves
                     }
                 }
             }
@@ -1420,6 +1445,9 @@ export class GameEngine {
         let farmUpgrades = 0;
 
         interactionsToRun.forEach(interaction => {
+            // Check if game ended during execution
+            if (this.isGameOver) return;
+            
             const action = this.interactionRegistry.get(interaction.actionId);
             if (action) {
                 if (this.hasActedThisTurn(interaction.r, interaction.c)) {
@@ -1560,9 +1588,12 @@ export class GameEngine {
         let enclaveFound = false;
 
         // Iterate grid to find disconnected cells owned by playerId
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
-                const cell = this.state.grid[r][c];
+        const height = this.state.grid.length;
+        const width = height > 0 ? this.state.grid[0].length : 0;
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
+                const cell = this.state.getCell(r, c);
+                if (!cell) continue;
                 // If I own it, and it is NOT connected
                 if (cell.owner === playerId && !cell.isConnected) {
                     enclaveFound = true;

@@ -171,10 +171,12 @@ export class CostSystem {
         let minDist = Infinity;
 
         // Iterate all cells to find owned & connected ones
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
-                const cell = state.grid[r][c];
-                if (cell.owner === playerId && cell.isConnected) {
+        const height = state.grid.length;
+        const width = height > 0 ? state.grid[0].length : 0;
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
+                const cell = state.getCell(r, c);
+                if (cell && cell.owner === playerId && cell.isConnected) {
                     const dist = Math.abs(r - targetR) + Math.abs(c - targetC);
                     if (dist < minDist) {
                         minDist = dist;
