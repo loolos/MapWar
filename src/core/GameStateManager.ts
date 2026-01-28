@@ -31,8 +31,9 @@ export class GameStateManager {
         // Remove from order
         this.state.playerOrder = this.state.playerOrder.filter(id => id !== playerId);
 
-        // Force connectivity update to ensure their lands disconnect
-        this.state.updateConnectivity(playerId);
+        // Mark all of this player's cells as disconnected. Once eliminated we no
+        // longer track their connectivity, so a full BFS is unnecessary.
+        this.state.markPlayerCellsDisconnected(playerId);
 
         // Note: Building destruction (base) is handled by the caller usually, 
         // but could be moved here if we pass coordinates. 

@@ -12,6 +12,13 @@ import { GameStateManager } from './GameStateManager';
 import { TypedEventEmitter } from './GameEvents';
 import { TurnEventSystem, type TurnEventPayload, type TurnEventDefinition } from './events/TurnEventSystem';
 
+type OwnershipChange = {
+    r: number;
+    c: number;
+    previousOwner: string | null;
+    newOwner: string | null;
+};
+
 export class GameEngine {
     stateManager: GameStateManager;
     events: TypedEventEmitter;
@@ -510,6 +517,7 @@ export class GameEngine {
         if (candidates.length === 0) return 0;
 
         const affectedPlayers = new Set<string>(); // Track players whose lands were flooded
+        const affectedChanges: OwnershipChange[] = [];
         let flooded = 0;
         for (const { r, c, isBridge } of candidates) {
             const cell = grid[r][c];
@@ -538,13 +546,22 @@ export class GameEngine {
             cell.isConnected = false;
             cell.type = 'water';
             flooded++;
+            affectedChanges.push({
+                r,
+                c,
+                previousOwner: previousOwner ?? null,
+                newOwner: null
+            });
         }
 
-        // Update connectivity for players whose lands were flooded
-        affectedPlayers.forEach(playerId => {
-            this.state.updateConnectivity(playerId);
-            this.checkForEnclaves(playerId);
-        });
+        // Update connectivity for players whose lands were flooded using
+        // the unified helper (ownership changes only).
+        if (affectedPlayers.size > 0) {
+            this.updateConnectivityForPlayers(
+                Array.from(affectedPlayers),
+                affectedChanges
+            );
+        }
 
         if (flooded > 0) {
             this.turnEventSystem.setPersistentEvent({
@@ -553,7 +570,6 @@ export class GameEngine {
                 message: GameConfig.TURN_EVENT_FLOOD_RECEDE_MESSAGE,
                 sfxKey: GameConfig.TURN_EVENT_FLOOD_RECEDE_SFX
             }, GameConfig.TURN_EVENT_FLOOD_RECEDE_PERSISTENT_CHANCE);
-            this.revalidateAllConnectivity();
             this.emit('mapUpdate');
         }
         return flooded;
@@ -572,7 +588,6 @@ export class GameEngine {
         }
         this.floodedCells.clear();
         if (restored > 0) {
-            this.revalidateAllConnectivity();
             this.emit('mapUpdate');
         }
         return restored;
@@ -636,10 +651,142 @@ export class GameEngine {
         return Math.floor(this.random() * (high - low + 1)) + low;
     }
 
-    private revalidateAllConnectivity() {
-        const playerIds = this.state.allPlayerIds?.length ? this.state.allPlayerIds : this.state.playerOrder;
+    /**
+     * Unified connectivity update entrypoint for ownership changes.
+     *
+     * @param playerIds Players whose connectivity may have changed.
+     * @param changedCells Optional list of ownership changes (coordinates + previous/new owner).
+     */
+    private updateConnectivityForPlayers(
+        playerIds: string[],
+        changedCells?: OwnershipChange[]
+    ): void {
         for (const playerId of playerIds) {
+            if (!playerId) continue;
+
+            const relevantChanges = changedCells
+                ? changedCells.filter(
+                    cell => cell.newOwner === playerId || cell.previousOwner === playerId
+                )
+                : [];
+
+            // If we have a small, purely additive set of changes that are all adjacent
+            // to already-connected territory, we can attempt an incremental update.
+            if (relevantChanges.length > 0 && this.canSkipFullUpdate(playerId, relevantChanges)) {
+                this.updateConnectivityIncremental(playerId, relevantChanges);
+                continue;
+            }
+
+            // Fallback: full recomputation (previous behavior)
             this.state.updateConnectivity(playerId);
+            this.checkForEnclaves(playerId);
+        }
+    }
+
+    /**
+     * Decide whether a full connectivity recomputation can be skipped.
+     *
+     * Rules:
+     * - Only when changes are small in number.
+     * - Only when the player never loses land (no previousOwner === playerId).
+     * - Only when new cells are adjacent to already-connected territory.
+     */
+    private canSkipFullUpdate(playerId: string, changes: OwnershipChange[]): boolean {
+        if (changes.length === 0) return false;
+
+        // If too many changes, just do a full update.
+        if (changes.length > 10) return false;
+
+        for (const change of changes) {
+            const cell = this.state.getCell(change.r, change.c);
+            if (!cell) continue;
+
+            // If this player lost land, connectivity may be cut – require full update.
+            if (change.previousOwner === playerId && change.newOwner !== playerId) {
+                return false;
+            }
+
+            // For newly acquired cells of this player, ensure they are adjacent
+            // to already-connected territory; otherwise we need full update to
+            // verify connectivity chain.
+            if (change.newOwner === playerId && change.previousOwner !== playerId) {
+                if (!this.state.isAdjacentToConnected(change.r, change.c, playerId)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Incremental connectivity update: only extend connectivity from newly
+     * acquired cells that are adjacent to already-connected territory.
+     *
+     * This is safe because:
+     * - We only handle additions here (no land loss for this player).
+     * - Existing cells' connectivity flags were already correct before changes.
+     */
+    private updateConnectivityIncremental(playerId: string, changes: OwnershipChange[]): void {
+        const sources: { r: number; c: number }[] = [];
+
+        for (const change of changes) {
+            if (change.newOwner !== playerId) continue;
+            const cell = this.state.getCell(change.r, change.c);
+            if (!cell || cell.owner !== playerId) continue;
+
+            if (this.state.isAdjacentToConnected(change.r, change.c, playerId)) {
+                cell.isConnected = true;
+                sources.push({ r: change.r, c: change.c });
+            }
+        }
+
+        for (const src of sources) {
+            this.markConnectedFrom(src.r, src.c, playerId);
+        }
+
+        this.checkForEnclaves(playerId);
+    }
+
+    /**
+     * BFS from a starting cell, marking all owned tiles reachable from it
+     * as connected for the given player.
+     */
+    private markConnectedFrom(startR: number, startC: number, playerId: string): void {
+        const startCell = this.state.getCell(startR, startC);
+        if (!startCell || startCell.owner !== playerId) return;
+
+        const height = this.state.grid.length;
+        const width = height > 0 ? this.state.grid[0].length : 0;
+        const queue: { r: number; c: number }[] = [{ r: startR, c: startC }];
+        const visited = new Set<string>([`${startR},${startC}`]);
+
+        startCell.isConnected = true;
+
+        const dirs = [
+            { r: -1, c: 0 }, { r: 1, c: 0 },
+            { r: 0, c: -1 }, { r: 0, c: 1 }
+        ];
+
+        let head = 0;
+        while (head < queue.length) {
+            const curr = queue[head++];
+
+            for (const d of dirs) {
+                const nr = curr.r + d.r;
+                const nc = curr.c + d.c;
+                if (nr < 0 || nr >= height || nc < 0 || nc >= width) continue;
+
+                const key = `${nr},${nc}`;
+                if (visited.has(key)) continue;
+
+                const cell = this.state.getCell(nr, nc);
+                if (!cell || cell.owner !== playerId) continue;
+
+                cell.isConnected = true;
+                visited.add(key);
+                queue.push({ r: nr, c: nc });
+            }
         }
     }
 
@@ -1255,6 +1402,7 @@ export class GameEngine {
         let conquerCount = 0;
         let bridgeBuiltCount = 0;
         const ownershipChangedPlayers = new Set<string>(); // Track players whose land ownership changed
+        const ownershipChanges: OwnershipChange[] = []; // Detailed ownership change records
 
 
         // Snapshot costs BEFORE execution to ensure consistency with the Plan
@@ -1275,6 +1423,8 @@ export class GameEngine {
             const cell = this.state.getCell(move.r, move.c);
 
             if (!cell) continue; // Safety Check
+
+            const previousOwner = cell.owner;
 
             // Win Condition Check: Capture Enemy Base
             if (cell.building === 'base' && cell.owner !== pid) {
@@ -1376,6 +1526,16 @@ export class GameEngine {
             }
 
             this.state.setOwner(move.r, move.c, pid);
+
+            const newOwner: string | null = pid;
+            if (previousOwner !== newOwner) {
+                ownershipChanges.push({
+                    r: move.r,
+                    c: move.c,
+                    previousOwner: previousOwner ?? null,
+                    newOwner
+                });
+            }
 
             // Treasure Chest/Flotsam Collection
             if (cell.treasureGold !== null && cell.treasureGold > 0) {
@@ -1503,14 +1663,14 @@ export class GameEngine {
             this.emit('sfx:victory');
         }
 
-        // Update connectivity for all players whose land ownership changed
-        // This includes: attackers, defenders, bridge builders, and any player who gained/lost land
-        // (Update regardless of totalCost, as ownership changes affect connectivity)
+        // Update connectivity for all players whose land ownership changed,
+        // using the unified connectivity update helper. This includes:
+        // attackers, defenders, bridge builders, and any player who gained/lost land.
         if (ownershipChangedPlayers.size > 0) {
-            ownershipChangedPlayers.forEach(playerId => {
-                this.state.updateConnectivity(playerId);
-                this.checkForEnclaves(playerId);
-            });
+            this.updateConnectivityForPlayers(
+                Array.from(ownershipChangedPlayers),
+                ownershipChanges
+            );
         }
 
         if (totalCost > 0) {

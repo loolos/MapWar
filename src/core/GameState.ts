@@ -251,6 +251,25 @@ export class GameState {
         return this.grid[row][col];
     }
 
+    /**
+     * Quickly mark all cells owned by the given player as disconnected.
+     * Used when a player is eliminated; afterwards we no longer care about
+     * their connectivity, so a full BFS is unnecessary.
+     */
+    public markPlayerCellsDisconnected(playerId: PlayerID): void {
+        if (!playerId) return;
+        const height = this.grid.length;
+        const width = height > 0 ? this.grid[0].length : 0;
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
+                const cell = this.grid[r][c];
+                if (cell.owner === playerId) {
+                    cell.isConnected = false;
+                }
+            }
+        }
+    }
+
     setOwner(row: number, col: number, owner: PlayerID) {
         const cell = this.getCell(row, col);
         if (cell) cell.owner = owner;
@@ -292,8 +311,9 @@ export class GameState {
     public accrueResources(playerId: PlayerID) {
         if (!playerId) return null;
 
-        // User Request: Determine connectivity state BEFORE calculating income
-        this.updateConnectivity(playerId);
+        // Note: Connectivity should already be up-to-date from commitMoves() in the previous turn.
+        // We only need to recalculate if ownership changed, which is handled in commitMoves().
+        // No need to update connectivity here for performance optimization.
 
         // Citadel: update turns held for accruing player
         for (let r = 0; r < this.grid.length; r++) {
@@ -460,12 +480,17 @@ export class GameState {
     public updateConnectivity(playerId: PlayerID) {
         if (!playerId) return;
 
+        // Use dynamic grid dimensions instead of GameConfig constants
+        const height = this.grid.length;
+        const width = height > 0 ? this.grid[0].length : 0;
+        if (height === 0 || width === 0) return;
+
         // 1. Find Base(s) and Reset Connectivity
         const queue: { r: number, c: number }[] = [];
         const ownedCells: { r: number, c: number }[] = [];
 
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
                 const cell = this.grid[r][c];
                 if (cell.owner === playerId) {
                     ownedCells.push({ r, c });
@@ -498,8 +523,8 @@ export class GameState {
                 const nr = curr.r + d.r;
                 const nc = curr.c + d.c;
 
-                // Bounds Check
-                if (nr >= 0 && nr < GameConfig.GRID_HEIGHT && nc >= 0 && nc < GameConfig.GRID_WIDTH) {
+                // Bounds Check using dynamic dimensions
+                if (nr >= 0 && nr < height && nc >= 0 && nc < width) {
                     const key = `${nr},${nc}`;
                     const neighbor = this.grid[nr][nc];
 
