@@ -49,11 +49,23 @@ export class AIController {
             this.engine.lastAiMoves = [];
 
             const weights = this.getWeightsForPlayer(aiPlayer.id as string);
-            const startTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+            const nowMs = () => (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+            const startTime = nowMs();
             const timeBudgetMs = GameConfig.AI_TURN_BUDGET_MS;
             const isOverBudget = () => {
-                const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                return (now - startTime) >= timeBudgetMs;
+                return (nowMs() - startTime) >= timeBudgetMs;
+            };
+
+            // Optional perf collector (used by benchmark / profiling scripts)
+            const perf = (this.engine as any).aiPerf as undefined | {
+                add: (name: string, ms: number) => void;
+            };
+            const time = <T>(name: string, fn: () => T): T => {
+                if (!perf) return fn();
+                const t0 = nowMs();
+                const out = fn();
+                perf.add(name, nowMs() - t0);
+                return out;
             };
 
             const turnCount = this.engine.state.turnCount;
@@ -76,20 +88,22 @@ export class AIController {
                 const candidates: ActionCandidate[] = [];
                 const grid = this.engine.state.grid;
                 const myBases: { r: number; c: number }[] = [];
-                const ownedCells: { r: number; c: number }[] = [];
+                let ownedCells: { r: number; c: number }[] = [];
                 const disconnectedOwned = new Set<string>();
 
                 // Use cached treasure locations if available
                 if (!this.treasureCacheValid) {
-                    this.cachedTreasureLocations = [];
-                    for (let r = 0; r < grid.length; r++) {
-                        for (let c = 0; c < grid[r].length; c++) {
-                            const cell = grid[r][c];
-                            if (cell.treasureGold !== null && cell.treasureGold > 0) {
-                                this.cachedTreasureLocations.push({ r, c, gold: cell.treasureGold });
+                    time('ai.buildCandidates.scanTreasure', () => {
+                        this.cachedTreasureLocations = [];
+                        for (let r = 0; r < grid.length; r++) {
+                            for (let c = 0; c < grid[r].length; c++) {
+                                const cell = grid[r][c];
+                                if (cell.treasureGold !== null && cell.treasureGold > 0) {
+                                    this.cachedTreasureLocations.push({ r, c, gold: cell.treasureGold });
+                                }
                             }
                         }
-                    }
+                    });
                     this.treasureCacheValid = true;
                 }
                 const treasureLocations = this.cachedTreasureLocations;
@@ -99,27 +113,27 @@ export class AIController {
                 let farmIncome = 0;
                 let baseIncome = 0;
 
-                for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-                    for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
-                        if (isOverBudget()) return candidates;
+                // Use indexed owned cells instead of full grid scan (O(owned) vs O(grid))
+                time('ai.buildCandidates.scanOwned', () => {
+                    ownedCells = this.engine.state.getOwnedCells(aiPlayer.id as string);
+                    for (const { r, c } of ownedCells) {
+                        if (isOverBudget()) return;
                         const cell = grid[r][c];
-                        if (cell.owner === aiPlayer.id) {
-                            ownedCells.push({ r, c });
-                            if (cell.building === 'base') {
-                                myBases.push({ r, c });
-                            }
-                            if (!cell.isConnected) {
-                                disconnectedOwned.add(`${r},${c}`);
-                            }
-                            const income = this.engine.state.getTileIncome(r, c);
-                            if (cell.building === 'farm') {
-                                farmIncome += income;
-                            } else if (cell.building === 'base') {
-                                baseIncome += income;
-                            }
+                        if (cell.building === 'base') {
+                            myBases.push({ r, c });
+                        }
+                        if (!cell.isConnected) {
+                            disconnectedOwned.add(`${r},${c}`);
+                        }
+                        const income = this.engine.state.getTileIncome(r, c);
+                        if (cell.building === 'farm') {
+                            farmIncome += income;
+                        } else if (cell.building === 'base') {
+                            baseIncome += income;
                         }
                     }
-                }
+                });
+                if (isOverBudget()) return candidates;
                 const farmToBaseRatio = baseIncome > 0 ? farmIncome / baseIncome : farmIncome > 0 ? 1 : 0;
                 const farmBalanceBonus = farmToBaseRatio < weights.ECONOMY_FARM_INCOME_TARGET_RATIO
                     ? weights.ECONOMY_FARM_BALANCE_BONUS
@@ -157,61 +171,70 @@ export class AIController {
                 };
 
                 // Build candidate positions: owned tiles and their neighbors
-                const candidatePositions = new Set<string>();
-                for (const cellPos of ownedCells) {
-                    const { r, c } = cellPos;
-                    candidatePositions.add(`${r},${c}`);
-                    const neighbors = [
-                        { r: r + 1, c }, { r: r - 1, c },
-                        { r, c: c + 1 }, { r, c: c - 1 }
-                    ];
-                    for (const n of neighbors) {
-                        if (this.engine.isValidCell(n.r, n.c)) {
-                            candidatePositions.add(`${n.r},${n.c}`);
+                // Use numeric keys (r*width + c) to avoid string split/alloc in hot loop.
+                const width = GameConfig.GRID_WIDTH;
+                const candidatePositions = new Set<number>();
+                time('ai.buildCandidates.buildAdjacencySet', () => {
+                    for (const cellPos of ownedCells) {
+                        const { r, c } = cellPos;
+                        const neighbors = [
+                            { r: r + 1, c }, { r: r - 1, c },
+                            { r, c: c + 1 }, { r, c: c - 1 }
+                        ];
+                        for (const n of neighbors) {
+                            if (this.engine.isValidCell(n.r, n.c)) {
+                                // Only consider non-owned tiles for move candidates.
+                                // Owned tiles are handled via interaction candidates and would be rejected by validateMove anyway.
+                                const nCell = grid[n.r][n.c];
+                                if (nCell.owner === aiPlayer.id) continue;
+                                candidatePositions.add(n.r * width + n.c);
+                            }
                         }
                     }
-                }
+                });
 
                 // Move candidates (owned + adjacent)
-                for (const key of candidatePositions) {
-                    if (isOverBudget()) return candidates;
-                    const [rStr, cStr] = key.split(',');
-                    const r = Number(rStr);
-                    const c = Number(cStr);
-                    if (!this.engine.isValidCell(r, c)) continue;
-                    if (actedTiles.has(`${r},${c}`)) continue;
+                time('ai.buildCandidates.moves', () => {
+                    for (const key of candidatePositions) {
+                        if (isOverBudget()) return;
+                        const r = Math.floor(key / width);
+                        const c = key % width;
+                        if (!this.engine.isValidCell(r, c)) continue;
+                        if (actedTiles.has(`${r},${c}`)) continue;
 
-                    const validation = this.engine.validateMove(r, c);
-                    if (!validation.valid) continue;
-                    const costValidation = this.engine.checkMoveCost(r, c);
-                    if (!costValidation.valid) continue;
+                        const validation = time('ai.validateMove', () => this.engine.validateMove(r, c));
+                        if (!validation.valid) continue;
+                        const costValidation = time('ai.checkMoveCost', () => this.engine.checkMoveCost(r, c));
+                        if (!costValidation.valid) continue;
 
-                    const cell = grid[r][c];
-                    const cost = this.engine.getMoveCost(r, c);
-                    let score = weights.SCORE_BASE_VALUE;
-                    score += this.scoreObjectives(cell, aiPlayer.id as string, weights);
-                    score += this.scoreAggression(cell, r, c, aiPlayer.id as string, myBases, weights);
-                    score += this.scoreTactical(cell, weights);
-                    score += this.scoreTreasure(cell, weights);
-                    score += this.scoreTreasureProximity(r, c, treasureLocations, weights);
-                    score += this.scoreExpansion(cell, turnCount, weights);
-                    score += this.scoreAura(r, c, aiPlayer.id as string, weights);
-                    score += this.scoreLookAhead(r, c, aiPlayer.id as string, grid, weights);
-                    score += this.scoreCitadelProximity(r, c, citadelCell, weights);
-                    score += this.scoreReconnect(r, c, disconnectedOwned, weights);
-                    const enemyAdj = countEnemyAdjacent(r, c);
-                    if (enemyAdj > 0) {
-                        score -= enemyAdj * weights.RISK_ENEMY_ADJACENT_PENALTY;
+                        const cell = grid[r][c];
+                        const cost = time('ai.getMoveCost', () => this.engine.getMoveCost(r, c));
+                        let score = weights.SCORE_BASE_VALUE;
+                        score += this.scoreObjectives(cell, aiPlayer.id as string, weights);
+                        score += this.scoreAggression(cell, r, c, aiPlayer.id as string, myBases, weights);
+                        score += this.scoreTactical(cell, weights);
+                        score += this.scoreTreasure(cell, weights);
+                        score += this.scoreTreasureProximity(r, c, treasureLocations, weights);
+                        score += this.scoreExpansion(cell, turnCount, weights);
+                        score += this.scoreAura(r, c, aiPlayer.id as string, weights);
+                        score += this.scoreLookAhead(r, c, aiPlayer.id as string, grid, weights);
+                        score += this.scoreCitadelProximity(r, c, citadelCell, weights);
+                        score += this.scoreReconnect(r, c, disconnectedOwned, weights);
+                        const enemyAdj = countEnemyAdjacent(r, c);
+                        if (enemyAdj > 0) {
+                            score -= enemyAdj * weights.RISK_ENEMY_ADJACENT_PENALTY;
+                        }
+                        score -= (cost * weights.COST_PENALTY_MULTIPLIER);
+                        score += Math.random() * weights.RANDOM_NOISE;
+
+                        const category: ActionCategory = cell.owner && cell.owner !== aiPlayer.id ? 'attack' : 'expand';
+                        if (category === 'attack' && turnCount >= weights.STRATEGY_ENDGAME_TURN) {
+                            score += weights.STRATEGY_ENDGAME_ATTACK_BONUS;
+                        }
+                        candidates.push({ kind: 'move', category, r, c, score, cost });
                     }
-                    score -= (cost * weights.COST_PENALTY_MULTIPLIER);
-                    score += Math.random() * weights.RANDOM_NOISE;
-
-                    const category: ActionCategory = cell.owner && cell.owner !== aiPlayer.id ? 'attack' : 'expand';
-                    if (category === 'attack' && turnCount >= weights.STRATEGY_ENDGAME_TURN) {
-                        score += weights.STRATEGY_ENDGAME_ATTACK_BONUS;
-                    }
-                    candidates.push({ kind: 'move', category, r, c, score, cost });
-                }
+                });
+                if (isOverBudget()) return candidates;
 
                 // Interaction candidates
                 for (const cellPos of ownedCells) {
@@ -300,11 +323,11 @@ export class AIController {
                     }
                 }
 
-                for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-                    for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
-                        const cell = this.engine.state.getCell(r, c);
-                        if (!cell || cell.owner !== aiPlayer.id) continue;
+                // Use indexed owned cells instead of full grid scan
+                time('ai.buildCandidates.scanFarmUpgrades', () => {
+                    for (const { r, c } of ownedCells) {
                         if (actedTiles.has(`${r},${c}`)) continue;
+                        const cell = grid[r][c];
                         if (cell.building === 'farm' && cell.farmLevel < GameConfig.FARM_MAX_LEVEL) {
                             const score = weights.ECONOMY_FARM_UPGRADE
                                 + (cell.farmLevel * weights.ECONOMY_FARM_LEVEL)
@@ -312,7 +335,7 @@ export class AIController {
                             addInteraction(r, c, 'UPGRADE_FARM', score, 'farm');
                         }
                     }
-                }
+                });
 
                 return candidates;
             };
@@ -322,7 +345,7 @@ export class AIController {
             let remainingGold = aiPlayer.gold;
             const skipped = new Set<string>();
 
-            const initialCandidates = buildCandidates();
+            const initialCandidates = time('ai.buildCandidates.total', buildCandidates);
             const bestTarget = initialCandidates
                 .filter((c) => c.kind === 'move')
                 .map((c) => ({ candidate: c, cell: this.engine.state.getCell(c.r, c.c) }))
@@ -341,7 +364,7 @@ export class AIController {
 
             while (actionCounter < MAX_ACTIONS) {
                 if (isOverBudget()) break;
-                const candidates = buildCandidates();
+                const candidates = time('ai.buildCandidates.total', buildCandidates);
                 const eligible = candidates.filter((c) => {
                     const key = `${c.kind}:${c.actionId ?? 'move'}:${c.r},${c.c}`;
                     if (skipped.has(key)) return false;
@@ -351,7 +374,7 @@ export class AIController {
                 });
 
                 if (eligible.length === 0) break;
-                eligible.sort((a, b) => b.score - a.score);
+                time('ai.sortCandidates', () => eligible.sort((a, b) => b.score - a.score));
                 const best = eligible[0];
                 const key = `${best.kind}:${best.actionId ?? 'move'}:${best.r},${best.c}`;
                 let executed = false;
@@ -363,13 +386,13 @@ export class AIController {
                         continue;
                     }
                     this.engine.lastAiMoves.push({ r: best.r, c: best.c });
-                    this.engine.commitMoves();
+                    time('ai.commitMoves', () => this.engine.commitMoves());
                     executed = true;
                 } else if (best.actionId) {
                     const before = this.engine.pendingInteractions.length;
                     this.engine.planInteraction(best.r, best.c, best.actionId);
                     if (this.engine.pendingInteractions.length > before) {
-                        this.engine.commitMoves();
+                        time('ai.commitMoves', () => this.engine.commitMoves());
                         executed = true;
                     } else {
                         skipped.add(key);

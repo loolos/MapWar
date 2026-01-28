@@ -131,7 +131,7 @@ describe('Base Upgrades', () => {
             for (let c = 0; c < width; c++) {
                 const cell = engine.state.grid[r][c];
                 cell.type = 'plain';
-                cell.owner = 'P1';
+                engine.state.setOwner(r, c, 'P1');
                 cell.building = 'none';
                 cell.isConnected = true;
             }

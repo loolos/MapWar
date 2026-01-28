@@ -133,6 +133,10 @@ type RunResult = {
     min: number;
     overMaxBudget: number;
     passed: boolean;
+    perf?: {
+        timesMs: Record<string, number>;
+        counts: Record<string, number>;
+    };
 };
 
 function runOneBenchmark(
@@ -141,7 +145,8 @@ function runOneBenchmark(
     players: number,
     mapType: MapType,
     turns: number,
-    configLabel: string
+    configLabel: string,
+    enablePerf: boolean
 ): RunResult {
     (GameConfig as any).GRID_WIDTH = width;
     (GameConfig as any).GRID_HEIGHT = height;
@@ -154,6 +159,25 @@ function runOneBenchmark(
 
     const engine = new GameEngine(playerList, mapType, Math.random, { randomizeAiProfiles: true });
     (engine as any).triggerAiTurn = () => {};
+
+    let perf:
+        | {
+            times: Map<string, number>;
+            counts: Map<string, number>;
+            add: (name: string, ms: number) => void;
+        }
+        | undefined;
+    if (enablePerf) {
+        perf = {
+            times: new Map(),
+            counts: new Map(),
+            add(name: string, ms: number) {
+                this.times.set(name, (this.times.get(name) ?? 0) + ms);
+                this.counts.set(name, (this.counts.get(name) ?? 0) + 1);
+            }
+        };
+        (engine as any).aiPerf = perf;
+    }
 
     engine.startGame();
 
@@ -183,7 +207,13 @@ function runOneBenchmark(
         max,
         min,
         overMaxBudget,
-        passed
+        passed,
+        perf: perf
+            ? {
+                timesMs: Object.fromEntries(perf.times.entries()),
+                counts: Object.fromEntries(perf.counts.entries()),
+            }
+            : undefined
     };
 }
 
@@ -197,7 +227,8 @@ function runFullMatrix(turns: number, quiet: boolean, profile: boolean): void {
             preset.players,
             preset.mapType,
             turns,
-            preset.label
+            preset.label,
+            profile
         );
         results.push(result);
     }
@@ -259,7 +290,7 @@ function runQuick(turns: number, quiet: boolean, profile: boolean): void {
     }));
 
     const results: RunResult[] = configs.map((cfg) =>
-        runOneBenchmark(cfg.width, cfg.height, cfg.players, cfg.mapType, turns, cfg.label)
+        runOneBenchmark(cfg.width, cfg.height, cfg.players, cfg.mapType, turns, cfg.label, profile)
     );
 
     if (!quiet) {
@@ -282,6 +313,17 @@ function runQuick(turns: number, quiet: boolean, profile: boolean): void {
             const p90 = sorted[Math.floor(sorted.length * 0.90)];
             const p99 = sorted[Math.floor(sorted.length * 0.99)];
             console.log(`  P50: ${p50.toFixed(2)} ms  P90: ${p90.toFixed(2)} ms  P99: ${p99.toFixed(2)} ms`);
+
+            // Section timing (top hotspots)
+            if (r.perf) {
+                const total = r.samples.reduce((a, b) => a + b, 0);
+                const entries = Object.entries(r.perf.timesMs).sort((a, b) => b[1] - a[1]).slice(0, 8);
+                console.log('  Hotspots (total ms, % of total turn time):');
+                for (const [name, ms] of entries) {
+                    const pct = total > 0 ? (ms / total) * 100 : 0;
+                    console.log(`   - ${name}: ${ms.toFixed(1)}ms (${pct.toFixed(1)}%)`);
+                }
+            }
         }
     }
     console.log('');
@@ -301,7 +343,8 @@ function runSingle(options: CliOptions): void {
         options.players,
         options.mapType,
         options.turns,
-        `${options.width}×${options.height}, ${options.players}P ${MAP_TYPE_LABELS[options.mapType]}`
+        `${options.width}×${options.height}, ${options.players}P ${MAP_TYPE_LABELS[options.mapType]}`,
+        options.profile
     );
 
     console.log(`AI benchmark (${options.width}x${options.height}, ${options.players} AI, ${MAP_TYPE_LABELS[options.mapType]})`);

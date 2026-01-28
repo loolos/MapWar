@@ -24,11 +24,13 @@ describe('AI Strategy', () => {
         // Clear board for clarity
         // P1 Base is usually at 1,1
         // Let's place P1 Base at 2,2 manually for control
+        engine.state.setOwner(2, 2, 'P1');
         engine.state.grid[2][2].building = 'base';
-        engine.state.grid[2][2].owner = 'P1';
+        engine.state.grid[2][2].isConnected = true;
 
         // Place AI Unit at 2,3 (Adjacent)
-        engine.state.grid[2][3].owner = 'P2';
+        engine.state.setOwner(2, 3, 'P2');
+        engine.state.grid[2][3].isConnected = true;
         // Make sure it's P2's turn
         engine.state.currentPlayerId = 'P2';
 
@@ -41,12 +43,14 @@ describe('AI Strategy', () => {
 
     it('Prioritizes defending Own Base when Enemy is near', () => {
         // Setup: P2 Base at 8,8
+        engine.state.setOwner(8, 8, 'P2');
         engine.state.grid[8][8].building = 'base';
-        engine.state.grid[8][8].owner = 'P2';
+        engine.state.grid[8][8].isConnected = true;
 
         // Enemy (P1) at 8,7 (Adjacent to base)
-        engine.state.grid[8][7].owner = 'P1';
+        engine.state.setOwner(8, 7, 'P1');
         engine.state.grid[8][7].building = 'none'; // Just a unit/land
+        engine.state.grid[8][7].isConnected = true;
 
         // DISTRACTION: Neutral Town at 8,9 (Adjacent to Base)
         // Existing logic rates Town capture (500) > Attack Enemy (100)
