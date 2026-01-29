@@ -167,61 +167,48 @@ export class MainScene extends Phaser.Scene {
             }
         }
 
-        // Runtime Transparency Processing
-        const processTransparency = (key: string) => {
+        // Unified background transparency for all loaded PNGs (black/white tolerance)
+        const PNG_KEYS_FOR_TRANSPARENCY = [
+            'ui_button', 'tile_plain', 'tile_hill', 'tile_water',
+            'icon_gold_3d', 'gold_mine', 'citadel', 'lighthouse',
+            'icon_human_cartoon', 'icon_robot_cartoon',
+            'town_level_1', 'town_level_2', 'town_level_3',
+            'treasure_chest', 'flotsam',
+        ] as const;
+
+        const processBackgroundTransparency = (key: string) => {
             if (typeof document === 'undefined') return;
             if (!this.textures.exists(key)) return;
-
             const texture = this.textures.get(key);
             const src = texture.getSourceImage();
+            if (!(src instanceof Image)) return;
+            const canvas = document.createElement('canvas');
+            canvas.width = src.width;
+            canvas.height = src.height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            ctx.drawImage(src, 0, 0);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+                if (r < 20 && g < 20 && b < 20) data[i + 3] = 0;       // near black
+                else if (r > 230 && g > 230 && b > 230) data[i + 3] = 0; // near white
+            }
+            ctx.putImageData(imageData, 0, 0);
+            this.textures.addCanvas(key + '_transparent', canvas);
+        };
 
-            if (src instanceof Image) {
-                const canvas = document.createElement('canvas');
-                canvas.width = src.width;
-                canvas.height = src.height;
-                const ctx = canvas.getContext('2d');
-                if (ctx) {
-                    ctx.drawImage(src, 0, 0);
-                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                    const data = imageData.data;
-
-                    for (let i = 0; i < data.length; i += 4) {
-                        const r = data[i];
-                        const g = data[i + 1];
-                        const b = data[i + 2];
-
-                        // Black Tolerance
-                        if (r < 20 && g < 20 && b < 20) {
-                            data[i + 3] = 0;
-                        }
-                        // White Tolerance
-                        else if (r > 230 && g > 230 && b > 230) {
-                            data[i + 3] = 0;
-                        }
-                    }
-                    ctx.putImageData(imageData, 0, 0);
-                    this.textures.addCanvas(key + '_transparent', canvas);
-                }
+        const applyTransparencyToAllPngs = () => {
+            for (const key of PNG_KEYS_FOR_TRANSPARENCY) {
+                if (this.textures.exists(key)) processBackgroundTransparency(key);
             }
         };
 
-        // Process Town Assets on Load
-        this.textures.on('onload', () => {
-            processTransparency('town_level_1');
-            processTransparency('town_level_2');
-            processTransparency('town_level_3');
-            processTransparency('treasure_chest');
-            processTransparency('flotsam');
-            processTransparency('citadel');
-        });
-
-        // Trigger manual check if already loaded
-        if (this.textures.exists('town_level_1')) processTransparency('town_level_1');
-        if (this.textures.exists('town_level_2')) processTransparency('town_level_2');
-        if (this.textures.exists('town_level_3')) processTransparency('town_level_3');
-        if (this.textures.exists('treasure_chest')) processTransparency('treasure_chest');
-        if (this.textures.exists('flotsam')) processTransparency('flotsam');
-        if (this.textures.exists('citadel')) processTransparency('citadel');
+        this.textures.on('onload', applyTransparencyToAllPngs);
+        applyTransparencyToAllPngs();
 
         this.cameras.main.setBackgroundColor(GameConfig.COLORS.BG);
 
@@ -1614,7 +1601,8 @@ export class MainScene extends Phaser.Scene {
             }
             else if (child.type === 'Image') {
                 if (child.texture && (
-                    child.texture.key === 'gold_mine'
+                    child.texture.key.startsWith('gold_mine')
+                    || child.texture.key.startsWith('citadel')
                     || child.texture.key.startsWith('watchtower')
                     || child.texture.key.startsWith('farm')
                     || child.texture.key.startsWith('town_level')
@@ -1649,6 +1637,8 @@ export class MainScene extends Phaser.Scene {
             endCol = Math.min(totalWidth, this.viewCol + this.visibleCols + 1);
         }
 
+        const texKey = (k: string) => this.textures.exists(k + '_transparent') ? k + '_transparent' : k;
+
         for (let r = startRow; r < endRow; r++) {
             for (let c = startCol; c < endCol; c++) {
                 const cell = grid[r][c];
@@ -1666,7 +1656,7 @@ export class MainScene extends Phaser.Scene {
                 // 0. SPECIAL TERRAIN REPLACEMENT (Gold Mine)
                 if (cell.building === 'gold_mine') {
                     // Render Gold Mine Image acting as Terrain
-                    const mineSprite = this.add.image(x + this.tileSize / 2, y + this.tileSize / 2, 'gold_mine');
+                    const mineSprite = this.add.image(x + this.tileSize / 2, y + this.tileSize / 2, texKey('gold_mine'));
                     mineSprite.setDisplaySize(this.tileSize * 1.0, this.tileSize * 1.0); // Full tile
                     this.mapContainer.add(mineSprite);
 
@@ -1741,8 +1731,7 @@ export class MainScene extends Phaser.Scene {
                     const baseText = this.add.text(x + this.tileSize / 2, y + this.tileSize / 2, '🏰', { fontSize: '32px' }).setOrigin(0.5);
                     this.mapContainer.add(baseText);
                 } else if (cell.building === 'citadel') {
-                    const key = this.textures.exists('citadel_transparent') ? 'citadel_transparent' : 'citadel';
-                    const sprite = this.add.image(x + this.tileSize / 2, y + this.tileSize / 2, key);
+                    const sprite = this.add.image(x + this.tileSize / 2, y + this.tileSize / 2, texKey('citadel'));
                     sprite.setDisplaySize(this.tileSize * 0.9, this.tileSize * 0.9);
                     this.mapContainer.add(sprite);
                 } else if (cell.building === 'town') {
@@ -1752,14 +1741,11 @@ export class MainScene extends Phaser.Scene {
                     } else if (cell.townIncome >= 4) {
                         key = 'town_level_2';
                     }
-                    // Use transparent version if available
-                    const finalKey = this.textures.exists(key + '_transparent') ? key + '_transparent' : key;
-
-                    const townSprite = this.add.image(x + this.tileSize / 2, y + this.tileSize / 2, finalKey);
+                    const townSprite = this.add.image(x + this.tileSize / 2, y + this.tileSize / 2, texKey(key));
                     townSprite.setDisplaySize(this.tileSize * 0.9, this.tileSize * 0.9); // Slight padding
                     this.mapContainer.add(townSprite);
                 } else if (cell.building === 'lighthouse') {
-                    const sprite = this.add.image(x + this.tileSize / 2, y + this.tileSize / 2, 'lighthouse');
+                    const sprite = this.add.image(x + this.tileSize / 2, y + this.tileSize / 2, texKey('lighthouse'));
                     sprite.setDisplaySize(this.tileSize * 0.9, this.tileSize * 0.9);
                     this.mapContainer.add(sprite);
                 } else if (cell.building === 'farm') {
