@@ -143,6 +143,7 @@ export class AIController {
                     : 0;
 
                 const citadelCell = this.engine.state.citadelLocation;
+                const lighthouseLocations = this.engine.state.lighthouseLocations;
 
                 const countEnemyAdjacent = (r: number, c: number) => {
                     let enemies = 0;
@@ -215,6 +216,7 @@ export class AIController {
                         score += this.scoreTactical(cell, weights);
                         score += this.scoreTreasure(cell, weights);
                         score += this.scoreTreasureProximity(r, c, treasureLocations, weights);
+                        score += this.scoreLighthouseProximity(r, c, aiPlayer.id as string, lighthouseLocations, weights);
                         score += this.scoreExpansion(cell, turnCount, weights);
                         score += this.scoreAura(r, c, aiPlayer.id as string, weights);
                         score += this.scoreLookAhead(r, c, aiPlayer.id as string, grid, weights);
@@ -420,8 +422,40 @@ export class AIController {
             if (cell.owner) score += weights.SCORE_CITADEL; // Extra when enemy-held (take-back priority)
         } else if (cell.building === 'town' && cell.owner !== aiPlayerId) score += weights.SCORE_TOWN;
         else if (cell.building === 'gold_mine' && cell.owner !== aiPlayerId) score += weights.SCORE_GOLD_MINE;
-        else if (cell.building === 'lighthouse' && cell.owner !== aiPlayerId) score += weights.SCORE_LIGHTHOUSE;
+        else if (cell.building === 'lighthouse' && cell.owner !== aiPlayerId) {
+            // Encourage stacking: the more lighthouses you already own, the more valuable the next one becomes.
+            const owned = this.engine.state.getLighthouseCount(aiPlayerId);
+            const stackMult = 1 + (Math.min(4, owned) * 0.15);
+            score += weights.SCORE_LIGHTHOUSE * stackMult;
+        }
         return score;
+    }
+
+    private scoreLighthouseProximity(
+        r: number,
+        c: number,
+        aiPlayerId: string,
+        lighthouseLocations: { r: number; c: number }[] | undefined,
+        weights: AIWeights
+    ): number {
+        if (!lighthouseLocations || lighthouseLocations.length === 0) return 0;
+
+        // Find the nearest lighthouse not owned by me (neutral or enemy).
+        let bestDist = Infinity;
+        for (const loc of lighthouseLocations) {
+            const cell = this.engine.state.getCell(loc.r, loc.c);
+            if (!cell) continue;
+            if (cell.owner === aiPlayerId) continue;
+            const dist = Math.abs(r - loc.r) + Math.abs(c - loc.c);
+            if (dist < bestDist) bestDist = dist;
+        }
+        if (!Number.isFinite(bestDist) || bestDist <= 0) return 0;
+
+        // Soft guidance toward lighthouses (only matters when lighthouse isn't directly capturable yet).
+        const maxRange = 8;
+        if (bestDist > maxRange) return 0;
+        const closeness = (maxRange - bestDist + 1) / maxRange; // (0,1]
+        return weights.SCORE_LIGHTHOUSE * 0.35 * closeness;
     }
 
     private scoreAggression(cell: Cell, r: number, c: number, aiPlayerId: string, myBases: { r: number, c: number }[], weights: AIWeights): number {

@@ -74,6 +74,34 @@ describe('Lighthouse', () => {
             expect(totalLighthouses).toBeLessThanOrEqual(5);
         });
 
+        it('caches lighthouse locations in GameState', () => {
+            const rng = createSeededRandom(12345);
+            const engine = new GameEngine(
+                [{ id: 'P1', isAI: false, color: 0 }, { id: 'P2', isAI: true, color: 1 }],
+                'archipelago',
+                rng
+            );
+            engine.startGame();
+
+            const grid = engine.state.grid;
+            const scanned: { r: number; c: number }[] = [];
+            for (let r = 0; r < grid.length; r++) {
+                for (let c = 0; c < grid[r].length; c++) {
+                    if (grid[r][c].building === 'lighthouse') scanned.push({ r, c });
+                }
+            }
+
+            const cached = engine.state.lighthouseLocations;
+            expect(cached.length).toBe(scanned.length);
+
+            const key = (p: { r: number; c: number }) => `${p.r},${p.c}`;
+            const scannedSet = new Set(scanned.map(key));
+            for (const loc of cached) {
+                expect(scannedSet.has(key(loc))).toBe(true);
+                expect(engine.state.getCell(loc.r, loc.c)!.building).toBe('lighthouse');
+            }
+        });
+
         it('does not place lighthouses on default, pangaea, or rivers', () => {
             const rng = createSeededRandom(42);
             for (const mapType of ['default', 'pangaea', 'rivers'] as const) {
@@ -85,6 +113,7 @@ describe('Lighthouse', () => {
                 engine.startGame();
                 const total = countLighthousesOnGrid(engine.state.grid);
                 expect(total).toBe(0);
+                expect(engine.state.lighthouseLocations.length).toBe(0);
             }
         });
     });
@@ -153,6 +182,43 @@ describe('Lighthouse', () => {
             state.getCell(1, 1)!.isConnected = true;
             const income = state.getTileIncome(1, 1);
             expect(income).toBe(3);
+        });
+
+        it('lighthouse income is halved when disconnected', () => {
+            const state = new GameState(
+                [{ id: 'P1', isAI: false, color: 0 }, { id: 'P2', isAI: true, color: 1 }],
+                'default'
+            );
+            state.setOwner(1, 1, 'P1');
+            state.getCell(1, 1)!.building = 'lighthouse';
+            state.getCell(1, 1)!.isConnected = false; // disconnected
+            const income = state.getTileIncome(1, 1);
+            expect(income).toBe(1.5);
+        });
+
+        it('lighthouse income is affected by base income aura', () => {
+            const state = new GameState(
+                [{ id: 'P1', isAI: false, color: 0 }, { id: 'P2', isAI: true, color: 1 }],
+                'default'
+            );
+
+            // Base at (1,1) with income aura range 1
+            state.setOwner(1, 1, 'P1');
+            state.setBuilding(1, 1, 'base');
+            state.getCell(1, 1)!.incomeLevel = 1;
+            state.getCell(1, 1)!.isConnected = true;
+
+            // Lighthouse adjacent at (1,2) -> should get +30% aura bonus
+            state.setOwner(1, 2, 'P1');
+            state.getCell(1, 2)!.building = 'lighthouse';
+            state.getCell(1, 2)!.isConnected = true;
+
+            const auraBonus = AuraSystem.getIncomeAuraBonus(state, 1, 2, 'P1');
+            expect(auraBonus).toBeGreaterThan(0);
+
+            // Base lighthouse income is 3 for 1 lighthouse; with +30% => 3.9
+            const income = state.getTileIncome(1, 2);
+            expect(income).toBeCloseTo(3 * (1 + GameConfig.AURA_BONUS_BASE), 5);
         });
 
         it('2 lighthouses give 5 each (10 total)', () => {

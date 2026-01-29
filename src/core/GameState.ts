@@ -13,6 +13,8 @@ export class GameState {
     turnsTakenInRound: number;
     currentMapType: MapType = 'default';
     citadelLocation: { r: number; c: number } | null = null;
+    /** Cached lighthouse locations (static map features). */
+    lighthouseLocations: { r: number; c: number }[] = [];
     /** Per-player owned cell index: Map<PlayerID, Set<cellKey>> where cellKey = r*width + c */
     private ownedCellsByPlayer: Map<PlayerID, Set<number>> = new Map();
 
@@ -65,19 +67,35 @@ export class GameState {
         // 2. Delegate to Generator
         MapGenerator.generate(this.grid, this.currentMapType, GameConfig.GRID_WIDTH, GameConfig.GRID_HEIGHT, this.playerOrder.length);
 
-        // 3. Cache Citadel Location
+        // 3. Cache static map feature locations
         this.cacheCitadelLocation();
+        this.cacheLighthouseLocations();
 
         this.setupBases();
     }
 
     private cacheCitadelLocation() {
         this.citadelLocation = null;
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+        const h = this.grid.length;
+        const w = h > 0 ? this.grid[0].length : 0;
+        for (let r = 0; r < h; r++) {
+            for (let c = 0; c < w; c++) {
                 if (this.grid[r][c].building === 'citadel') {
                     this.citadelLocation = { r, c };
                     return;
+                }
+            }
+        }
+    }
+
+    private cacheLighthouseLocations() {
+        this.lighthouseLocations = [];
+        const h = this.grid.length;
+        const w = h > 0 ? this.grid[0].length : 0;
+        for (let r = 0; r < h; r++) {
+            for (let c = 0; c < w; c++) {
+                if (this.grid[r][c].building === 'lighthouse') {
+                    this.lighthouseLocations.push({ r, c });
                 }
             }
         }
@@ -228,6 +246,9 @@ export class GameState {
             }
             // Re-spawn Bases
             this.setupBases();
+            // Rebuild caches after bases may overwrite static features
+            this.cacheCitadelLocation();
+            this.cacheLighthouseLocations();
             // For this strictly typed edit, I can't call private method.
             // I will skip town regen for "keepMap" for now or expose it differently?
             // Actually, if I modify MapGenerator to have public `distributeTowns`, I can call it.
@@ -801,6 +822,10 @@ export class GameState {
                 }
             }
         }
+
+        // Rebuild static map feature caches after load
+        this.cacheCitadelLocation();
+        this.cacheLighthouseLocations();
     }
     getNeighbors(r: number, c: number): Cell[] {
         const neighbors: Cell[] = [];

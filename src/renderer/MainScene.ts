@@ -113,6 +113,7 @@ export class MainScene extends Phaser.Scene {
         // Gold Mine Asset
         this.load.image('gold_mine', 'assets/gold_mine.png');
         this.load.image('citadel', 'assets/citadel.png');
+        this.load.image('lighthouse', 'assets/lighthouse.png');
 
         // Avatar Assets (Direct Load)
         this.load.image('icon_human_cartoon', 'assets/cartoon_human.png');
@@ -1617,6 +1618,7 @@ export class MainScene extends Phaser.Scene {
                     || child.texture.key.startsWith('watchtower')
                     || child.texture.key.startsWith('farm')
                     || child.texture.key.startsWith('town_level')
+                    || child.texture.key.startsWith('lighthouse')
                     || child.texture.key.startsWith('treasure_chest')
                     || child.texture.key.startsWith('flotsam')
                 )) {
@@ -1756,6 +1758,10 @@ export class MainScene extends Phaser.Scene {
                     const townSprite = this.add.image(x + this.tileSize / 2, y + this.tileSize / 2, finalKey);
                     townSprite.setDisplaySize(this.tileSize * 0.9, this.tileSize * 0.9); // Slight padding
                     this.mapContainer.add(townSprite);
+                } else if (cell.building === 'lighthouse') {
+                    const sprite = this.add.image(x + this.tileSize / 2, y + this.tileSize / 2, 'lighthouse');
+                    sprite.setDisplaySize(this.tileSize * 0.9, this.tileSize * 0.9);
+                    this.mapContainer.add(sprite);
                 } else if (cell.building === 'farm') {
                     // Farm Visuals
                     const level = cell.farmLevel || 1;

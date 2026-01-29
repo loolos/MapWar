@@ -192,6 +192,7 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
                 if (cell.building === 'gold_mine') { typeStr = "Gold Mine"; }
                 else if (cell.building === 'town') { typeStr = "Town"; }
                 else if (cell.building === 'citadel') { typeStr = "Citadel"; }
+                else if (cell.building === 'lighthouse') { typeStr = "Lighthouse"; }
                 else if (cell.building === 'base') {
                     typeStr = "Base";
                     if (cell.defenseLevel > 0) typeStr += ` (Def Lvl ${cell.defenseLevel})`;
@@ -278,6 +279,27 @@ export class CellInfoSystem extends Phaser.GameObjects.Container {
         let desc = "";
         if (cell.building === 'gold_mine') desc = "Generates +5 G.";
         else if (cell.building === 'town') desc = `Generates +${this.formatNumber(cell.townIncome)} G.`;
+        else if (cell.building === 'lighthouse') {
+            desc = "Lighthouse: provides bonus income when owned and reduces flood chance on the owner's tiles.";
+
+            const auraRange = GameConfig.WATCHTOWER_RANGES?.[3] ?? 4;
+            const discount = GameConfig.WATCHTOWER_DISCOUNT_BASE ?? 0.2;
+            desc += `\n* Aura: range ${auraRange}, attack cost discount +${Math.round(discount * 100)}% (same as Watchtower Lv 3).`;
+
+            if (engine?.state && cell.owner) {
+                const count = Math.max(1, engine.state.getLighthouseCount(cell.owner));
+                const capped = Math.min(5, count);
+                const totalBonus = GameConfig.LIGHTHOUSE_INCOME_BY_COUNT?.[capped - 1] ?? 0;
+                const per = totalBonus / count;
+                desc += `\n* Lighthouse income: own ${count} → total bonus +${this.formatNumber(totalBonus)} G, about +${this.formatNumber(per)} G per lighthouse.`;
+
+                const mult = GameConfig.LIGHTHOUSE_FLOOD_MULTIPLIER?.[capped - 1] ?? 1;
+                desc += `\n* Flood reduction: flood chance ×${this.formatNumber(mult)} on your tiles (with ${capped} lighthouse(s)).`;
+            } else {
+                desc += "\n* Lighthouse income: owning 1/2/3/4/5 → total bonus +3/+10/+30/+60/+100 G (split evenly across your lighthouses).";
+                desc += "\n* Flood reduction: owning 1/2/3/4/5 → flood chance ×0.8/×0.5/×0.2/×0.1/×0 (immune).";
+            }
+        }
         else if (cell.building === 'citadel') {
             desc = `Citadel. +${GameConfig.CITADEL_INCOME_PER_TURN} G.`;
             desc += `\n* DOMINANCE: Hold ${GameConfig.CITADEL_DOMINANCE_TURNS_MIN} turns for Attack x${GameConfig.CITADEL_DOMINANCE_FACTOR}.`;
