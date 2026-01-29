@@ -244,16 +244,18 @@ export class PlayerStatusSystem {
         const iconSize = Math.min(h - 4, 28 * s);
         const iconX = W - (iconSize / 2) - 5;
 
-        // Type Icon
+        const texKey = (k: string) => scene.textures.exists(k + '_transparent') ? k + '_transparent' : k;
+
+        // Type Icon (avatar)
         const iconKey = player.isAI ? 'icon_robot_cartoon' : 'icon_human_cartoon';
-        const icon = scene.add.image(iconX, h / 2, iconKey)
+        const icon = scene.add.image(iconX, h / 2, texKey(iconKey))
             .setDisplaySize(iconSize, iconSize);
         row.add(icon);
 
         // Coin
         const coinSize = Math.floor(goldSize * 0.9);
         const coinX = iconX - (iconSize / 2) - 5 - (coinSize / 2);
-        const coin = scene.add.image(coinX, h / 2, 'icon_gold_3d').setDisplaySize(coinSize, coinSize);
+        const coin = scene.add.image(coinX, h / 2, texKey('icon_gold_3d')).setDisplaySize(coinSize, coinSize);
         row.add(coin);
 
         // Gold Value
