@@ -45,7 +45,7 @@ const parseArgs = (): CliOptions => {
         winBonus2p: 1,
         winBonus4p: 2,
         winBonus8p: 4,
-        mapTypes: ['default', 'archipelago', 'pangaea'],
+        mapTypes: ['default', 'archipelago', 'pangaea', 'mountains', 'rivers'],
         baseVariantRange: 0.1,
         defaultVariantRange: 0.4,
         diversityMaxAttempts: 500,

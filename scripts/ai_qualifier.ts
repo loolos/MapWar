@@ -129,7 +129,7 @@ export const qualifiesCandidate = (
 ): boolean => {
     const maps: Array<{ type: MapType; seed: number }> = [
         { type: 'default', seed: mapSeeds.default },
-        { type: 'river', seed: mapSeeds.river }
+        { type: 'rivers', seed: mapSeeds.river }
     ];
     let wins = 0;
     let losses = 0;
