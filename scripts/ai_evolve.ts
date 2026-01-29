@@ -17,7 +17,7 @@ import {
     rankResults,
     type TournamentOptions
 } from './ai_tournament_lib';
-import { getQualifierMapSeedsFromSeed, qualifiesCandidate } from './ai_qualifier';
+import { qualifiesCandidate } from './ai_qualifier';
 
 type CliOptions = TournamentOptions & {
     rounds: number;
@@ -201,8 +201,8 @@ const buildQualifiedVariant = (
         );
         const aiSeedBase = options.seed + roundIndex * 100000 + baseIndex * 10000 + variantIndex * 1000 + attempt * 10;
         const mapBlock = Math.floor((attempt - 1) / refreshEvery);
-        const mapSeeds = getQualifierMapSeedsFromSeed(mapSeedBase + mapBlock * 100);
-        const qualified = qualifiesCandidate(candidate, baseProfile, mapSeeds, aiSeedBase);
+        const qualifierSeedBase = mapSeedBase + mapBlock * 100;
+        const qualified = qualifiesCandidate(candidate, baseProfile, options.mapTypes, qualifierSeedBase, aiSeedBase);
         if (qualified) {
             if (!options.quiet) {
                 console.log(`Round ${roundIndex + 1} variant: base ${baseIndex + 1} variant ${variantIndex} qualified after ${attempt} tries.`);
@@ -248,8 +248,8 @@ const generateDiversityProfiles = (
             );
             const aiSeedBase = options.seed + roundIndex * 100000 + baseIndex * 10000 + attempt * 10;
             const mapBlock = Math.floor((attempt - 1) / refreshEvery);
-            const mapSeeds = getQualifierMapSeedsFromSeed(options.seed + roundIndex * 100000 + baseIndex * 10000 + mapBlock * 100);
-            if (qualifiesCandidate(candidate, opponent, mapSeeds, aiSeedBase)) {
+            const qualifierSeedBase = options.seed + roundIndex * 100000 + baseIndex * 10000 + mapBlock * 100;
+            if (qualifiesCandidate(candidate, opponent, options.mapTypes, qualifierSeedBase, aiSeedBase)) {
                 diversity.push(candidate);
                 qualified = true;
                 if (!options.quiet) {

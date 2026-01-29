@@ -2,23 +2,17 @@ import { GameEngine } from '../src/core/GameEngine';
 import { GameConfig } from '../src/core/GameConfig';
 import type { MapType } from '../src/core/map/MapGenerator';
 import type { AIProfile } from '../src/core/ai/AIProfile';
-import { withSeededRandom } from './ai_tournament_lib';
+import { createSeededRandom, withSeededRandom } from './ai_tournament_lib';
 
-export type QualifierMapSeeds = {
-    default: number;
-    river: number;
-};
-
-export const getQualifierMapSeedsFromSeed = (seed: number): QualifierMapSeeds => {
-    const base = seed + 4242;
-    return {
-        default: base + 1,
-        river: base + 2
-    };
-};
-
-export const getQualifierMapSeeds = (seed: number, roundIndex: number): QualifierMapSeeds => {
-    return getQualifierMapSeedsFromSeed(seed + roundIndex * 100000);
+const pickTwoDistinctMapTypes = (mapTypes: MapType[], seed: number): MapType[] => {
+    const unique = Array.from(new Set(mapTypes));
+    if (unique.length === 0) return ['default'];
+    if (unique.length === 1) return [unique[0], unique[0]];
+    const rng = createSeededRandom(seed);
+    const first = Math.floor(rng() * unique.length);
+    let second = Math.floor(rng() * (unique.length - 1));
+    if (second >= first) second += 1;
+    return [unique[first], unique[second]];
 };
 
 const countLandByPlayer = (grid: { owner: string | null }[][]): Record<string, number> => {
@@ -124,13 +118,15 @@ const runQualifierMatch = (
 export const qualifiesCandidate = (
     candidate: AIProfile,
     base: AIProfile,
-    mapSeeds: QualifierMapSeeds,
+    mapTypes: MapType[],
+    qualifierSeedBase: number,
     aiSeedBase: number
 ): boolean => {
-    const maps: Array<{ type: MapType; seed: number }> = [
-        { type: 'default', seed: mapSeeds.default },
-        { type: 'rivers', seed: mapSeeds.river }
-    ];
+    const picked = pickTwoDistinctMapTypes(mapTypes, qualifierSeedBase + 4242);
+    const maps: Array<{ type: MapType; seed: number }> = picked.map((type, idx) => ({
+        type,
+        seed: qualifierSeedBase + 100 + idx * 1000
+    }));
     let wins = 0;
     let losses = 0;
 
