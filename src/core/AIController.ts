@@ -420,6 +420,7 @@ export class AIController {
             if (cell.owner) score += weights.SCORE_CITADEL; // Extra when enemy-held (take-back priority)
         } else if (cell.building === 'town' && cell.owner !== aiPlayerId) score += weights.SCORE_TOWN;
         else if (cell.building === 'gold_mine' && cell.owner !== aiPlayerId) score += weights.SCORE_GOLD_MINE;
+        else if (cell.building === 'lighthouse' && cell.owner !== aiPlayerId) score += weights.SCORE_LIGHTHOUSE;
         return score;
     }
 

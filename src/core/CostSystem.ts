@@ -21,6 +21,9 @@ export class CostSystem {
         } else if (cell.building === 'town' && (cell.owner === null || cell.owner === 'neutral')) {
             baseCost = GameConfig.COST_CAPTURE_TOWN; // 30
             breakdownParts.push(`Capture Town(${baseCost})`);
+        } else if (cell.building === 'lighthouse' && cell.owner === null) {
+            baseCost = GameConfig.COST_CAPTURE_LIGHTHOUSE;
+            breakdownParts.push(`Capture Lighthouse(${baseCost})`);
         } else {
             if (cell.type === 'hill') {
                 baseCost = GameConfig.COST_CAPTURE * 2;
@@ -47,13 +50,16 @@ export class CostSystem {
             } else if (isCitadel) {
                 baseCost = GameConfig.COST_CAPTURE_CITADEL * 2;
                 breakdownParts = [`Attack Citadel(${baseCost})`];
+            } else if (cell.building === 'lighthouse') {
+                baseCost = GameConfig.COST_ATTACK_LIGHTHOUSE;
+                breakdownParts = [`Attack Lighthouse(${baseCost})`];
             } else {
                 baseCost = GameConfig.COST_ATTACK; // 20
                 breakdownParts = [`Attack(${baseCost})`];
             }
 
-            // Adjust for Terrain in Attack
-            if (!isBase && !isCitadel) {
+            // Adjust for Terrain in Attack (lighthouse is fixed cost)
+            if (!isBase && !isCitadel && cell.building !== 'lighthouse') {
                 if (cell.type === 'hill' || cell.type === 'bridge') {
                     baseCost = GameConfig.COST_ATTACK * 2;
                     breakdownParts = [`Attack Hill/Bridge(${baseCost})`];
@@ -78,8 +84,8 @@ export class CostSystem {
                 }
             }
 
-            // Watchtower Defense (applies to any building with watchtower)
-            if (cell.watchtowerLevel > 0 && cell.isConnected) {
+            // Watchtower Defense (applies to any building with watchtower; lighthouse has fixed cost)
+            if (cell.building !== 'lighthouse' && cell.watchtowerLevel > 0 && cell.isConnected) {
                 const watchtowerBonus = cell.watchtowerLevel * GameConfig.WATCHTOWER_DEFENSE_BONUS;
                 baseCost += watchtowerBonus;
                 breakdownParts.push(`Tower Lv${cell.watchtowerLevel}(+${watchtowerBonus})`);

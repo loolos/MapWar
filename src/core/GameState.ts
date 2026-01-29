@@ -207,11 +207,11 @@ export class GameState {
                     cell.isConnected = false;
                     cell.unit = null;
 
-                    // Reset Buildings but KEEP TOWNS and CITADEL
+                    // Reset Buildings but KEEP TOWNS, CITADEL, and LIGHTHOUSE
                     if (cell.building === 'town') {
                         cell.townIncome = GameConfig.TOWN_INCOME_BASE;
                         cell.townTurnCount = 0;
-                    } else if (cell.building !== 'citadel') {
+                    } else if (cell.building !== 'citadel' && cell.building !== 'lighthouse') {
                         cell.building = 'none';
                         cell.defenseLevel = 0;
                         cell.incomeLevel = 0;
@@ -255,6 +255,20 @@ export class GameState {
             return null;
         }
         return this.grid[row][col];
+    }
+
+    /**
+     * Count lighthouses owned by a player (for income bonus and flood reduction).
+     */
+    public getLighthouseCount(playerId: PlayerID): number {
+        if (!playerId) return 0;
+        const owned = this.getOwnedCells(playerId);
+        let count = 0;
+        for (const { r, c } of owned) {
+            const cell = this.getCell(r, c);
+            if (cell?.building === 'lighthouse') count++;
+        }
+        return count;
     }
 
     /**
@@ -386,7 +400,7 @@ export class GameState {
         }
     }
 
-    setBuilding(row: number, col: number, type: 'base' | 'town' | 'gold_mine' | 'wall' | 'farm' | 'citadel' | 'none') {
+    setBuilding(row: number, col: number, type: 'base' | 'town' | 'gold_mine' | 'wall' | 'farm' | 'citadel' | 'lighthouse' | 'none') {
         const cell = this.getCell(row, col);
         if (cell) cell.building = type;
     }
@@ -702,6 +716,10 @@ export class GameState {
             income = GameConfig.GOLD_MINE_INCOME;
         } else if (cell.building === 'citadel') {
             income = GameConfig.CITADEL_INCOME_PER_TURN;
+        } else if (cell.building === 'lighthouse') {
+            const count = this.getLighthouseCount(cell.owner);
+            const totalBonus = count >= 1 && count <= 5 ? GameConfig.LIGHTHOUSE_INCOME_BY_COUNT[count - 1] : 0;
+            income = count > 0 ? totalBonus / count : 0;
         } else if (cell.building === 'farm') {
             const level = Math.min(cell.farmLevel, GameConfig.FARM_MAX_LEVEL);
             income = GameConfig.FARM_INCOME[level];

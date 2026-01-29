@@ -5,6 +5,7 @@ export type AIWeights = {
     SCORE_CITADEL_PROXIMITY: number;
     SCORE_TOWN: number;
     SCORE_GOLD_MINE: number;
+    SCORE_LIGHTHOUSE: number;
     SCORE_ENEMY_LAND: number;
     SCORE_DISCONNECT_ENEMY: number;
     SCORE_DEFEND_BASE: number;
@@ -107,6 +108,7 @@ export const DefaultAIWeights: AIWeights = {
     SCORE_CITADEL_PROXIMITY: 25,
     SCORE_TOWN: 198.39,
     SCORE_GOLD_MINE: 150.0,
+    SCORE_LIGHTHOUSE: 200,
     SCORE_WIN_CONDITION: 4949.401,
     STRATEGY_BASE_UPGRADE_BONUS: 33.57,
     STRATEGY_EARLY_EXPANSION_BONUS: 7.576,

@@ -49,6 +49,11 @@ export class AuraSystem {
                     const wallLv = Math.max(1, cell.defenseLevel);
                     discount = GameConfig.WATCHTOWER_DISCOUNT_BASE + ((wallLv - 1) * GameConfig.WATCHTOWER_DISCOUNT_PER_WALL);
                 }
+                // 3. Lighthouse (level-3 watchtower effect)
+                else if (cell.building === 'lighthouse') {
+                    range = GameConfig.WATCHTOWER_RANGES[3]; // 4 tiles
+                    discount = GameConfig.WATCHTOWER_DISCOUNT_BASE; // 20%
+                }
 
                 if (range > 0 && discount > 0) {
                     // Check Distance (Manhattan for Rhombus/Diamond shape)
@@ -78,6 +83,10 @@ export class AuraSystem {
 
         if (cell.watchtowerLevel > 0) {
             return GameConfig.WATCHTOWER_RANGES[cell.watchtowerLevel];
+        }
+
+        if (cell.building === 'lighthouse') {
+            return GameConfig.WATCHTOWER_RANGES[3]; // 4 tiles
         }
 
         return 0;

@@ -530,6 +530,13 @@ export class GameEngine {
             } else if (cell.type === 'hill') {
                 chance *= 0.25; // hills 1/4 as likely to flood as plains
             }
+            // Lighthouse: reduce flood chance for owner's tiles based on how many lighthouses they own
+            if (cell.owner) {
+                const lighthouseCount = Math.min(5, this.state.getLighthouseCount(cell.owner));
+                if (lighthouseCount >= 1) {
+                    chance *= GameConfig.LIGHTHOUSE_FLOOD_MULTIPLIER[lighthouseCount - 1];
+                }
+            }
             if (this.random() > chance) continue;
             const previousOwner = cell.owner; // Store before clearing
             if (previousOwner) {

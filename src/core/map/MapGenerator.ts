@@ -167,6 +167,24 @@ export class MapGenerator {
 
         // Add some hills on islands
         this.scatterTerrain(grid, 'hill', 0.2, 'plain'); // 20% of plains become hills
+
+        // Place 5 lighthouses: four corners + center (uninhabited islands or tiles)
+        const lighthousePositions: { r: number; c: number }[] = [
+            { r: 0, c: 0 },
+            { r: 0, c: width - 1 },
+            { r: height - 1, c: 0 },
+            { r: height - 1, c: width - 1 },
+            { r: Math.floor(height / 2), c: Math.floor(width / 2) }
+        ];
+        for (const { r, c } of lighthousePositions) {
+            if (!this.isValid(grid, r, c)) continue;
+            const cell = grid[r][c];
+            // Only place on water or neutral land; skip if already player-owned (e.g. spawn)
+            if (cell.owner !== null) continue;
+            cell.type = 'plain';
+            cell.building = 'lighthouse';
+            cell.owner = null;
+        }
     }
 
     private static generatePangaea(grid: Cell[][], width: number, height: number, playerCount: number = 2) {

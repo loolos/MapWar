@@ -11,6 +11,11 @@ export const GameConfig = {
     COST_BUILD_BRIDGE: 30,
     // Town Configs
     COST_CAPTURE_TOWN: 30,
+    // Lighthouse (Archipelago: 5 uninhabited islands)
+    COST_CAPTURE_LIGHTHOUSE: 30,
+    COST_ATTACK_LIGHTHOUSE: 60,
+    LIGHTHOUSE_INCOME_BY_COUNT: [3, 10, 30, 60, 100] as const, // total bonus for 1/2/3/4/5 towers
+    LIGHTHOUSE_FLOOD_MULTIPLIER: [0.8, 0.5, 0.2, 0.1, 0] as const, // flood chance mult for owner's tiles
     // Citadel (Pangaea center)
     COST_CAPTURE_CITADEL: 100,
     CITADEL_INCOME_PER_TURN: 10,
