@@ -196,12 +196,49 @@ export class MapGenerator {
             return neighbors.some(([nr, nc]) => this.isValid(grid, nr, nc) && grid[nr][nc].type === 'water');
         };
 
+        const n = spawns.length;
+        // Targets are based on initial per-zone totals and stay fixed across rounds.
+        const initialTerrain = countPerZone();
+        const tWater = initialTerrain.water.reduce((a, b) => a + b, 0) / n;
+        const tHill = initialTerrain.hill.reduce((a, b) => a + b, 0) / n;
+        const tPlain = initialTerrain.plain.reduce((a, b) => a + b, 0) / n; // 各区内平原总计之和 ÷ n
+        const countTownPerZone = (): number[] => {
+            const townCounts = new Array<number>(spawns.length).fill(0);
+            for (let r = 0; r < height; r++) {
+                for (let c = 0; c < width; c++) {
+                    if (grid[r][c].building !== 'town') continue;
+                    for (const i of getZoneIndices(r, c)) townCounts[i]++;
+                }
+            }
+            return townCounts;
+        };
+        const countTreasurePerZone = (): number[] => {
+            const treasureCounts = new Array<number>(spawns.length).fill(0);
+            for (let r = 0; r < height; r++) {
+                for (let c = 0; c < width; c++) {
+                    const gold = grid[r][c].treasureGold;
+                    if (gold == null || gold <= 0) continue;
+                    for (const i of getZoneIndices(r, c)) treasureCounts[i]++;
+                }
+            }
+            return treasureCounts;
+        };
+        const countMinePerZone = (): number[] => {
+            const mineCounts = new Array<number>(spawns.length).fill(0);
+            for (let r = 0; r < height; r++) {
+                for (let c = 0; c < width; c++) {
+                    if (grid[r][c].building !== 'gold_mine') continue;
+                    for (const i of getZoneIndices(r, c)) mineCounts[i]++;
+                }
+            }
+            return mineCounts;
+        };
+        const tTown = countTownPerZone().reduce((a, b) => a + b, 0) / n; // 各区内村落总计之和 ÷ n
+        const tTreasure = countTreasurePerZone().reduce((a, b) => a + b, 0) / n; // 各区内宝箱总计之和 ÷ n
+        const tMine = countMinePerZone().reduce((a, b) => a + b, 0) / n; // 各区内金矿总计之和 ÷ n
+
         for (let round = 0; round < maxRounds; round++) {
-            const { water, hill } = countPerZone();
-            const n = spawns.length;
-            // Target = (sum of per-zone counts) / n, i.e. 各区内该地形总计之和 ÷ 玩家数 (not whole-map count)
-            const tWater = water.reduce((a, b) => a + b, 0) / n;
-            const tHill = hill.reduce((a, b) => a + b, 0) / n;
+            const { water, hill, plain } = countPerZone();
 
             let changed = false;
 
@@ -280,8 +317,6 @@ export class MapGenerator {
             }
 
             if (balancePlain) {
-                const { plain } = countPerZone();
-                const tPlain = plain.reduce((a, b) => a + b, 0) / n; // 各区内平原总计之和 ÷ n
                 for (let i = 0; i < n; i++) {
                     if (plain[i] <= tPlain + tolerance) continue;
                     const candidates: { r: number; c: number }[] = [];
@@ -317,14 +352,7 @@ export class MapGenerator {
             }
 
             if (balanceTowns) {
-                const townCounts = new Array<number>(spawns.length).fill(0);
-                for (let r = 0; r < height; r++) {
-                    for (let c = 0; c < width; c++) {
-                        if (grid[r][c].building !== 'town') continue;
-                        for (const i of getZoneIndices(r, c)) townCounts[i]++;
-                    }
-                }
-                const tTown = townCounts.reduce((a, b) => a + b, 0) / n; // 各区内村落总计之和 ÷ n
+                const townCounts = countTownPerZone();
                 for (let i = 0; i < n; i++) {
                     if (townCounts[i] <= tTown + tolerance) continue;
                     const candidates: { r: number; c: number }[] = [];
@@ -369,15 +397,7 @@ export class MapGenerator {
             }
 
             if (balanceTreasures) {
-                const treasureCounts = new Array<number>(spawns.length).fill(0);
-                for (let r = 0; r < height; r++) {
-                    for (let c = 0; c < width; c++) {
-                        const gold = grid[r][c].treasureGold;
-                        if (gold == null || gold <= 0) continue;
-                        for (const i of getZoneIndices(r, c)) treasureCounts[i]++;
-                    }
-                }
-                const tTreasure = treasureCounts.reduce((a, b) => a + b, 0) / n; // 各区内宝箱总计之和 ÷ n
+                const treasureCounts = countTreasurePerZone();
                 for (let i = 0; i < n; i++) {
                     if (treasureCounts[i] <= tTreasure + tolerance) continue;
                     const candidates: { r: number; c: number }[] = [];
@@ -418,14 +438,7 @@ export class MapGenerator {
             }
 
             if (balanceGoldMines) {
-                const mineCounts = new Array<number>(spawns.length).fill(0);
-                for (let r = 0; r < height; r++) {
-                    for (let c = 0; c < width; c++) {
-                        if (grid[r][c].building !== 'gold_mine') continue;
-                        for (const i of getZoneIndices(r, c)) mineCounts[i]++;
-                    }
-                }
-                const tMine = mineCounts.reduce((a, b) => a + b, 0) / n; // 各区内金矿总计之和 ÷ n
+                const mineCounts = countMinePerZone();
                 const hasAdjacentGoldMine = (r: number, c: number): boolean => {
                     const neighbors = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]];
                     return neighbors.some(([nr, nc]) => this.isValid(grid, nr, nc) && grid[nr][nc].building === 'gold_mine');
@@ -569,9 +582,46 @@ export class MapGenerator {
     }
 
     private static generatePangaea(grid: Cell[][], width: number, height: number, playerCount: number = 2) {
-        // 1. Start with Water
-        this.fillGrid(grid, 'water');
-
+        // 1. Start with Land, then carve edge water inward until ~30% water
+        this.fillGrid(grid, 'plain');
+        const minDim = Math.min(width, height);
+        const edgeBand = Math.max(1, Math.floor(minDim * 0.1));
+        const maxEdgeDist = Math.max(edgeBand + 1, Math.floor(minDim / 2));
+        const edgeWaterProb = 0.97;
+        const minWaterProb = 0.08;
+        const targetWater = Math.floor(width * height * 0.35);
+        let waterCount = 0;
+        const order: { r: number; c: number; edgeDist: number }[] = [];
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
+                const edgeDist = Math.min(r, c, height - 1 - r, width - 1 - c);
+                order.push({ r, c, edgeDist });
+            }
+        }
+        order.sort((a, b) => a.edgeDist - b.edgeDist || Math.random() - 0.5);
+        // Extra randomness per ring to avoid overly uniform inward expansion
+        for (let i = 0; i < order.length; ) {
+            const d = order[i].edgeDist;
+            let j = i + 1;
+            while (j < order.length && order[j].edgeDist === d) j++;
+            for (let k = j - 1; k > i; k--) {
+                const swap = i + Math.floor(Math.random() * (k - i + 1));
+                [order[k], order[swap]] = [order[swap], order[k]];
+            }
+            i = j;
+        }
+        for (const { r, c, edgeDist } of order) {
+            if (waterCount >= targetWater) break;
+            let waterProb = edgeWaterProb;
+            if (edgeDist > edgeBand) {
+                const t = (edgeDist - edgeBand) / (maxEdgeDist - edgeBand);
+                waterProb = Math.max(minWaterProb, edgeWaterProb * (1 - t));
+            }
+            if (Math.random() < waterProb) {
+                grid[r][c].type = 'water';
+                waterCount++;
+            }
+        }
         const centerX = Math.floor(width / 2);
         const centerY = Math.floor(height / 2);
 
@@ -581,7 +631,8 @@ export class MapGenerator {
             const spawn = this.getSpawnPoint(i, playerCount, width, height);
             spawnPoints.push(spawn);
             // Large cluster at spawn to guarantee start area
-            this.growClusterAt(grid, spawn.r, spawn.c, 'plain', 25, 'water');
+            const spawnClusterSize = Math.max(8, Math.floor((width * height) / playerCount / 5));
+            this.growClusterAt(grid, spawn.r, spawn.c, 'plain', spawnClusterSize, 'water');
         }
 
         // 3. Connect Spawns to Center (Land Arms)
@@ -637,41 +688,12 @@ export class MapGenerator {
             }
         }
 
-        // 4. Organic Filling (Expand to target %)
-        // Target roughly 65-75% land for Pangea
-        const targetLand = Math.floor(width * height * 0.70);
-        let currentLand = grid.flat().filter(c => c.type === 'plain').length;
-        let safety = 0;
-
-        while (currentLand < targetLand && safety < 200) {
-            safety++;
-            // Pick a random existing land tile to grow from (maintains connectivity)
-            const r = Math.floor(Math.random() * height);
-            const c = Math.floor(Math.random() * width);
-
-            if (grid[r][c].type === 'plain') {
-                // Find a water neighbor to expand into
-                const neighbors = [
-                    { r: r + 1, c }, { r: r - 1, c },
-                    { r, c: c + 1 }, { r, c: c - 1 }
-                ];
-                const validWater = neighbors.filter(n =>
-                    this.isValid(grid, n.r, n.c) && grid[n.r][n.c].type === 'water'
-                );
-
-                if (validWater.length > 0) {
-                    const target = validWater[Math.floor(Math.random() * validWater.length)];
-                    this.growClusterAt(grid, target.r, target.c, 'plain', 12, 'water');
-                    currentLand = grid.flat().filter(c => c.type === 'plain').length;
-                }
-            }
-        }
-
-        // 5. Add Texture (Hills, Forests?)
+        // 4. Add Texture (Hills, Forests?)
         this.scatterTerrain(grid, 'hill', 0.15, 'plain');
 
         // Ensure each spawn is connected to the main landmass
         this.ensureSpawnsOnMainland(grid, width, height, spawnPoints);
+        this.trimToMainland(grid, width, height);
     }
 
     private static placePangaeaCitadel(grid: Cell[][], width: number, height: number) {
@@ -893,6 +915,21 @@ export class MapGenerator {
         }
 
         return { masses };
+    }
+
+    private static trimToMainland(grid: Cell[][], width: number, height: number) {
+        const { masses } = this.getLandmasses(grid, width, height);
+        if (masses.length <= 1) return;
+        masses.sort((a, b) => b.cells.length - a.cells.length);
+        for (let i = 1; i < masses.length; i++) {
+            for (const cell of masses[i].cells) {
+                const c = grid[cell.r][cell.c];
+                c.type = 'water';
+                c.building = 'none';
+                c.owner = null;
+                c.treasureGold = null;
+            }
+        }
     }
 
     private static findClosestCell(origin: { r: number; c: number }, cells: { r: number; c: number }[]) {
@@ -1221,6 +1258,7 @@ export class MapGenerator {
         const minDistance = Math.max(3, Math.floor(Math.min(width, height) / 6));
         const shortSide = Math.min(width, height);
         const scoreThreshold = shortSide / 3;
+        const chestMinSpacing = Math.max(2, Math.floor(Math.min(width, height) / 8));
 
         const candidates: { r: number; c: number }[] = [];
         for (let r = 0; r < height; r++) {
@@ -1229,14 +1267,12 @@ export class MapGenerator {
                 if (cell.type !== 'plain') continue;
                 if (cell.owner !== null || cell.building !== 'none') continue;
                 if (cell.treasureGold !== null) continue;
-                let ok = true;
+                let minSpawnDist = Infinity;
                 for (const sp of spawns) {
-                    if (manhattan(r, c, sp.r, sp.c) < minDistance) {
-                        ok = false;
-                        break;
-                    }
+                    const d = manhattan(r, c, sp.r, sp.c);
+                    if (d < minSpawnDist) minSpawnDist = d;
                 }
-                if (ok) candidates.push({ r, c });
+                if (minSpawnDist >= minDistance) candidates.push({ r, c });
             }
         }
 
@@ -1253,6 +1289,15 @@ export class MapGenerator {
 
         const pickedSet = new Set<string>();
         const picks: { r: number; c: number }[] = [];
+        const minPickedDistance = (r: number, c: number): number | null => {
+            if (picks.length === 0) return null;
+            let best = Infinity;
+            for (const p of picks) {
+                const d = manhattan(r, c, p.r, p.c);
+                if (d < best) best = d;
+            }
+            return Number.isFinite(best) ? best : null;
+        };
 
         for (let i = 0; i < totalCount; i++) {
             let bestCell: { r: number; c: number } | null = null;
@@ -1261,6 +1306,8 @@ export class MapGenerator {
 
             for (const { r, c } of candidates) {
                 if (pickedSet.has(`${r},${c}`)) continue;
+                const minChestDist = minPickedDistance(r, c);
+                if (minChestDist !== null && minChestDist < chestMinSpacing) continue;
                 const dists = spawns.map((s, idx) => ({ idx, d: manhattan(r, c, s.r, s.c) }));
                 dists.sort((a, b) => a.d - b.d);
                 const nearest3 = dists.slice(0, Math.min(3, dists.length));
@@ -1327,8 +1374,8 @@ export class MapGenerator {
                 if (isTargetType || canOverwrite) {
                     if (!isTargetType) {
                         cell.type = type as any; // Cast safely
-                        size++;
                     }
+                    size++;
 
                     // Add neighbors
                     queue.push({ r: curr.r + 1, c: curr.c });
