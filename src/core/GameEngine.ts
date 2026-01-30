@@ -619,9 +619,19 @@ export class GameEngine {
         for (const entry of this.floodedCells.values()) {
             const cell = this.state.getCell(entry.r, entry.c);
             if (!cell) continue;
-            if (cell.type === 'water' && entry.type !== 'bridge') {
-                cell.type = entry.type;
-                restored++;
+            if (entry.type !== 'bridge') {
+                if (cell.type === 'water' || cell.type === 'bridge') {
+                    cell.type = entry.type;
+                    cell.owner = null;
+                    cell.building = 'none';
+                    cell.defenseLevel = 0;
+                    cell.incomeLevel = 0;
+                    cell.watchtowerLevel = 0;
+                    cell.farmLevel = 0;
+                    cell.unit = null;
+                    cell.isConnected = false;
+                    restored++;
+                }
             }
         }
         this.floodedCells.clear();

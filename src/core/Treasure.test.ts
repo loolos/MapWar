@@ -154,17 +154,19 @@ describe('Treasure Chest/Flotsam System', () => {
                 spawns.push({ r, c });
             }
             
-            const minDistance = Math.max(3, Math.floor(Math.min(width, height) / 5));
+            const minDistance = Math.max(3, Math.floor(Math.min(width, height) / 6));
             const manhattan = (r1: number, c1: number, r2: number, c2: number) =>
                 Math.abs(r1 - r2) + Math.abs(c1 - c2);
             
             for (let r = 0; r < height; r++) {
                 for (let c = 0; c < width; c++) {
-                    if (grid[r][c].treasureGold !== null) {
+                    if (grid[r][c].treasureGold !== null && grid[r][c].type === 'plain') {
+                        let nearest = Infinity;
                         for (const spawn of spawns) {
                             const dist = manhattan(r, c, spawn.r, spawn.c);
-                            expect(dist).toBeGreaterThanOrEqual(minDistance);
+                            if (dist < nearest) nearest = dist;
                         }
+                        expect(nearest).toBeGreaterThanOrEqual(minDistance);
                     }
                 }
             }

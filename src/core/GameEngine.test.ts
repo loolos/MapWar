@@ -1121,6 +1121,39 @@ describe('GameEngine', () => {
             expect(target.building).toBe('none');
         });
 
+        it('restores non-bridge terrain even if a bridge was built on flooded tile', () => {
+            setupFloodMap();
+
+            const target = engine.state.grid[5][4];
+            target.type = 'hill';
+            target.owner = 'P2';
+            target.building = 'farm';
+
+            // Simulate a flooded tile that later had a bridge built on it
+            target.type = 'bridge';
+            target.owner = 'P1';
+            target.building = 'wall';
+            target.defenseLevel = 2;
+            target.incomeLevel = 1;
+            target.watchtowerLevel = 1;
+            target.farmLevel = 1;
+            target.unit = {} as any;
+            target.isConnected = true;
+            (engine as any).floodedCells.set('5,4', { r: 5, c: 4, type: 'hill' });
+
+            const restored = (engine as any).applyFloodRecedeEvent();
+            expect(restored).toBeGreaterThan(0);
+            expect(target.type).toBe('hill');
+            expect(target.owner).toBe(null);
+            expect(target.building).toBe('none');
+            expect(target.defenseLevel).toBe(0);
+            expect(target.incomeLevel).toBe(0);
+            expect(target.watchtowerLevel).toBe(0);
+            expect(target.farmLevel).toBe(0);
+            expect(target.unit).toBe(null);
+            expect(target.isConnected).toBe(false);
+        });
+
         it('accumulates multiple floods and fully recedes', () => {
             setupFloodMap();
             GameConfig.FLOOD_CHANCE_BASE = 1;
