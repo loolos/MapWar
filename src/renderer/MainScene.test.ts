@@ -522,16 +522,18 @@ describe('MainScene', () => {
         addButtonSpy.mockClear();
         scene.setupButtons();
 
-        // Should add Clear, End Turn, and Mute (Clear/End Turn take optional { disabled } for AI turn)
-        expect(addButtonSpy).toHaveBeenCalledTimes(3);
+        // Should add Clear, End Turn, Mute, and Autoplay (Clear/End Turn take optional { disabled } for AI turn)
+        expect(addButtonSpy).toHaveBeenCalledTimes(4);
         expect(addButtonSpy).toHaveBeenCalledWith(0, 0, "CLEAR", expect.any(Function), expect.anything());
         expect(addButtonSpy).toHaveBeenCalledWith(1, 0, "END TURN", expect.any(Function), expect.anything());
         expect(addButtonSpy).toHaveBeenCalledWith(0, 1, "MUTE 🔊", expect.any(Function));
+        expect(addButtonSpy).toHaveBeenCalledWith(1, 1, "AUTOPLAY ON", expect.any(Function));
 
         scene.soundManager.isMuted = true;
         scene.setupButtons();
         expect(addButtonSpy).toHaveBeenCalledWith(0, 0, "CLEAR", expect.any(Function), expect.anything());
         expect(addButtonSpy).toHaveBeenCalledWith(1, 0, "END TURN", expect.any(Function), expect.anything());
         expect(addButtonSpy).toHaveBeenCalledWith(0, 1, "UNMUTE 🔇", expect.any(Function));
+        expect(addButtonSpy).toHaveBeenCalledWith(1, 1, "AUTOPLAY ON", expect.any(Function));
     });
 });

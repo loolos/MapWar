@@ -1183,6 +1183,13 @@ export class MainScene extends Phaser.Scene {
             // Re-render buttons to update label
             this.setupButtons();
         });
+
+        // Button 4: Autoplay (auto AI for human players)
+        const autoplayLabel = this.engine.isAutoplayEnabled() ? "AUTOPLAY OFF" : "AUTOPLAY ON";
+        this.buttonSystem.addButton(1, 1, autoplayLabel, () => {
+            this.engine.toggleAutoplay();
+            this.setupButtons();
+        });
     }
 
     /**

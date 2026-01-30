@@ -45,6 +45,8 @@ export class GameEngine {
 
     // AI
     ai: AIController;
+    private autoplayEnabled: boolean = false;
+    private originalIsAIByPlayerId: Map<string, boolean> = new Map();
 
     // Tutorial State
     hasTriggeredEnclaveTutorial: boolean = false;
@@ -96,6 +98,34 @@ export class GameEngine {
             if (profile) {
                 this.ai.setProfileForPlayer(playerId, profile);
             }
+        }
+    }
+
+    public isAutoplayEnabled(): boolean {
+        return this.autoplayEnabled;
+    }
+
+    public toggleAutoplay() {
+        this.autoplayEnabled = !this.autoplayEnabled;
+        if (this.autoplayEnabled) {
+            this.originalIsAIByPlayerId.clear();
+            for (const playerId of Object.keys(this.state.players)) {
+                const player = this.state.players[playerId];
+                this.originalIsAIByPlayerId.set(playerId, player.isAI);
+                if (!player.isAI) player.isAI = true;
+            }
+            const current = this.state.getCurrentPlayer();
+            if (current.isAI) {
+                this.triggerAiTurn();
+            }
+        } else {
+            for (const playerId of Object.keys(this.state.players)) {
+                const original = this.originalIsAIByPlayerId.get(playerId);
+                if (original != null) {
+                    this.state.players[playerId].isAI = original;
+                }
+            }
+            this.originalIsAIByPlayerId.clear();
         }
     }
 
