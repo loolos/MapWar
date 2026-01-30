@@ -519,9 +519,10 @@ export class GameEngine {
         const affectedPlayers = new Set<string>(); // Track players whose lands were flooded
         const affectedChanges: OwnershipChange[] = [];
         let flooded = 0;
+        const floodImmuneBuildings = new Set(['base', 'citadel', 'lighthouse', 'town']);
         for (const { r, c, isBridge } of candidates) {
             const cell = grid[r][c];
-            if (cell.type === 'water' || cell.building === 'base') continue;
+            if (cell.type === 'water' || (cell.building && floodImmuneBuildings.has(cell.building))) continue;
             let chance = cell.building === 'wall' ? floodChanceWall : floodChanceBase;
             if (isBridge) {
                 const distRaw = distanceToLand[r][c];

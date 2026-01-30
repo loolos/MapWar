@@ -35,22 +35,32 @@ export class MapGenerator {
                 this.generateMountains(grid, width, height, playerCount);
                 break;
             case 'rivers':
-                this.generateRivers(grid, width, height);
+                this.generateRivers(grid, width, height, playerCount);
                 break;
             case 'default':
             default:
-                this.generateDefault(grid, width, height);
+                this.generateDefault(grid, width, height, playerCount);
                 break;
         }
 
-        // Post-Processing: Distribute Towns
-        this.distributeTowns(grid, width, height);
+        // Post-Processing: Distribute Towns (zone-aware for default map)
+        const spawns = this.getSpawnPoints(playerCount, width, height);
+        const area = width * height;
+        const zoneRadius = Math.max(3, Math.floor(Math.sqrt(area / playerCount) / 2));
+        this.distributeTowns(grid, width, height, (type === 'default' || type === 'rivers') ? { playerCount, spawns, zoneRadius } : undefined);
 
         // Post-Processing: Ensure Spawn Accessibility
         this.ensureAccessibility(grid, width, height, playerCount);
 
         // Post-Processing: Distribute Treasures/Flotsam (fair per-player)
         this.distributeTreasures(grid, width, height, playerCount);
+
+        // Post-Processing: Balance towns and treasures per zone (always after distributeTowns & distributeTreasures)
+        this.balanceZoneTerrain(grid, width, height, spawns, zoneRadius, {
+            balanceTerrainTypes: [],
+            maxRounds: 40,
+            tolerance: 2
+        });
     }
 
     private static getSpawnPoint(index: number, total: number, width: number, height: number): { r: number, c: number } {
@@ -76,17 +86,334 @@ export class MapGenerator {
         return { r, c };
     }
 
-    private static generateDefault(grid: Cell[][], width: number, height: number) {
+    /**
+     * Generate base terrain with optional terrain types. Default ['water','hill','plain'].
+     * Omit 'water' e.g. for rivers map so water is created only in addRiversAlongBisectors.
+     */
+    private static generateDefault(
+        grid: Cell[][],
+        width: number,
+        height: number,
+        playerCount: number,
+        terrainTypes: ('water' | 'hill' | 'plain')[] = ['water', 'hill', 'plain']
+    ) {
         const area = width * height;
         const scaleFactor = area / 100;
 
-        // ~2% Water Clusters
-        const waterClusters = Math.max(2, Math.floor(2 * scaleFactor));
-        for (let i = 0; i < waterClusters; i++) this.growCluster(grid, 'water', 6);
+        // 1. Random phase: clusters only for requested terrain types
+        if (terrainTypes.includes('water')) {
+            const waterClusters = Math.max(2, Math.floor(2 * scaleFactor));
+            for (let i = 0; i < waterClusters; i++) this.growCluster(grid, 'water', 6);
+        }
+        if (terrainTypes.includes('hill')) {
+            const hillClusters = Math.max(3, Math.floor(3 * scaleFactor));
+            for (let i = 0; i < hillClusters; i++) this.growCluster(grid, 'hill', 5);
+        }
 
-        // ~3% Hill Clusters
-        const hillClusters = Math.max(3, Math.floor(3 * scaleFactor));
-        for (let i = 0; i < hillClusters; i++) this.growCluster(grid, 'hill', 5);
+        // 2. Balance per-player zones for the requested terrain types
+        const spawns = this.getSpawnPoints(playerCount, width, height);
+        const zoneRadius = Math.max(3, Math.floor(Math.sqrt(area / playerCount) / 2));
+        this.balanceZoneTerrain(grid, width, height, spawns, zoneRadius, { balanceTerrainTypes: terrainTypes });
+    }
+
+    /**
+     * Zone = cells within Manhattan distance zoneRadius of each spawn.
+     * Balance selected terrain (water/hill/plain), towns, treasures per zone; changes kept minimal (one flip per zone per type per round).
+     * balanceTerrainTypes: which terrain to balance (default ['water','hill','plain']). Omit water e.g. in rivers.
+     * balanceTowns / balanceTreasures: run after towns/treasures are placed (default true).
+     */
+    static balanceZoneTerrain(
+        grid: Cell[][],
+        width: number,
+        height: number,
+        spawns: { r: number; c: number }[],
+        zoneRadius: number,
+        options?: {
+            minimal?: boolean;
+            maxRounds?: number;
+            tolerance?: number;
+            /** Terrain types to balance; default ['water','hill','plain']. Omit water e.g. in rivers to preserve river layout. */
+            balanceTerrainTypes?: ('water' | 'hill' | 'plain')[];
+            balanceTowns?: boolean;
+            balanceTreasures?: boolean;
+        }
+    ) {
+        const minimal = options?.minimal ?? false;
+        const maxRounds = options?.maxRounds ?? (minimal ? 25 : 120);
+        const tolerance = options?.tolerance ?? (minimal ? 3 : 2);
+        const balanceTypes = options?.balanceTerrainTypes ?? ['water', 'hill', 'plain'];
+        const balanceWater = balanceTypes.includes('water');
+        const balanceHill = balanceTypes.includes('hill');
+        const balancePlain = balanceTypes.includes('plain');
+        const balanceTowns = options?.balanceTowns ?? true;
+        const balanceTreasures = options?.balanceTreasures ?? true;
+
+        const manhattan = (r1: number, c1: number, r2: number, c2: number) =>
+            Math.abs(r1 - r2) + Math.abs(c1 - c2);
+
+        const getZoneIndices = (r: number, c: number): number[] => {
+            const indices: number[] = [];
+            for (let i = 0; i < spawns.length; i++) {
+                if (manhattan(r, c, spawns[i].r, spawns[i].c) <= zoneRadius) indices.push(i);
+            }
+            return indices;
+        };
+
+        const countPerZone = () => {
+            const plain = new Array<number>(spawns.length).fill(0);
+            const water = new Array<number>(spawns.length).fill(0);
+            const hill = new Array<number>(spawns.length).fill(0);
+            for (let r = 0; r < height; r++) {
+                for (let c = 0; c < width; c++) {
+                    const zones = getZoneIndices(r, c);
+                    const cell = grid[r][c];
+                    const type = cell.type;
+                    for (const i of zones) {
+                        if (type === 'plain') plain[i]++;
+                        else if (type === 'water') water[i]++;
+                        else if (type === 'hill') hill[i]++;
+                    }
+                }
+            }
+            return { plain, water, hill };
+        };
+
+        const hasPlainNeighbor = (r: number, c: number): boolean => {
+            const neighbors = [
+                [r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]
+            ];
+            return neighbors.some(([nr, nc]) => this.isValid(grid, nr, nc) && grid[nr][nc].type === 'plain');
+        };
+
+        const hasWaterNeighbor = (r: number, c: number): boolean => {
+            const neighbors = [
+                [r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]
+            ];
+            return neighbors.some(([nr, nc]) => this.isValid(grid, nr, nc) && grid[nr][nc].type === 'water');
+        };
+
+        for (let round = 0; round < maxRounds; round++) {
+            const { water, hill } = countPerZone();
+            const n = spawns.length;
+            const tWater = water.reduce((a, b) => a + b, 0) / n;
+            const tHill = hill.reduce((a, b) => a + b, 0) / n;
+
+            let changed = false;
+
+            if (balanceWater) {
+                // Balance water: remove one boundary water from an excess zone, add one adjacent to water in a deficit zone (keeps clustering)
+                for (let i = 0; i < n; i++) {
+                    if (water[i] <= tWater + tolerance) continue;
+                    const candidates: { r: number; c: number }[] = [];
+                    for (let r = 0; r < height; r++) {
+                        for (let c = 0; c < width; c++) {
+                            if (grid[r][c].type !== 'water') continue;
+                            if (!getZoneIndices(r, c).includes(i)) continue;
+                            if (!hasPlainNeighbor(r, c)) continue;
+                            candidates.push({ r, c });
+                        }
+                    }
+                    if (candidates.length > 0) {
+                        const pick = candidates[Math.floor(Math.random() * candidates.length)];
+                        grid[pick.r][pick.c].type = 'plain';
+                        changed = true;
+                    }
+                }
+                for (let i = 0; i < n; i++) {
+                    if (water[i] >= tWater - tolerance) continue;
+                    const candidates: { r: number; c: number }[] = [];
+                    for (let r = 0; r < height; r++) {
+                        for (let c = 0; c < width; c++) {
+                            if (grid[r][c].type !== 'plain') continue;
+                            if (!getZoneIndices(r, c).includes(i)) continue;
+                            if (!hasWaterNeighbor(r, c)) continue;
+                            candidates.push({ r, c });
+                        }
+                    }
+                    if (candidates.length > 0) {
+                        const pick = candidates[Math.floor(Math.random() * candidates.length)];
+                        grid[pick.r][pick.c].type = 'water';
+                        changed = true;
+                    }
+                }
+            }
+
+            if (balanceHill) {
+                // Balance hill: remove one from excess zone, add one in deficit zone
+                for (let i = 0; i < n; i++) {
+                    if (hill[i] <= tHill + tolerance) continue;
+                    const candidates: { r: number; c: number }[] = [];
+                    for (let r = 0; r < height; r++) {
+                        for (let c = 0; c < width; c++) {
+                            if (grid[r][c].type !== 'hill') continue;
+                            if (!getZoneIndices(r, c).includes(i)) continue;
+                            candidates.push({ r, c });
+                        }
+                    }
+                    if (candidates.length > 0) {
+                        const pick = candidates[Math.floor(Math.random() * candidates.length)];
+                        grid[pick.r][pick.c].type = 'plain';
+                        changed = true;
+                    }
+                }
+                for (let i = 0; i < n; i++) {
+                    if (hill[i] >= tHill - tolerance) continue;
+                    const candidates: { r: number; c: number }[] = [];
+                    for (let r = 0; r < height; r++) {
+                        for (let c = 0; c < width; c++) {
+                            if (grid[r][c].type !== 'plain') continue;
+                            if (!getZoneIndices(r, c).includes(i)) continue;
+                            candidates.push({ r, c });
+                        }
+                    }
+                    if (candidates.length > 0) {
+                        const pick = candidates[Math.floor(Math.random() * candidates.length)];
+                        grid[pick.r][pick.c].type = 'hill';
+                        changed = true;
+                    }
+                }
+            }
+
+            if (balancePlain) {
+                const { plain } = countPerZone();
+                const tPlain = plain.reduce((a, b) => a + b, 0) / n;
+                for (let i = 0; i < n; i++) {
+                    if (plain[i] <= tPlain + tolerance) continue;
+                    const candidates: { r: number; c: number }[] = [];
+                    for (let r = 0; r < height; r++) {
+                        for (let c = 0; c < width; c++) {
+                            if (grid[r][c].type !== 'plain') continue;
+                            if (!getZoneIndices(r, c).includes(i)) continue;
+                            candidates.push({ r, c });
+                        }
+                    }
+                    if (candidates.length > 0) {
+                        const pick = candidates[Math.floor(Math.random() * candidates.length)];
+                        grid[pick.r][pick.c].type = 'hill';
+                        changed = true;
+                    }
+                }
+                for (let i = 0; i < n; i++) {
+                    if (plain[i] >= tPlain - tolerance) continue;
+                    const candidates: { r: number; c: number }[] = [];
+                    for (let r = 0; r < height; r++) {
+                        for (let c = 0; c < width; c++) {
+                            if (grid[r][c].type !== 'hill') continue;
+                            if (!getZoneIndices(r, c).includes(i)) continue;
+                            candidates.push({ r, c });
+                        }
+                    }
+                    if (candidates.length > 0) {
+                        const pick = candidates[Math.floor(Math.random() * candidates.length)];
+                        grid[pick.r][pick.c].type = 'plain';
+                        changed = true;
+                    }
+                }
+            }
+
+            if (balanceTowns) {
+                const townCounts = new Array<number>(spawns.length).fill(0);
+                for (let r = 0; r < height; r++) {
+                    for (let c = 0; c < width; c++) {
+                        if (grid[r][c].building !== 'town') continue;
+                        for (const i of getZoneIndices(r, c)) townCounts[i]++;
+                    }
+                }
+                const tTown = townCounts.reduce((a, b) => a + b, 0) / n;
+                for (let i = 0; i < n; i++) {
+                    if (townCounts[i] <= tTown + tolerance) continue;
+                    const candidates: { r: number; c: number }[] = [];
+                    for (let r = 0; r < height; r++) {
+                        for (let c = 0; c < width; c++) {
+                            if (grid[r][c].building !== 'town') continue;
+                            if (!getZoneIndices(r, c).includes(i)) continue;
+                            candidates.push({ r, c });
+                        }
+                    }
+                    if (candidates.length > 0) {
+                        const pick = candidates[Math.floor(Math.random() * candidates.length)];
+                        grid[pick.r][pick.c].building = 'none';
+                        grid[pick.r][pick.c].townIncome = 0;
+                        townCounts[i]--;
+                        changed = true;
+                    }
+                }
+                for (let i = 0; i < n; i++) {
+                    if (townCounts[i] >= tTown - tolerance) continue;
+                    const candidates: { r: number; c: number }[] = [];
+                    for (let r = 0; r < height; r++) {
+                        for (let c = 0; c < width; c++) {
+                            if (grid[r][c].type !== 'plain' || grid[r][c].building !== 'none') continue;
+                            if (!getZoneIndices(r, c).includes(i)) continue;
+                            let tooClose = false;
+                            for (let tr = r - 2; tr <= r + 2; tr++) {
+                                for (let tc = c - 2; tc <= c + 2; tc++) {
+                                    if (this.isValid(grid, tr, tc) && (grid[tr][tc].building === 'town' || grid[tr][tc].building === 'base')) tooClose = true;
+                                }
+                            }
+                            if (!tooClose) candidates.push({ r, c });
+                        }
+                    }
+                    if (candidates.length > 0) {
+                        const pick = candidates[Math.floor(Math.random() * candidates.length)];
+                        grid[pick.r][pick.c].building = 'town';
+                        grid[pick.r][pick.c].townIncome = GameConfig.TOWN_INCOME_BASE;
+                        changed = true;
+                    }
+                }
+            }
+
+            if (balanceTreasures) {
+                const treasureCounts = new Array<number>(spawns.length).fill(0);
+                for (let r = 0; r < height; r++) {
+                    for (let c = 0; c < width; c++) {
+                        const gold = grid[r][c].treasureGold;
+                        if (gold == null || gold <= 0) continue;
+                        for (const i of getZoneIndices(r, c)) treasureCounts[i]++;
+                    }
+                }
+                const tTreasure = treasureCounts.reduce((a, b) => a + b, 0) / n;
+                for (let i = 0; i < n; i++) {
+                    if (treasureCounts[i] <= tTreasure + tolerance) continue;
+                    const candidates: { r: number; c: number }[] = [];
+                    for (let r = 0; r < height; r++) {
+                        for (let c = 0; c < width; c++) {
+                            const gold = grid[r][c].treasureGold;
+                            if (gold == null || gold <= 0) continue;
+                            if (!getZoneIndices(r, c).includes(i)) continue;
+                            candidates.push({ r, c });
+                        }
+                    }
+                    if (candidates.length > 0) {
+                        const pick = candidates[Math.floor(Math.random() * candidates.length)];
+                        grid[pick.r][pick.c].treasureGold = null;
+                        treasureCounts[i]--;
+                        changed = true;
+                    }
+                }
+                for (let i = 0; i < n; i++) {
+                    if (treasureCounts[i] >= tTreasure - tolerance) continue;
+                    const candidates: { r: number; c: number }[] = [];
+                    for (let r = 0; r < height; r++) {
+                        for (let c = 0; c < width; c++) {
+                            if ((grid[r][c].type !== 'plain' && grid[r][c].type !== 'water') || grid[r][c].building !== 'none' || grid[r][c].owner != null) continue;
+                            if (grid[r][c].treasureGold != null) continue;
+                            if (!getZoneIndices(r, c).includes(i)) continue;
+                            candidates.push({ r, c });
+                        }
+                    }
+                    if (candidates.length > 0) {
+                        const pick = candidates[Math.floor(Math.random() * candidates.length)];
+                        const minG = GameConfig.TREASURE_GOLD_MIN;
+                        const maxG = GameConfig.TREASURE_GOLD_MAX;
+                        grid[pick.r][pick.c].treasureGold = minG + Math.floor(Math.random() * (maxG - minG + 1));
+                        changed = true;
+                    }
+                }
+            }
+
+            if (!changed) break;
+        }
     }
 
     private static generateArchipelago(grid: Cell[][], width: number, height: number, playerCount: number) {
@@ -291,6 +618,11 @@ export class MapGenerator {
 
         // Ensure each spawn is connected to the main landmass
         this.ensureSpawnsOnMainland(grid, width, height, spawnPoints);
+
+        // Light zone balance with minimal adjustments (fewer rounds, looser tolerance)
+        const area = width * height;
+        const zoneRadius = Math.max(3, Math.floor(Math.sqrt(area / playerCount) / 2));
+        this.balanceZoneTerrain(grid, width, height, spawnPoints, zoneRadius, { minimal: true });
     }
 
     private static placePangaeaCitadel(grid: Cell[][], width: number, height: number) {
@@ -603,8 +935,8 @@ export class MapGenerator {
     }
 
     private static generateMountains(grid: Cell[][], width: number, height: number, playerCount: number) {
-        // Default land gen
-        this.generateDefault(grid, width, height);
+        // Default land gen (with zone balance)
+        this.generateDefault(grid, width, height, playerCount);
 
         // Heavy Hills
         // Add ranges? Or just high density scatter?
@@ -619,141 +951,141 @@ export class MapGenerator {
 
         // Gold Mines: Fair distribution replacing Hills
         this.distributeGoldMines(grid, width, height, this.getSpawnPoints(playerCount, width, height));
+
+        // Light zone balance with minimal adjustments (fewer rounds, looser tolerance)
+        const spawns = this.getSpawnPoints(playerCount, width, height);
+        const area = width * height;
+        const zoneRadius = Math.max(3, Math.floor(Math.sqrt(area / playerCount) / 2));
+        this.balanceZoneTerrain(grid, width, height, spawns, zoneRadius, { minimal: true });
     }
 
     private static generateRivers(grid: Cell[][], width: number, height: number, playerCount: number = 2) {
-        this.generateDefault(grid, width, height);
+        // 1. Base terrain without water: plain + hill only; water is created in step 2
+        this.generateDefault(grid, width, height, playerCount, ['hill', 'plain']);
 
-        const centerX = Math.floor(width / 2);
-        const centerY = Math.floor(height / 2);
+        const spawns = this.getSpawnPoints(playerCount, width, height);
+        const area = width * height;
+        const zoneRadius = Math.max(3, Math.floor(Math.sqrt(area / playerCount) / 2));
 
-        // 1. Create a Central Lake to block easy crossing
-        // Size proportional to map
-        const lakeSize = Math.max(3, Math.floor(Math.min(width, height) / 6));
-        this.growClusterAt(grid, centerY, centerX, 'water', lakeSize * lakeSize); // Square-ish area
+        // 2. Place all rivers/water along bisectors (no pre-existing water)
+        this.addRiversAlongBisectors(grid, width, height, spawns);
 
-        // 2. Strategic Rivers: Barriers BETWEEN players
-        for (let i = 0; i < playerCount; i++) {
-            // Angle for Player i
-            // We use the same angle offset logic as spawns (-3PI/4) to align checking
-            const offset = -3 * Math.PI / 4;
-            const angleI = (i / playerCount) * 2 * Math.PI - (Math.PI / 2) + offset;
-            const angleNext = ((i + 1) / playerCount) * 2 * Math.PI - (Math.PI / 2) + offset;
-
-            // Average Angle is the Bisector (Between players)
-            // Use vector addition to handle wrap-around correctly
-            const v1x = Math.cos(angleI);
-            const v1y = Math.sin(angleI);
-            const v2x = Math.cos(angleNext);
-            const v2y = Math.sin(angleNext);
-
-            let dx = v1x + v2x;
-            let dy = v1y + v2y;
-
-            // Normalize
-            const len = Math.sqrt(dx * dx + dy * dy);
-            if (len > 0.001) {
-                dx /= len;
-                dy /= len;
-            } else {
-                // Opposite vectors (180 deg) - Pick orthogonal
-                dx = -v1y;
-                dy = v1x;
-            }
-
-            // Start from Center Lake Edge
-            // Move out in direction (dy, dx) -> Row is Y, Col is X
-            let currentR = centerY + dy * (lakeSize / 2);
-            let currentC = centerX + dx * (lakeSize / 2);
-
-            const maxDist = Math.max(width, height) * 1.5;
-            let dist = 0;
-
-            while (this.isValid(grid, Math.floor(currentR), Math.floor(currentC)) && dist < maxDist) {
-                const cellR = Math.floor(currentR);
-                const cellC = Math.floor(currentC);
-
-                grid[cellR][cellC].type = 'water'; // River
-
-                // Widen River occasionally
-                if (dist % 3 === 0) {
-                    // Make it width 2
-                    const neighbors = [
-                        { r: cellR + 1, c: cellC }, { r: cellR - 1, c: cellC },
-                        { r: cellR, c: cellC + 1 }, { r: cellR, c: cellC - 1 }
-                    ];
-                    for (const n of neighbors) {
-                        if (this.isValid(grid, n.r, n.c)) grid[n.r][n.c].type = 'water';
-                    }
-                }
-
-                // Move outwards
-                // Reduced Meander to ensure separation
-                const noise = (Math.random() - 0.5) * 0.3;
-                currentR += dy + (dx * noise);
-                currentC += dx + (-dy * noise);
-
-                dist++;
-            }
-        }
-
-        // 3. Additional Random Rivers for Scaling
-        const extraRivers = Math.floor((width * height) / 150); // One per ~150 tiles
-        for (let j = 0; j < extraRivers; j++) {
-            this.generateRandomRiver(grid, width, height);
-        }
+        // 3. Re-apply zone balance for hill and plain only (do not balance water so river layout is preserved)
+        this.balanceZoneTerrain(grid, width, height, spawns, zoneRadius, { balanceTerrainTypes: ['hill', 'plain'] });
     }
 
-    private static generateRandomRiver(grid: Cell[][], width: number, height: number) {
-        // Pick a random edge point
-        const side = Math.floor(Math.random() * 4);
-        let r = 0;
-        let c = 0;
-        let dr = 0;
-        let dc = 0;
+    /**
+     * Rivers: cells equidistant from two nearest spawns are preferred; water forms thin continuous lines
+     * (exactly 1 river-neighbor when extending = no branching, no widening). Total water target ~18%
+     * so rivers stay narrow; cap remains 35% if design allows.
+     */
+    private static addRiversAlongBisectors(
+        grid: Cell[][],
+        width: number,
+        height: number,
+        spawns: { r: number; c: number }[]
+    ) {
+        const area = width * height;
+        // Target ~18% water so rivers stay narrow; hard cap remains 35% if needed
+        const targetWaterRatio = 0.18;
+        const maxWaterCells = Math.floor(area * targetWaterRatio);
 
-        if (side === 0) { // Top
-            c = Math.floor(Math.random() * width);
-            dr = 1;
-            dc = (Math.random() - 0.5) * 2;
-        } else if (side === 1) { // Bottom
-            r = height - 1;
-            c = Math.floor(Math.random() * width);
-            dr = -1;
-            dc = (Math.random() - 0.5) * 2;
-        } else if (side === 2) { // Left
-            r = Math.floor(Math.random() * height);
-            dc = 1;
-            dr = (Math.random() - 0.5) * 2;
-        } else { // Right
-            r = Math.floor(Math.random() * height);
-            c = width - 1;
-            dc = -1;
-            dr = (Math.random() - 0.5) * 2;
-        }
+        const manhattan = (r1: number, c1: number, r2: number, c2: number) =>
+            Math.abs(r1 - r2) + Math.abs(c1 - c2);
 
-        let currR = r;
-        let currC = c;
-        let dist = 0;
-        const maxDist = Math.max(width, height);
+        const neighborsOf = (r: number, c: number) => [
+            { r: r - 1, c }, { r: r + 1, c }, { r, c: c - 1 }, { r, c: c + 1 }
+        ].filter((n) => this.isValid(grid, n.r, n.c));
 
-        while (this.isValid(grid, Math.floor(currR), Math.floor(currC)) && dist < maxDist) {
-            const cellR = Math.floor(currR);
-            const cellC = Math.floor(currC);
-            grid[cellR][cellC].type = 'water';
+        const getScore = (r: number, c: number): number => {
+            const dists = spawns.map((s) => manhattan(r, c, s.r, s.c)).sort((a, b) => a - b);
+            const d1 = dists[0];
+            const d2 = dists[1];
+            return 1 / (1 + Math.abs(d2 - d1));
+        };
+        // Pick randomly among top N by score so rivers meander instead of straight lines
+        const pickFromTop = <T>(arr: T[], scoreDesc: (t: T) => number, topN: number): T => {
+            if (arr.length === 0) throw new Error('empty');
+            const sorted = [...arr].sort((a, b) => scoreDesc(b) - scoreDesc(a));
+            const n = Math.min(topN, sorted.length);
+            return sorted[Math.floor(Math.random() * n)];
+        };
 
-            // Slight meander
-            dr += (Math.random() - 0.5) * 0.4;
-            dc += (Math.random() - 0.5) * 0.4;
+        let currentWater = 0;
+        for (let r = 0; r < height; r++)
+            for (let c = 0; c < width; c++)
+                if (grid[r][c].type === 'water') currentWater++;
+        const riverBudget = Math.max(0, maxWaterCells - currentWater);
+        if (riverBudget <= 0) return;
 
-            // Normalize vector slightly to keep moving
-            const mag = Math.sqrt(dr * dr + dc * dc);
-            if (mag > 0) {
-                currR += dr / mag;
-                currC += dc / mag;
+        const riverSet = new Set<string>();
+        const key = (r: number, c: number) => `${r},${c}`;
+        const riverNeighborCount = (r: number, c: number): number =>
+            neighborsOf(r, c).filter((n) => riverSet.has(key(n.r, n.c))).length;
+
+        const isAdjacentToRiver = (r: number, c: number): boolean =>
+            neighborsOf(r, c).some((n) => riverSet.has(key(n.r, n.c)));
+
+        // All non-water cells with score, sorted by score desc (for picking seeds)
+        let scoredCells: { r: number; c: number; score: number }[] = [];
+        const refreshScoredCells = () => {
+            scoredCells = [];
+            for (let r = 0; r < height; r++) {
+                for (let c = 0; c < width; c++) {
+                    if (grid[r][c].type === 'water' || riverSet.has(key(r, c))) continue;
+                    scoredCells.push({ r, c, score: getScore(r, c) });
+                }
+            }
+            scoredCells.sort((a, b) => b.score - a.score);
+        };
+        refreshScoredCells();
+
+        const isAdjacentToExistingWater = (r: number, c: number): boolean =>
+            neighborsOf(r, c).some((n) => grid[n.r][n.c].type === 'water' || riverSet.has(key(n.r, n.c)));
+
+        while (riverSet.size < riverBudget) {
+            const seen = new Set<string>();
+            const tipCandidates: { r: number; c: number; score: number; neighbors: number }[] = [];
+            for (const k of riverSet) {
+                const [r, c] = k.split(',').map(Number);
+                for (const n of neighborsOf(r, c)) {
+                    if (riverSet.has(key(n.r, n.c)) || grid[n.r][n.c].type === 'water') continue;
+                    if (seen.has(key(n.r, n.c))) continue;
+                    seen.add(key(n.r, n.c));
+                    const cnt = riverNeighborCount(n.r, n.c);
+                    if (cnt >= 1 && cnt <= 2) {
+                        const base = getScore(n.r, n.c);
+                        const score = base + (Math.random() - 0.5) * 0.12;
+                        tipCandidates.push({ r: n.r, c: n.c, score, neighbors: cnt });
+                    }
+                }
+            }
+            // Prefer extend (1 neighbor) then bridge (2 neighbors); pick from top 2–3 only for mild meander
+            if (tipCandidates.length > 0) {
+                tipCandidates.sort((a, b) => a.neighbors - b.neighbors || b.score - a.score);
+                const bestNeighbors = tipCandidates[0].neighbors;
+                const sameTier = tipCandidates.filter((t) => t.neighbors === bestNeighbors);
+                const chosen = sameTier.length <= 2
+                    ? sameTier[Math.floor(Math.random() * sameTier.length)]
+                    : pickFromTop(sameTier, (t) => t.score, 3);
+                riverSet.add(key(chosen.r, chosen.c));
+                continue;
             }
 
-            dist++;
+            // No adjacent candidate: start from cell next to existing water; pick from top 3 by score
+            refreshScoredCells();
+            let pool = scoredCells.filter((c) => isAdjacentToExistingWater(c.r, c.c));
+            if (pool.length === 0) pool = scoredCells.filter((c) => !isAdjacentToRiver(c.r, c.c));
+            if (pool.length === 0) break;
+            const seed = pool.length <= 2
+                ? pool[Math.floor(Math.random() * pool.length)]
+                : pickFromTop(pool, (c) => c.score, 3);
+            riverSet.add(key(seed.r, seed.c));
+        }
+
+        for (const k of riverSet) {
+            const [r, c] = k.split(',').map(Number);
+            grid[r][c].type = 'water';
         }
     }
 
@@ -982,9 +1314,55 @@ export class MapGenerator {
         }));
     }
 
-    private static distributeTowns(grid: Cell[][], width: number, height: number) {
+    private static distributeTowns(
+        grid: Cell[][],
+        width: number,
+        height: number,
+        zoneOptions?: { playerCount: number; spawns: { r: number; c: number }[]; zoneRadius: number }
+    ) {
         const area = width * height;
         const townCount = Math.max(5, Math.floor(area / 15)); // ~6-7 towns per 100 tiles
+
+        const manhattan = (r1: number, c1: number, r2: number, c2: number) =>
+            Math.abs(r1 - r2) + Math.abs(c1 - c2);
+
+        const canPlaceTown = (r: number, c: number): boolean => {
+            if (grid[r][c].type !== 'plain' || grid[r][c].building !== 'none') return false;
+            for (let tr = r - 2; tr <= r + 2; tr++) {
+                for (let tc = c - 2; tc <= c + 2; tc++) {
+                    if (this.isValid(grid, tr, tc) && (grid[tr][tc].building === 'town' || grid[tr][tc].building === 'base')) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+
+        if (zoneOptions) {
+            const { playerCount, spawns, zoneRadius } = zoneOptions;
+            const targetPerZone = Math.max(1, Math.floor(townCount / playerCount));
+            for (let i = 0; i < spawns.length; i++) {
+                const spawn = spawns[i];
+                const candidates: { r: number; c: number }[] = [];
+                for (let r = 0; r < height; r++) {
+                    for (let c = 0; c < width; c++) {
+                        if (manhattan(r, c, spawn.r, spawn.c) > zoneRadius) continue;
+                        if (canPlaceTown(r, c)) candidates.push({ r, c });
+                    }
+                }
+                let placedInZone = 0;
+                while (placedInZone < targetPerZone && candidates.length > 0) {
+                    const idx = Math.floor(Math.random() * candidates.length);
+                    const { r, c } = candidates[idx];
+                    candidates.splice(idx, 1);
+                    if (!canPlaceTown(r, c)) continue;
+                    grid[r][c].building = 'town';
+                    grid[r][c].townIncome = GameConfig.TOWN_INCOME_BASE;
+                    placedInZone++;
+                }
+            }
+            return;
+        }
 
         let placed = 0;
         let attempts = 0;
@@ -992,27 +1370,10 @@ export class MapGenerator {
             attempts++;
             const r = Math.floor(Math.random() * height);
             const c = Math.floor(Math.random() * width);
-            const cell = grid[r][c];
-
-            if (cell.type === 'plain' && cell.building === 'none') {
-                // Check isolation
-                let tooClose = false;
-                // (Simple local scan for other towns to avoid importing state helpers)
-                for (let tr = r - 2; tr <= r + 2; tr++) {
-                    for (let tc = c - 2; tc <= c + 2; tc++) {
-                        if (this.isValid(grid, tr, tc)) {
-                            if (grid[tr][tc].building === 'town' || grid[tr][tc].building === 'base') {
-                                tooClose = true;
-                            }
-                        }
-                    }
-                }
-
-                if (!tooClose) {
-                    cell.building = 'town';
-                    cell.townIncome = GameConfig.TOWN_INCOME_BASE;
-                    placed++;
-                }
+            if (canPlaceTown(r, c)) {
+                grid[r][c].building = 'town';
+                grid[r][c].townIncome = GameConfig.TOWN_INCOME_BASE;
+                placed++;
             }
         }
     }
