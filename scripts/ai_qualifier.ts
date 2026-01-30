@@ -4,15 +4,31 @@ import type { MapType } from '../src/core/map/MapGenerator';
 import type { AIProfile } from '../src/core/ai/AIProfile';
 import { createSeededRandom, withSeededRandom } from './ai_tournament_lib';
 
-const pickTwoDistinctMapTypes = (mapTypes: MapType[], seed: number): MapType[] => {
+export type QualifierOptions = {
+    /** Number of distinct map types to use (default 2). */
+    numMaps?: number;
+    /** Minimum wins required to qualify (default 3). */
+    minWinsToQualify?: number;
+    /** Rotations (P1/P2 swap) per map (default 2). */
+    rotationsPerMap?: number;
+};
+
+const DEFAULT_QUALIFIER_OPTIONS: Required<QualifierOptions> = {
+    numMaps: 2,
+    minWinsToQualify: 3,
+    rotationsPerMap: 2
+};
+
+const pickNDistinctMapTypes = (mapTypes: MapType[], n: number, seed: number): MapType[] => {
     const unique = Array.from(new Set(mapTypes));
     if (unique.length === 0) return ['default'];
-    if (unique.length === 1) return [unique[0], unique[0]];
+    if (unique.length === 1) return Array(n).fill(unique[0]);
     const rng = createSeededRandom(seed);
-    const first = Math.floor(rng() * unique.length);
-    let second = Math.floor(rng() * (unique.length - 1));
-    if (second >= first) second += 1;
-    return [unique[first], unique[second]];
+    const indices = new Set<number>();
+    while (indices.size < Math.min(n, unique.length)) {
+        indices.add(Math.floor(rng() * unique.length));
+    }
+    return Array.from(indices).map((i) => unique[i]);
 };
 
 const countLandByPlayer = (grid: { owner: string | null }[][]): Record<string, number> => {
@@ -120,9 +136,18 @@ export const qualifiesCandidate = (
     base: AIProfile,
     mapTypes: MapType[],
     qualifierSeedBase: number,
-    aiSeedBase: number
+    aiSeedBase: number,
+    options?: QualifierOptions
 ): boolean => {
-    const picked = pickTwoDistinctMapTypes(mapTypes, qualifierSeedBase + 4242);
+    const opts = { ...DEFAULT_QUALIFIER_OPTIONS, ...options };
+    const numMaps = Math.max(1, opts.numMaps);
+    const rotationsPerMap = Math.max(1, opts.rotationsPerMap);
+    const totalMatches = numMaps * rotationsPerMap;
+    const minWins = Math.min(opts.minWinsToQualify, totalMatches);
+    // Fail once we can no longer reach minWins: e.g. 4/4 → 1 loss = out, 3/4 → 2 losses = out
+    const maxLossesToFail = totalMatches - minWins + 1;
+
+    const picked = pickNDistinctMapTypes(mapTypes, numMaps, qualifierSeedBase + 4242);
     const maps: Array<{ type: MapType; seed: number }> = picked.map((type, idx) => ({
         type,
         seed: qualifierSeedBase + 100 + idx * 1000
@@ -131,7 +156,7 @@ export const qualifiesCandidate = (
     let losses = 0;
 
     for (let mapIndex = 0; mapIndex < maps.length; mapIndex++) {
-        for (let rotation = 0; rotation < 2; rotation++) {
+        for (let rotation = 0; rotation < rotationsPerMap; rotation++) {
             const result = runQualifierMatch(
                 { P1: candidate, P2: base },
                 maps[mapIndex].seed,
@@ -143,12 +168,12 @@ export const qualifiesCandidate = (
                 wins += 1;
             } else {
                 losses += 1;
-                if (losses >= 2) {
+                if (losses >= maxLossesToFail) {
                     return false;
                 }
             }
         }
     }
 
-    return wins >= 3;
+    return wins >= minWins;
 };
