@@ -251,6 +251,24 @@ function runFullMatrix(turns: number, quiet: boolean, profile: boolean): void {
                     const p90 = sorted[Math.floor(sorted.length * 0.90)];
                     const p99 = sorted[Math.floor(sorted.length * 0.99)];
                     console.log(`     P50: ${p50.toFixed(2)} ms  P90: ${p90.toFixed(2)} ms  P99: ${p99.toFixed(2)} ms`);
+                    if (r.perf) {
+                        const entries = Object.entries(r.perf.timesMs)
+                            .map(([name, totalMs]) => ({
+                                name,
+                                totalMs,
+                                count: r.perf?.counts[name] ?? 0,
+                                avgMs: (r.perf?.counts[name] ?? 0) > 0
+                                    ? totalMs / (r.perf?.counts[name] ?? 1)
+                                    : 0
+                            }))
+                            .sort((a, b) => b.totalMs - a.totalMs);
+                        if (entries.length > 0) {
+                            console.log('     Perf (sorted by total ms):');
+                            for (const item of entries) {
+                                console.log(`       ${item.name}: total ${item.totalMs.toFixed(2)} ms  avg ${item.avgMs.toFixed(3)} ms  count ${item.count}`);
+                            }
+                        }
+                    }
                 }
             }
             console.log('');

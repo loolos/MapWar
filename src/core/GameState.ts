@@ -17,6 +17,8 @@ export class GameState {
     lighthouseLocations: { r: number; c: number }[] = [];
     /** Per-player owned cell index: Map<PlayerID, Set<cellKey>> where cellKey = r*width + c */
     private ownedCellsByPlayer: Map<PlayerID, Set<number>> = new Map();
+    /** Snapshot of the base map (no bases/ownership). */
+    private baseMapSnapshot: ReturnType<Cell['serialize']>[][] = [];
 
     constructor(playerConfigs: { id: string, isAI: boolean, color: number }[] = [], mapType: MapType = 'default') {
         this.grid = [];
@@ -67,11 +69,24 @@ export class GameState {
         // 2. Delegate to Generator
         MapGenerator.generate(this.grid, this.currentMapType, GameConfig.GRID_WIDTH, GameConfig.GRID_HEIGHT, this.playerOrder.length);
 
+        // 2b. Snapshot base map before bases are placed.
+        this.storeBaseMapSnapshot();
+
         // 3. Cache static map feature locations
         this.cacheCitadelLocation();
         this.cacheLighthouseLocations();
 
         this.setupBases();
+    }
+
+    private storeBaseMapSnapshot() {
+        this.baseMapSnapshot = this.grid.map(row => row.map(cell => cell.serialize()));
+    }
+
+    private restoreBaseMapSnapshot(): boolean {
+        if (this.baseMapSnapshot.length === 0) return false;
+        this.grid = this.baseMapSnapshot.map(row => row.map(data => Cell.deserialize(data)));
+        return true;
     }
 
     private cacheCitadelLocation() {
@@ -217,47 +232,39 @@ export class GameState {
         this.ownedCellsByPlayer.clear();
         
         if (keepMap) {
-            // Preserve Terrain Types, Reset Ownership/Buildings
-            for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-                for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
-                    const cell = this.grid[r][c];
-                    cell.owner = null;
-                    cell.isConnected = false;
-                    cell.unit = null;
+            // Restore base map snapshot (terrain + static buildings + treasure)
+            // then re-spawn bases for current player order.
+            if (!this.restoreBaseMapSnapshot()) {
+                // Fallback: preserve current terrain if snapshot is missing
+                for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
+                    for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
+                        const cell = this.grid[r][c];
+                        cell.owner = null;
+                        cell.isConnected = false;
+                        cell.unit = null;
 
-                    // Reset Buildings but KEEP TOWNS, CITADEL, and LIGHTHOUSE
-                    if (cell.building === 'town') {
-                        cell.townIncome = GameConfig.TOWN_INCOME_BASE;
-                        cell.townTurnCount = 0;
-                    } else if (cell.building !== 'citadel' && cell.building !== 'lighthouse') {
-                        cell.building = 'none';
-                        cell.defenseLevel = 0;
-                        cell.incomeLevel = 0;
-                        cell.watchtowerLevel = 0;
-                        cell.farmLevel = 0;
-                    }
+                        if (cell.building === 'town') {
+                            cell.townIncome = GameConfig.TOWN_INCOME_BASE;
+                            cell.townTurnCount = 0;
+                        } else if (cell.building !== 'citadel' && cell.building !== 'lighthouse') {
+                            cell.building = 'none';
+                            cell.defenseLevel = 0;
+                            cell.incomeLevel = 0;
+                            cell.watchtowerLevel = 0;
+                            cell.farmLevel = 0;
+                        }
 
-                    // Revert bridges to water
-                    if (cell.type === 'bridge') {
-                        cell.type = 'water';
-                        cell.building = 'none'; // Ensure no building on bridge
+                        if (cell.type === 'bridge') {
+                            cell.type = 'water';
+                            cell.building = 'none';
+                        }
                     }
                 }
             }
-            // Re-spawn Bases
+
             this.setupBases();
-            // Rebuild caches after bases may overwrite static features
             this.cacheCitadelLocation();
             this.cacheLighthouseLocations();
-            // For this strictly typed edit, I can't call private method.
-            // I will skip town regen for "keepMap" for now or expose it differently?
-            // Actually, if I modify MapGenerator to have public `distributeTowns`, I can call it.
-            // I'll update MapGenerator in separate step if needed. 
-            // For now, "Keep Map" will result in No Towns unless I handle it. 
-            // Actually, `generateTerrain` was integrated.
-            // I'll make a public static method on GameState or MapGenerator?
-            // I'll stick to simple logic: If keepMap, terrain stays. Towns are gone. 
-            // Proceed with edit.
         } else {
             // Full Map Regenerate
             this.grid = [];

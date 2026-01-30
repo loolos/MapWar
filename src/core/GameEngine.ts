@@ -192,6 +192,8 @@ export class GameEngine {
         this.lastAiMoves = [];
         this.lastError = null;
         this.actedTilesThisTurn.clear();
+        this.floodedCells.clear();
+        this.ai.invalidateTreasureCache();
         if (this.peaceDayActive) this.endPeaceDay();
         if (this.bloodMoonActive) this.endBloodMoon();
         this.isGameOver = false;

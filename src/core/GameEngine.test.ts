@@ -497,30 +497,38 @@ describe('GameEngine', () => {
             expect(engine.pendingMoves).toHaveLength(0);
         });
 
-        it('restarts game with terrain preservation', () => {
-            // Setup: (0,1) is Water
-            engine.state.getCell(0, 1)!.type = 'water';
-            engine.state.setOwner(0, 1, 'P1'); // Owner specific
+        it('restarts game with base map restoration', () => {
+            const cell = engine.state.getCell(1, 1)!;
+            const originalType = cell.type;
 
-            // Restart with keepMap = true
+            cell.type = originalType === 'water' ? 'plain' : 'water';
+            engine.state.setOwner(1, 1, 'P1');
+
             engine.restartGame(true);
 
-            const cell = engine.state.getCell(0, 1)!;
-            // Should still be water
-            expect(cell.type).toBe('water');
-            // But owner should be reset (null or Base depending on pos)
-            // (0,1) is NOT a base. So null.
-            expect(cell.owner).toBeNull();
+            const restored = engine.state.getCell(1, 1)!;
+            expect(restored.type).toBe(originalType);
+            expect(restored.owner).toBeNull();
         });
 
-        it('restarts game reset resets buildings/bridges', () => {
-            // Setup Bridge
-            engine.state.getCell(0, 1)!.type = 'bridge';
+        it('restarts game restores bridge modifications', () => {
+            const cell = engine.state.getCell(1, 2)!;
+            const originalType = cell.type;
+            cell.type = 'bridge';
 
             engine.restartGame(true);
 
-            // Should revert to water
-            expect(engine.state.getCell(0, 1)!.type).toBe('water');
+            expect(engine.state.getCell(1, 2)!.type).toBe(originalType);
+        });
+
+        it('restarts game restores treasure', () => {
+            const cell = engine.state.getCell(1, 1)!;
+            const originalTreasure = cell.treasureGold;
+            cell.treasureGold = originalTreasure === null ? 999 : null;
+
+            engine.restartGame(true);
+
+            expect(engine.state.getCell(1, 1)!.treasureGold).toBe(originalTreasure);
         });
     });
 
