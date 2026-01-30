@@ -1163,6 +1163,21 @@ export class MapGenerator {
             riverSet.add(key(seed.r, seed.c));
         }
 
+        // Final pass: fill enclosed holes (all 4 neighbors are water/river) with high probability
+        const surrounded: { r: number; c: number }[] = [];
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
+                if (grid[r][c].type === 'water' || riverSet.has(key(r, c))) continue;
+                const neighbors = neighborsOf(r, c);
+                if (neighbors.length < 4) continue;
+                const allWaterLike = neighbors.every((n) => riverSet.has(key(n.r, n.c)) || grid[n.r][n.c].type === 'water');
+                if (allWaterLike && Math.random() < 0.7) surrounded.push({ r, c });
+            }
+        }
+        for (const cell of surrounded) {
+            riverSet.add(key(cell.r, cell.c));
+        }
+
         for (const k of riverSet) {
             const [r, c] = k.split(',').map(Number);
             grid[r][c].type = 'water';
@@ -1258,6 +1273,7 @@ export class MapGenerator {
         const minDistance = Math.max(3, Math.floor(Math.min(width, height) / 6));
         const shortSide = Math.min(width, height);
         const scoreThreshold = shortSide / 3;
+        const scoreNearbyPlayersTarget = 3;
         const chestMinSpacing = Math.max(2, Math.floor(Math.min(width, height) / 8));
 
         const candidates: { r: number; c: number }[] = [];
@@ -1282,8 +1298,9 @@ export class MapGenerator {
             const dists = spawns.map((s, idx) => ({ idx, d: manhattan(r, c, s.r, s.c) }));
             dists.sort((a, b) => a.d - b.d);
             const nearest3 = dists.slice(0, Math.min(3, dists.length));
+            const effectiveCount = dists.filter((x) => x.d <= scoreThreshold).length;
             for (const { idx, d } of nearest3) {
-                playerScores[idx] += 0.5 * Math.max(0, scoreThreshold - d);
+                playerScores[idx] += 0.5 * Math.max(scoreNearbyPlayersTarget - effectiveCount, scoreThreshold - d);
             }
         }
 
@@ -1311,12 +1328,14 @@ export class MapGenerator {
                 const dists = spawns.map((s, idx) => ({ idx, d: manhattan(r, c, s.r, s.c) }));
                 dists.sort((a, b) => a.d - b.d);
                 const nearest3 = dists.slice(0, Math.min(3, dists.length));
+                const effectiveCount = dists.filter((x) => x.d <= scoreThreshold).length;
                 const contributions = new Array<number>(playerCount).fill(0);
                 for (const { idx, d } of nearest3) {
-                    contributions[idx] = Math.max(0, scoreThreshold - d);
+                    contributions[idx] = Math.max(scoreNearbyPlayersTarget - effectiveCount, scoreThreshold - d);
                 }
                 const newScores = playerScores.map((s, j) => s + contributions[j]);
-                const imbalance = Math.max(...newScores) - Math.min(...newScores);
+                const avgScore = newScores.reduce((a, b) => a + b, 0) / playerCount;
+                const imbalance = newScores.reduce((sum, s) => sum + Math.abs(s - avgScore), 0);
                 if (imbalance < bestImbalance || (imbalance === bestImbalance && Math.random() < 0.5)) {
                     bestImbalance = imbalance;
                     bestCell = { r, c };
