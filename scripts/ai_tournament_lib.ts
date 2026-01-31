@@ -601,12 +601,18 @@ export const rankResults = (
     const avgPoints2p = pool.map((ind) => ind.avgPointsRaw2p);
     const avgPoints4p = pool.map((ind) => ind.avgPointsRaw4p);
     const avgPoints8p = pool.map((ind) => ind.avgPointsRaw8p);
+    const avgBonus2p = pool.map((ind) => ind.avgDecisiveBonus2p);
+    const avgBonus4p = pool.map((ind) => ind.avgDecisiveBonus4p);
+    const avgBonus8p = pool.map((ind) => ind.avgDecisiveBonus8p);
     const mean2p = avgPoints2p.reduce((sum, value) => sum + value, 0) / Math.max(avgPoints2p.length, 1);
     const mean4p = avgPoints4p.reduce((sum, value) => sum + value, 0) / Math.max(avgPoints4p.length, 1);
     const mean8p = avgPoints8p.reduce((sum, value) => sum + value, 0) / Math.max(avgPoints8p.length, 1);
     const var2p = avgPoints2p.reduce((sum, value) => sum + Math.pow(value - mean2p, 2), 0) / Math.max(avgPoints2p.length, 1);
     const var4p = avgPoints4p.reduce((sum, value) => sum + Math.pow(value - mean4p, 2), 0) / Math.max(avgPoints4p.length, 1);
     const var8p = avgPoints8p.reduce((sum, value) => sum + Math.pow(value - mean8p, 2), 0) / Math.max(avgPoints8p.length, 1);
+    const meanBonus2p = avgBonus2p.reduce((sum, value) => sum + value, 0) / Math.max(avgBonus2p.length, 1);
+    const meanBonus4p = avgBonus4p.reduce((sum, value) => sum + value, 0) / Math.max(avgBonus4p.length, 1);
+    const meanBonus8p = avgBonus8p.reduce((sum, value) => sum + value, 0) / Math.max(avgBonus8p.length, 1);
     const std2p = Math.sqrt(var2p);
     const std4p = Math.sqrt(var4p);
     const std8p = Math.sqrt(var8p);
@@ -622,9 +628,9 @@ export const rankResults = (
         candidate.avgPointsNorm = normParts.length > 0
             ? normParts.reduce((sum, value) => sum + value, 0) / normParts.length
             : 0;
-        const bonus2p = std2p > 1e-6 ? candidate.avgDecisiveBonus2p / std2p : 0;
-        const bonus4p = std4p > 1e-6 ? candidate.avgDecisiveBonus4p / std4p : 0;
-        const bonus8p = std8p > 1e-6 ? candidate.avgDecisiveBonus8p / std8p : 0;
+        const bonus2p = std2p > 1e-6 ? (candidate.avgDecisiveBonus2p - meanBonus2p) / std2p : 0;
+        const bonus4p = std4p > 1e-6 ? (candidate.avgDecisiveBonus4p - meanBonus4p) / std4p : 0;
+        const bonus8p = std8p > 1e-6 ? (candidate.avgDecisiveBonus8p - meanBonus8p) / std8p : 0;
         candidate.avgDecisiveBonusNorm2p = bonus2p;
         candidate.avgDecisiveBonusNorm4p = bonus4p;
         candidate.avgDecisiveBonusNorm8p = bonus8p;
