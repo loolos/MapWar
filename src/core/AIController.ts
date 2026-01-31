@@ -123,15 +123,19 @@ export class AIController {
             const buildAffordableList = (remainingGold: number) => {
                 const affordable: ActionCandidate[] = [];
                 let total = 0;
+                let nextUnaffordable: ActionCandidate | null = null;
                 for (const candidate of candidatePool) {
                     const key = makeCandidateKey(candidate);
                     if (skipped.has(key)) continue;
                     if (actedTiles.has(`${candidate.r},${candidate.c}`)) continue;
-                    if (total + candidate.cost > remainingGold) break;
+                    if (total + candidate.cost > remainingGold) {
+                        nextUnaffordable = candidate;
+                        break;
+                    }
                     affordable.push(candidate);
                     total += candidate.cost;
                 }
-                return affordable;
+                return { affordable, nextUnaffordable };
             };
 
             const buildMoveScoreContext = () => {
@@ -484,27 +488,22 @@ export class AIController {
 
             const initialCandidates = time('ai.buildCandidates.total', buildCandidates);
             seedCandidatePool(initialCandidates);
-            const bestTarget = candidatePool
-                .filter((c) => c.kind === 'move')
-                .map((c) => ({ candidate: c, cell: this.engine.state.getCell(c.r, c.c) }))
-                .filter(({ cell }) => !!cell && cell.owner && cell.owner !== aiPlayer.id && (cell.building === 'base' || cell.building === 'town'))
-                .sort((a, b) => b.candidate.score - a.candidate.score)[0];
-
-            if (bestTarget && bestTarget.candidate.cost > remainingGold) {
-                const income = this.engine.state.calculateIncome(aiPlayer.id as string);
-                const incomePerTurn = Math.max(income || 0, 1);
-                const shortfall = bestTarget.candidate.cost - remainingGold;
-                const turnsNeeded = Math.ceil(shortfall / incomePerTurn);
-                if (turnsNeeded <= weights.SAVE_FOR_TARGET_MAX_TURNS && bestTarget.candidate.score >= weights.SAVE_FOR_TARGET_MIN_SCORE) {
-                    return;
-                }
-            }
 
             while (actionCounter < MAX_ACTIONS) {
                 if (isOverBudget()) break;
-                const eligible = buildAffordableList(remainingGold);
-                if (eligible.length === 0) break;
-                const best = eligible[0];
+                const { affordable, nextUnaffordable } = buildAffordableList(remainingGold);
+                if (affordable.length === 0) break;
+                const best = affordable[0];
+                if (nextUnaffordable) {
+                    const income = this.engine.state.calculateIncome(aiPlayer.id as string);
+                    const incomePerTurn = Math.max(income || 0, 1);
+                    if (remainingGold + incomePerTurn >= nextUnaffordable.cost) {
+                        const scoreDiff = nextUnaffordable.score - best.score;
+                        if (scoreDiff >= weights.SAVE_FOR_TARGET_SCORE_DIFF) {
+                            return;
+                        }
+                    }
+                }
                 const key = makeCandidateKey(best);
                 let executed = false;
 
