@@ -8,30 +8,20 @@ interface LogEntry {
 }
 
 export class LogSystem {
+    private scene: Phaser.Scene;
     private container: Phaser.GameObjects.Container;
     private background: Phaser.GameObjects.Graphics;
     private logLines: Phaser.GameObjects.Text[] = [];
     private messages: LogEntry[] = [];
-    private maxMessages: number = 8;
+    private maxMessages: number = 0;
 
     constructor(scene: Phaser.Scene, x: number, y: number, width: number, height: number) {
+        this.scene = scene;
         this.container = scene.add.container(x, y);
 
         // Background
         this.background = scene.add.graphics();
         this.container.add(this.background);
-
-        // Initialize Text Lines
-        for (let i = 0; i < this.maxMessages; i++) {
-            const textObj = scene.add.text(5, 0, '', {
-                fontFamily: 'monospace',
-                fontSize: '14px',
-                color: '#ffffff',
-                wordWrap: { width: width - 10 }
-            });
-            this.container.add(textObj);
-            this.logLines.push(textObj);
-        }
 
         this.resize(width, height);
         this.refresh();
@@ -68,7 +58,7 @@ export class LogSystem {
 
         this.messages.push(entry);
 
-        if (this.messages.length > this.maxMessages) {
+        while (this.messages.length > this.maxMessages) {
             this.messages.shift();
         }
 
@@ -123,6 +113,29 @@ export class LogSystem {
     private lastWidth: number = 300;
     private lastHeight: number = 300;
 
+    private ensureLogLines(targetCount: number, fontStr: string, width: number) {
+        while (this.logLines.length < targetCount) {
+            const textObj = this.scene.add.text(5, 0, '', {
+                fontFamily: 'monospace',
+                fontSize: fontStr,
+                color: '#ffffff',
+                wordWrap: { width: width - 10 }
+            });
+            this.container.add(textObj);
+            this.logLines.push(textObj);
+        }
+
+        while (this.logLines.length > targetCount) {
+            const removed = this.logLines.pop();
+            if (removed) {
+                this.container.remove(removed);
+                removed.destroy();
+            }
+        }
+
+        this.maxMessages = targetCount;
+    }
+
     public resize(width: number, height: number) {
         this.lastWidth = width;
         this.lastHeight = height;
@@ -139,6 +152,11 @@ export class LogSystem {
         // 14px at 300px width ~ 4.6%
         const fontSizeVal = Math.max(10, Math.floor(width * 0.045));
         const fontStr = `${fontSizeVal}px`;
+        const lineGap = 2;
+        const verticalPadding = 10;
+        const lineCapacity = Math.max(1, Math.floor((height - verticalPadding) / (fontSizeVal + lineGap)));
+
+        this.ensureLogLines(lineCapacity, fontStr, width);
 
         // Update Text Wrapping Width and Font
         for (let i = 0; i < this.logLines.length; i++) {

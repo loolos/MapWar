@@ -1602,7 +1602,7 @@ export class GameEngine {
             }
 
             // Gold Mine Discovery (Hill + Neutral Capture)
-            if (cell.type === 'hill' && !hasCombat) {
+            if (cell.type === 'hill' && !hasCombat && cell.building === 'none') {
                 if (this.random() < GameConfig.GOLD_MINE_CHANCE) {
                     this.state.setBuilding(move.r, move.c, 'gold_mine');
                     this.emit('logMessage', { text: `Gold Mine discovered at (${move.r}, ${move.c})!`, type: 'info' });
