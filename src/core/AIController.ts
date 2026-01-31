@@ -111,8 +111,17 @@ export class AIController {
             };
 
             const seedCandidatePool = (candidates: ActionCandidate[]) => {
-                candidates.sort((a, b) => b.score - a.score);
+                const bestByTile = new Map<string, ActionCandidate>();
                 for (const candidate of candidates) {
+                    const tileKey = `${candidate.r},${candidate.c}`;
+                    const existing = bestByTile.get(tileKey);
+                    if (!existing || candidate.score > existing.score) {
+                        bestByTile.set(tileKey, candidate);
+                    }
+                }
+                const deduped = Array.from(bestByTile.values());
+                deduped.sort((a, b) => b.score - a.score);
+                for (const candidate of deduped) {
                     const key = makeCandidateKey(candidate);
                     if (candidateKeys.has(key)) continue;
                     candidateKeys.add(key);
@@ -530,6 +539,11 @@ export class AIController {
                     time('ai.commitMoves', () => this.engine.commitMoves());
                     executed = true;
                 } else if (best.actionId) {
+                    const action = this.engine.interactionRegistry.get(best.actionId);
+                    if (!action || !action.isAvailable(this.engine, best.r, best.c, true)) {
+                        skipped.add(key);
+                        continue;
+                    }
                     const before = this.engine.pendingInteractions.length;
                     this.engine.planInteraction(best.r, best.c, best.actionId);
                     if (this.engine.pendingInteractions.length > before) {

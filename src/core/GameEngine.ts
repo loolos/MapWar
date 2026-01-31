@@ -1,6 +1,7 @@
 import { GameConfig } from './GameConfig';
 import { AIController } from './AIController';
 import { InteractionRegistry } from './interaction/InteractionRegistry';
+import { AuraSystem } from './AuraSystem';
 import { CostSystem } from './CostSystem';
 import { RandomAiProfiles, type AIProfile } from './ai/AIProfile';
 
@@ -954,7 +955,20 @@ export class GameEngine {
 
         // Validation
         if (!action.isAvailable(this, row, col, true)) {
-            console.log(`[PlanInteraction] Action ${actionId} not available at ${row},${col}. Owner: ${this.state.getCell(row, col)?.owner}, Current: ${this.state.currentPlayerId}, Building: ${this.state.getCell(row, col)?.building}`);
+            const cell = this.state.getCell(row, col);
+            let reason = '';
+            if (actionId === 'BUILD_FARM') {
+                const pid = this.state.currentPlayerId;
+                const checks = [
+                    cell && pid && cell.owner === pid ? null : 'not_owned',
+                    cell?.type === 'plain' ? null : 'not_plain',
+                    cell?.building === 'none' ? null : 'has_building',
+                    cell?.isConnected ? null : 'not_connected',
+                    cell && pid && AuraSystem.isInIncomeAura(this.state, row, col, pid) ? null : 'no_income_aura'
+                ].filter((value): value is string => value !== null);
+                reason = checks.length > 0 ? ` Reasons: ${checks.join(',')}` : '';
+            }
+            console.log(`[PlanInteraction] Action ${actionId} not available at ${row},${col}. Owner: ${cell?.owner}, Current: ${this.state.currentPlayerId}, Building: ${cell?.building}, Type: ${cell?.type}, Connected: ${cell?.isConnected}${reason}`);
             this.lastError = "Action not available";
             this.emit('planUpdate');
             return;
