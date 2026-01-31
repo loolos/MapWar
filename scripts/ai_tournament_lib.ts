@@ -382,7 +382,8 @@ export const evaluateTournament = (
         }
     }
     for (const mode of modes) {
-        const total = profiles.length * mode.matchesPerAi / mode.players;
+        const numGroupsPerShuffle = Math.floor(profiles.length / mode.players);
+        const total = mode.matchesPerAi * numGroupsPerShuffle;
         modeTotals[mode.key] = total;
         modeCompleted[mode.key] = 0;
     }
@@ -392,39 +393,32 @@ export const evaluateTournament = (
             throw new Error(`Not enough profiles for ${mode.key} (${profiles.length} < ${mode.players}).`);
         }
 
-        const groupCounts = new Map<string, number>();
-        for (const profile of profiles) {
-            groupCounts.set(profile.id, 0);
-        }
+        const numGroupsPerShuffle = Math.floor(profiles.length / mode.players);
 
-        const order = shuffleProfiles(profiles, rng);
-        const step = getCoprimeStep(mode.players + 1, order.length);
-        const offset = roundIndex % Math.max(1, order.length);
+        for (let shuffleRound = 0; shuffleRound < mode.matchesPerAi; shuffleRound++) {
+            const order = shuffleProfiles(profiles, rng);
 
-        while ([...groupCounts.values()].some((count) => count < mode.matchesPerAi)) {
-            const groupIndex = modeCompleted[mode.key];
-            const group = buildRotationGroup(order, groupIndex, mode.players, step, offset);
-            const profilesByPlayer: Record<string, AIProfile> = {};
-            const playerIds: string[] = [];
-            for (let i = 0; i < group.length; i++) {
-                const playerId = `P${i + 1}`;
-                playerIds.push(playerId);
-                profilesByPlayer[playerId] = group[i];
-            }
-            for (const member of group) {
-                groupCounts.set(member.id, (groupCounts.get(member.id) ?? 0) + 1);
-            }
+            for (let groupIndex = 0; groupIndex < numGroupsPerShuffle; groupIndex++) {
+                const group = order.slice(groupIndex * mode.players, (groupIndex + 1) * mode.players);
+                const globalGroupIndex = shuffleRound * numGroupsPerShuffle + groupIndex;
+                const profilesByPlayer: Record<string, AIProfile> = {};
+                const playerIds: string[] = [];
+                for (let i = 0; i < group.length; i++) {
+                    const playerId = `P${i + 1}`;
+                    playerIds.push(playerId);
+                    profilesByPlayer[playerId] = group[i];
+                }
 
-            for (let mapIndex = 0; mapIndex < options.mapTypes.length; mapIndex++) {
-                const mapType = options.mapTypes[mapIndex];
+                for (let mapIndex = 0; mapIndex < options.mapTypes.length; mapIndex++) {
+                    const mapType = options.mapTypes[mapIndex];
 
-                for (let rotation = 0; rotation < mode.players; rotation++) {
-                    const matchSeed = options.seed
-                        + roundIndex * 100000
-                        + groupIndex * 1000
-                        + mapIndex * 100
-                        + rotation * 10
-                        + mode.players;
+                    for (let rotation = 0; rotation < mode.players; rotation++) {
+                        const matchSeed = options.seed
+                            + roundIndex * 100000
+                            + globalGroupIndex * 1000
+                            + mapIndex * 100
+                            + rotation * 10
+                            + mode.players;
                     const matchStart = Date.now();
                     const result = runMatch(
                         profilesByPlayer,
@@ -513,6 +507,7 @@ export const evaluateTournament = (
                 const m8 = activeModes.use8p ? `${modeCompleted['8p']}/${Math.ceil(modeTotals['8p'])}` : '-';
                 process.stdout.write(`\rRound ${roundIndex + 1}: m2 ${m2} | m4 ${m4} | m8 ${m8} groups...`);
             }
+        }
         }
     }
 
