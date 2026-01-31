@@ -83,6 +83,142 @@ export class AIController {
                 actionId?: string;
             };
 
+            const candidatePool: ActionCandidate[] = [];
+            const candidateKeys = new Set<string>();
+            const skipped = new Set<string>();
+            const makeCandidateKey = (candidate: ActionCandidate) =>
+                `${candidate.kind}:${candidate.actionId ?? 'move'}:${candidate.r},${candidate.c}`;
+
+            const insertCandidateSorted = (candidate: ActionCandidate) => {
+                let low = 0;
+                let high = candidatePool.length;
+                while (low < high) {
+                    const mid = (low + high) >> 1;
+                    if (candidate.score > candidatePool[mid].score) {
+                        high = mid;
+                    } else {
+                        low = mid + 1;
+                    }
+                }
+                candidatePool.splice(low, 0, candidate);
+            };
+
+            const addCandidateToPool = (candidate: ActionCandidate) => {
+                const key = makeCandidateKey(candidate);
+                if (candidateKeys.has(key)) return;
+                candidateKeys.add(key);
+                insertCandidateSorted(candidate);
+            };
+
+            const seedCandidatePool = (candidates: ActionCandidate[]) => {
+                candidates.sort((a, b) => b.score - a.score);
+                for (const candidate of candidates) {
+                    const key = makeCandidateKey(candidate);
+                    if (candidateKeys.has(key)) continue;
+                    candidateKeys.add(key);
+                    candidatePool.push(candidate);
+                }
+            };
+
+            const buildAffordableList = (remainingGold: number) => {
+                const affordable: ActionCandidate[] = [];
+                let total = 0;
+                for (const candidate of candidatePool) {
+                    const key = makeCandidateKey(candidate);
+                    if (skipped.has(key)) continue;
+                    if (actedTiles.has(`${candidate.r},${candidate.c}`)) continue;
+                    if (total + candidate.cost > remainingGold) break;
+                    affordable.push(candidate);
+                    total += candidate.cost;
+                }
+                return affordable;
+            };
+
+            const buildMoveScoreContext = () => {
+                const grid = this.engine.state.grid;
+                const myBases: { r: number; c: number }[] = [];
+                const disconnectedOwned = new Set<string>();
+                const ownedCells = this.engine.state.getOwnedCells(aiPlayer.id as string);
+                for (const { r, c } of ownedCells) {
+                    const cell = grid[r][c];
+                    if (cell.building === 'base') myBases.push({ r, c });
+                    if (!cell.isConnected) disconnectedOwned.add(`${r},${c}`);
+                }
+                if (!this.treasureCacheValid) {
+                    this.cachedTreasureLocations = [];
+                    for (let r = 0; r < grid.length; r++) {
+                        for (let c = 0; c < grid[r].length; c++) {
+                            const cell = grid[r][c];
+                            if (cell.treasureGold !== null && cell.treasureGold > 0) {
+                                this.cachedTreasureLocations.push({ r, c, gold: cell.treasureGold });
+                            }
+                        }
+                    }
+                    this.treasureCacheValid = true;
+                }
+                return {
+                    grid,
+                    myBases,
+                    disconnectedOwned,
+                    treasureLocations: this.cachedTreasureLocations,
+                    lighthouseLocations: this.engine.state.lighthouseLocations,
+                    citadelCell: this.engine.state.citadelLocation
+                };
+            };
+
+            const buildMoveCandidate = (
+                r: number,
+                c: number,
+                context: ReturnType<typeof buildMoveScoreContext>
+            ): ActionCandidate | null => {
+                if (!this.engine.isValidCell(r, c)) return null;
+                if (actedTiles.has(`${r},${c}`)) return null;
+
+                const validation = this.engine.validateMove(r, c);
+                if (!validation.valid) return null;
+                const costValidation = this.engine.checkMoveCost(r, c);
+                if (!costValidation.valid) return null;
+
+                const cell = context.grid[r][c];
+                const cost = this.engine.getMoveCost(r, c);
+                let score = weights.SCORE_BASE_VALUE;
+                score += this.scoreObjectives(cell, aiPlayer.id as string, weights);
+                score += this.scoreAggression(cell, r, c, aiPlayer.id as string, context.myBases, weights);
+                score += this.scoreTactical(cell, weights);
+                score += this.scoreTreasure(cell, weights);
+                score += this.scoreTreasureProximity(r, c, context.treasureLocations, weights);
+                score += this.scoreLighthouseProximity(r, c, aiPlayer.id as string, context.lighthouseLocations, weights);
+                score += this.scoreExpansion(cell, turnCount, weights);
+                score += this.scoreAura(r, c, aiPlayer.id as string, weights);
+                score += this.scoreLookAhead(r, c, aiPlayer.id as string, context.grid, weights);
+                score += this.scoreCitadelProximity(r, c, context.citadelCell, weights);
+                score += this.scoreReconnect(r, c, context.disconnectedOwned, weights);
+                const enemyAdj = (() => {
+                    let enemies = 0;
+                    const neighbors = [
+                        { r: r + 1, c }, { r: r - 1, c },
+                        { r, c: c + 1 }, { r, c: c - 1 }
+                    ];
+                    for (const n of neighbors) {
+                        if (!this.engine.isValidCell(n.r, n.c)) continue;
+                        const nCell = this.engine.state.getCell(n.r, n.c);
+                        if (nCell && nCell.owner && nCell.owner !== aiPlayer.id) enemies++;
+                    }
+                    return enemies;
+                })();
+                if (enemyAdj > 0) {
+                    score -= enemyAdj * weights.RISK_ENEMY_ADJACENT_PENALTY;
+                }
+                score -= (cost * weights.COST_PENALTY_MULTIPLIER);
+                score += Math.random() * weights.RANDOM_NOISE;
+
+                const category: ActionCategory = cell.owner && cell.owner !== aiPlayer.id ? 'attack' : 'expand';
+                if (category === 'attack' && turnCount >= weights.STRATEGY_ENDGAME_TURN) {
+                    score += weights.STRATEGY_ENDGAME_ATTACK_BONUS;
+                }
+
+                return { kind: 'move', category, r, c, score, cost };
+            };
 
             const buildCandidates = (): ActionCandidate[] => {
                 const candidates: ActionCandidate[] = [];
@@ -345,10 +481,10 @@ export class AIController {
             let actionCounter = 0;
             const MAX_ACTIONS = weights.MAX_MOVES_PER_TURN;
             let remainingGold = aiPlayer.gold;
-            const skipped = new Set<string>();
 
             const initialCandidates = time('ai.buildCandidates.total', buildCandidates);
-            const bestTarget = initialCandidates
+            seedCandidatePool(initialCandidates);
+            const bestTarget = candidatePool
                 .filter((c) => c.kind === 'move')
                 .map((c) => ({ candidate: c, cell: this.engine.state.getCell(c.r, c.c) }))
                 .filter(({ cell }) => !!cell && cell.owner && cell.owner !== aiPlayer.id && (cell.building === 'base' || cell.building === 'town'))
@@ -366,22 +502,19 @@ export class AIController {
 
             while (actionCounter < MAX_ACTIONS) {
                 if (isOverBudget()) break;
-                const candidates = time('ai.buildCandidates.total', buildCandidates);
-                const eligible = candidates.filter((c) => {
-                    const key = `${c.kind}:${c.actionId ?? 'move'}:${c.r},${c.c}`;
-                    if (skipped.has(key)) return false;
-                    if (c.cost > remainingGold) return false;
-                    if (actedTiles.has(`${c.r},${c.c}`)) return false;
-                    return true;
-                });
-
+                const eligible = buildAffordableList(remainingGold);
                 if (eligible.length === 0) break;
-                time('ai.sortCandidates', () => eligible.sort((a, b) => b.score - a.score));
                 const best = eligible[0];
-                const key = `${best.kind}:${best.actionId ?? 'move'}:${best.r},${best.c}`;
+                const key = makeCandidateKey(best);
                 let executed = false;
 
                 if (best.kind === 'move') {
+                    const validation = this.engine.validateMove(best.r, best.c);
+                    const costValidation = this.engine.checkMoveCost(best.r, best.c);
+                    if (!validation.valid || !costValidation.valid) {
+                        skipped.add(key);
+                        continue;
+                    }
                     this.engine.togglePlan(best.r, best.c);
                     if (this.engine.lastError) {
                         skipped.add(key);
@@ -405,6 +538,25 @@ export class AIController {
                 actedTiles.add(`${best.r},${best.c}`);
                 remainingGold = this.engine.state.getCurrentPlayer().gold;
                 actionCounter++;
+
+                if (best.kind === 'move') {
+                    const context = buildMoveScoreContext();
+                    const neighbors = [
+                        { r: best.r + 1, c: best.c },
+                        { r: best.r - 1, c: best.c },
+                        { r: best.r, c: best.c + 1 },
+                        { r: best.r, c: best.c - 1 }
+                    ];
+                    for (const n of neighbors) {
+                        if (!this.engine.isValidCell(n.r, n.c)) continue;
+                        const nCell = this.engine.state.getCell(n.r, n.c);
+                        if (nCell && nCell.owner === aiPlayer.id) continue;
+                        const candidate = buildMoveCandidate(n.r, n.c, context);
+                        if (candidate) {
+                            addCandidateToPool(candidate);
+                        }
+                    }
+                }
             }
 
         } catch (err) {
@@ -421,6 +573,7 @@ export class AIController {
             score += weights.SCORE_CITADEL;
             if (cell.owner) score += weights.SCORE_CITADEL; // Extra when enemy-held (take-back priority)
         } else if (cell.building === 'town' && cell.owner !== aiPlayerId) score += weights.SCORE_TOWN;
+        else if (cell.building === 'farm' && cell.owner !== aiPlayerId) score += weights.SCORE_FARM;
         else if (cell.building === 'gold_mine' && cell.owner !== aiPlayerId) score += weights.SCORE_GOLD_MINE;
         else if (cell.building === 'lighthouse' && cell.owner !== aiPlayerId) {
             // Encourage stacking: the more lighthouses you already own, the more valuable the next one becomes.
@@ -462,7 +615,10 @@ export class AIController {
         let score = 0;
         if (cell.owner && cell.owner !== aiPlayerId) {
             score += weights.SCORE_ENEMY_LAND;
-            if (!cell.isConnected) score += weights.SCORE_DISCONNECT_ENEMY;
+            if (!cell.isConnected) {
+                score += weights.SCORE_DISCONNECT_ENEMY_ATTACK;
+                score += this.scoreDisconnectedBuildingBonus(cell, weights);
+            }
 
             for (const base of myBases) {
                 const dist = Math.abs(r - base.r) + Math.abs(c - base.c);
@@ -473,6 +629,27 @@ export class AIController {
             }
         }
         return score;
+    }
+
+    private scoreDisconnectedBuildingBonus(cell: Cell, weights: AIWeights): number {
+        switch (cell.building) {
+            case 'base':
+                return weights.SCORE_WIN_CONDITION;
+            case 'citadel':
+                return weights.SCORE_CITADEL;
+            case 'town':
+                return weights.SCORE_TOWN;
+            case 'farm':
+                return weights.SCORE_FARM;
+            case 'gold_mine':
+                return weights.SCORE_GOLD_MINE;
+            case 'lighthouse':
+                return weights.SCORE_LIGHTHOUSE;
+            case 'wall':
+                return weights.SCORE_WALL;
+            default:
+                return 0;
+        }
     }
 
     private scoreTactical(cell: Cell, weights: AIWeights): number {
