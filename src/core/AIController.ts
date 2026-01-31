@@ -128,6 +128,13 @@ export class AIController {
                     const key = makeCandidateKey(candidate);
                     if (skipped.has(key)) continue;
                     if (actedTiles.has(`${candidate.r},${candidate.c}`)) continue;
+                    if (candidate.kind === 'interaction') {
+                        const action = this.engine.interactionRegistry.get(candidate.actionId || '');
+                        if (!action || !action.isAvailable(this.engine, candidate.r, candidate.c, true)) {
+                            skipped.add(key);
+                            continue;
+                        }
+                    }
                     if (total + candidate.cost > remainingGold) {
                         nextUnaffordable = candidate;
                         break;
