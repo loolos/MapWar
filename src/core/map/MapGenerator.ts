@@ -1100,11 +1100,15 @@ export class MapGenerator {
 
         const riverSet = new Set<string>();
         const key = (r: number, c: number) => `${r},${c}`;
+        const centerR = Math.floor(height / 2);
+        const centerC = Math.floor(width / 2);
+        if (this.isValid(grid, centerR, centerC) && grid[centerR][centerC].type !== 'water') {
+            riverSet.add(key(centerR, centerC));
+        }
         const riverNeighborCount = (r: number, c: number): number =>
             neighborsOf(r, c).filter((n) => riverSet.has(key(n.r, n.c))).length;
 
-        const isAdjacentToRiver = (r: number, c: number): boolean =>
-            neighborsOf(r, c).some((n) => riverSet.has(key(n.r, n.c)));
+        // isAdjacentToRiver no longer needed after center re-seed change.
 
         // All non-water cells with score, sorted by score desc (for picking seeds)
         let scoredCells: { r: number; c: number; score: number }[] = [];
@@ -1120,8 +1124,7 @@ export class MapGenerator {
         };
         refreshScoredCells();
 
-        const isAdjacentToExistingWater = (r: number, c: number): boolean =>
-            neighborsOf(r, c).some((n) => grid[n.r][n.c].type === 'water' || riverSet.has(key(n.r, n.c)));
+        // isAdjacentToExistingWater no longer needed after center re-seed change.
 
         while (riverSet.size < riverBudget) {
             const seen = new Set<string>();
@@ -1152,15 +1155,12 @@ export class MapGenerator {
                 continue;
             }
 
-            // No adjacent candidate: start from cell next to existing water; pick from top 3 by score
-            refreshScoredCells();
-            let pool = scoredCells.filter((c) => isAdjacentToExistingWater(c.r, c.c));
-            if (pool.length === 0) pool = scoredCells.filter((c) => !isAdjacentToRiver(c.r, c.c));
-            if (pool.length === 0) break;
-            const seed = pool.length <= 2
-                ? pool[Math.floor(Math.random() * pool.length)]
-                : pickFromTop(pool, (c) => c.score, 3);
-            riverSet.add(key(seed.r, seed.c));
+            // No adjacent candidate: re-seed from map center (or stop if already river).
+            if (!riverSet.has(key(centerR, centerC))) {
+                riverSet.add(key(centerR, centerC));
+            } else {
+                break;
+            }
         }
 
         // Final pass: fill enclosed holes (all 4 neighbors are water/river) with high probability
