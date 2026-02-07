@@ -4,15 +4,18 @@ import { GameConfig } from '../GameConfig';
 export type MapType = 'default' | 'archipelago' | 'pangaea' | 'mountains' | 'rivers';
 
 export class MapGenerator {
-    private static getSpawnPoints(count: number, width: number, height: number) {
+    private static getSpawnPoints(count: number, width: number, height: number, mapType?: MapType) {
+        if (mapType === 'mountains' || mapType === 'rivers') {
+            return this.getRandomSpawnPoints(count, width, height);
+        }
         const spawns: { r: number; c: number }[] = [];
         for (let i = 0; i < count; i++) {
-            spawns.push(this.getSpawnPoint(i, count, width, height));
+            spawns.push(this.getSpawnPoint(i, count, width, height, mapType));
         }
         return spawns;
     }
 
-    static generate(grid: Cell[][], type: MapType, width: number, height: number, playerCount: number = 2) {
+    static generate(grid: Cell[][], type: MapType, width: number, height: number, playerCount: number = 2): { r: number; c: number }[] {
         // Reset to default state
         for (let r = 0; r < height; r++) {
             for (let c = 0; c < width; c++) {
@@ -23,37 +26,38 @@ export class MapGenerator {
             }
         }
 
+        const spawns = this.getSpawnPoints(playerCount, width, height, type);
+
         switch (type) {
             case 'archipelago':
-                this.generateArchipelago(grid, width, height, playerCount);
+                this.generateArchipelago(grid, width, height, playerCount, spawns);
                 break;
             case 'pangaea':
-                this.generatePangaea(grid, width, height, playerCount);
+                this.generatePangaea(grid, width, height, playerCount, spawns);
                 this.placePangaeaCitadel(grid, width, height);
                 break;
             case 'mountains':
-                this.generateMountains(grid, width, height, playerCount);
+                this.generateMountains(grid, width, height, playerCount, spawns);
                 break;
             case 'rivers':
-                this.generateRivers(grid, width, height, playerCount);
+                this.generateRivers(grid, width, height, playerCount, spawns);
                 break;
             case 'default':
             default:
-                this.generateDefault(grid, width, height, playerCount);
+                this.generateDefault(grid, width, height, playerCount, type, undefined, spawns);
                 break;
         }
 
         // Post-Processing: Distribute Towns (zone-aware for default map)
-        const spawns = this.getSpawnPoints(playerCount, width, height);
         const area = width * height;
         const zoneRadius = Math.max(3, Math.floor(Math.sqrt(area / playerCount) / 2));
         this.distributeTowns(grid, width, height, (type === 'default' || type === 'rivers') ? { playerCount, spawns, zoneRadius } : undefined);
 
         // Post-Processing: Ensure Spawn Accessibility
-        this.ensureAccessibility(grid, width, height, playerCount);
+        this.ensureAccessibility(grid, width, height, playerCount, spawns);
 
         // Post-Processing: Distribute Treasures/Flotsam (fair per-player)
-        this.distributeTreasures(grid, width, height, playerCount);
+        this.distributeTreasures(grid, width, height, playerCount, spawns);
 
         // Post-Processing: Balance per zone (always after distributeTowns & distributeTreasures). Mountains/Pangaea also get light terrain balance.
         const isMountainsOrPangaea = type === 'mountains' || type === 'pangaea';
@@ -61,28 +65,123 @@ export class MapGenerator {
             ? { minimal: true, balanceTerrainTypes: ['water', 'hill', 'plain'], balanceGoldMines: type === 'mountains' }
             : { balanceTerrainTypes: [], maxRounds: 40, tolerance: 2 }
         );
+        return spawns;
     }
 
-    private static getSpawnPoint(index: number, total: number, width: number, height: number): { r: number, c: number } {
+    private static getSpawnPoint(index: number, total: number, width: number, height: number, mapType?: MapType): { r: number, c: number } {
         const margin = 2;
-        const boundedW = width - 2 * margin;
-        const boundedH = height - 2 * margin;
+        const boundedW = Math.max(1, width - 2 * margin);
+        const boundedH = Math.max(1, height - 2 * margin);
+        const usePerimeterSpawns = mapType === 'pangaea' || mapType === 'archipelago';
 
-        // Angle fraction matching GameState.setupBases
-        const angle = (index / total) * 2 * Math.PI - (Math.PI / 2);
-        // Start offset matching setupBases (-3*PI/4)
-        const startOffset = -3 * Math.PI / 4;
-        const finalAngle = angle + startOffset;
+        let r = Math.floor(height / 2);
+        let c = Math.floor(width / 2);
+        if (usePerimeterSpawns) {
+            const spawn = this.getPerimeterSpawnPoint(index, total, width, height, margin);
+            r = spawn.r;
+            c = spawn.c;
+        } else {
+            // Angle fraction matching GameState.setupBases
+            const angle = (index / total) * 2 * Math.PI - (Math.PI / 2);
+            // Start offset matching setupBases (-3*PI/4)
+            const startOffset = -3 * Math.PI / 4;
+            const finalAngle = angle + startOffset;
 
-        const cx = width / 2;
-        const cy = height / 2;
+            const cx = width / 2;
+            const cy = height / 2;
 
-        let r = Math.round(cy + (boundedH / 2) * Math.sin(finalAngle));
-        let c = Math.round(cx + (boundedW / 2) * Math.cos(finalAngle));
+            r = Math.round(cy + (boundedH / 2) * Math.sin(finalAngle));
+            c = Math.round(cx + (boundedW / 2) * Math.cos(finalAngle));
+        }
 
         r = Math.max(0, Math.min(height - 1, r));
         c = Math.max(0, Math.min(width - 1, c));
 
+        return { r, c };
+    }
+
+    private static getRandomSpawnPoints(count: number, width: number, height: number) {
+        const margin = 2;
+        const minSide = Math.min(width, height);
+        const minDist = Math.max(2, Math.floor(minSide / 3));
+        const sumTolerance = Math.max(2, Math.floor(minDist * 0.5));
+        const edgeTolerance = Math.max(2, Math.floor(sumTolerance * 1.5));
+        const maxAttempts = 500;
+        const maxPointAttempts = 200;
+        const manhattan = (a: { r: number; c: number }, b: { r: number; c: number }) =>
+            Math.abs(a.r - b.r) + Math.abs(a.c - b.c);
+        const randomPoint = () => ({
+            r: margin + Math.floor(Math.random() * Math.max(1, height - 2 * margin)),
+            c: margin + Math.floor(Math.random() * Math.max(1, width - 2 * margin))
+        });
+
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const spawns: { r: number; c: number }[] = [];
+            for (let i = 0; i < count; i++) {
+                let placed = false;
+                for (let tries = 0; tries < maxPointAttempts; tries++) {
+                    const candidate = randomPoint();
+                    if (spawns.some((s) => manhattan(s, candidate) < minDist)) continue;
+                    spawns.push(candidate);
+                    placed = true;
+                    break;
+                }
+                if (!placed) break;
+            }
+            if (spawns.length !== count) continue;
+
+            const sums = spawns.map((s) => {
+                const dists = spawns
+                    .filter((o) => o !== s)
+                    .map((o) => manhattan(s, o))
+                    .sort((a, b) => a - b);
+                if (dists.length === 0) return 0;
+                if (dists.length === 1) return dists[0];
+                return dists[0] + dists[1];
+            });
+            const minSum = Math.min(...sums);
+            const maxSum = Math.max(...sums);
+            const edgeDists = spawns.map((s) =>
+                Math.min(s.r, s.c, height - 1 - s.r, width - 1 - s.c)
+            );
+            const minEdge = Math.min(...edgeDists);
+            const maxEdge = Math.max(...edgeDists);
+            if (maxSum - minSum <= sumTolerance && maxEdge - minEdge <= edgeTolerance) {
+                return spawns;
+            }
+        }
+
+        const fallback: { r: number; c: number }[] = [];
+        for (let i = 0; i < count; i++) {
+            fallback.push(this.getSpawnPoint(i, count, width, height, 'default'));
+        }
+        return fallback;
+    }
+
+    private static getPerimeterSpawnPoint(index: number, total: number, width: number, height: number, margin: number) {
+        const boundedW = Math.max(1, width - 2 * margin);
+        const boundedH = Math.max(1, height - 2 * margin);
+        const perimeter = 2 * ((boundedW - 1) + (boundedH - 1));
+        if (perimeter <= 0) {
+            return { r: Math.floor(height / 2), c: Math.floor(width / 2) };
+        }
+        let t = Math.floor((index / total) * perimeter);
+        const topLen = boundedW - 1;
+        const rightLen = boundedH - 1;
+        const bottomLen = boundedW - 1;
+        let r = margin;
+        let c = margin;
+        if (t < topLen) {
+            c += t;
+        } else if (t < topLen + rightLen) {
+            c += topLen;
+            r += (t - topLen);
+        } else if (t < topLen + rightLen + bottomLen) {
+            c += topLen - (t - topLen - rightLen);
+            r += rightLen;
+        } else {
+            r += rightLen - (t - topLen - rightLen - bottomLen);
+        }
         return { r, c };
     }
 
@@ -95,7 +194,9 @@ export class MapGenerator {
         width: number,
         height: number,
         playerCount: number,
-        terrainTypes: ('water' | 'hill' | 'plain')[] = ['water', 'hill', 'plain']
+        mapType?: MapType,
+        terrainTypes: ('water' | 'hill' | 'plain')[] = ['water', 'hill', 'plain'],
+        spawns?: { r: number; c: number }[]
     ) {
         const area = width * height;
         const scaleFactor = area / 100;
@@ -111,9 +212,9 @@ export class MapGenerator {
         }
 
         // 2. Balance per-player zones for the requested terrain types
-        const spawns = this.getSpawnPoints(playerCount, width, height);
+        const zoneSpawns = spawns ?? this.getSpawnPoints(playerCount, width, height, mapType);
         const zoneRadius = Math.max(3, Math.floor(Math.sqrt(area / playerCount) / 2));
-        this.balanceZone(grid, width, height, spawns, zoneRadius, { balanceTerrainTypes: terrainTypes });
+        this.balanceZone(grid, width, height, zoneSpawns, zoneRadius, { balanceTerrainTypes: terrainTypes });
     }
 
     /**
@@ -483,7 +584,7 @@ export class MapGenerator {
         }
     }
 
-    private static generateArchipelago(grid: Cell[][], width: number, height: number, playerCount: number) {
+    private static generateArchipelago(grid: Cell[][], width: number, height: number, playerCount: number, spawns: { r: number; c: number }[]) {
         // Start with WATER
         this.fillGrid(grid, 'water');
 
@@ -494,10 +595,8 @@ export class MapGenerator {
         const minPlayerIsland = Math.max(8, Math.floor(targetPlayerIsland * 0.85));
 
         // Generate Player Islands first (disconnected)
-        const spawnPoints: { r: number; c: number }[] = [];
         for (let i = 0; i < playerCount; i++) {
-            const spawn = this.getSpawnPoint(i, playerCount, width, height);
-            spawnPoints.push(spawn);
+            const spawn = spawns[i] ?? this.getSpawnPoint(i, playerCount, width, height, 'archipelago');
             const island = this.growIslandFromSeed(
                 grid,
                 spawn,
@@ -523,9 +622,9 @@ export class MapGenerator {
         }
 
         // Ensure player islands are separated (safety pass)
-        this.separateSpawnIslands(grid, width, height, spawnPoints);
+        this.separateSpawnIslands(grid, width, height, spawns);
 
-        const playerLandSet = this.collectPlayerLand(grid, spawnPoints);
+        const playerLandSet = this.collectPlayerLand(grid, spawns);
         let currentLand = this.countLand(grid);
         let remainingLand = Math.max(0, targetLand - currentLand);
 
@@ -581,7 +680,7 @@ export class MapGenerator {
         }
     }
 
-    private static generatePangaea(grid: Cell[][], width: number, height: number, playerCount: number = 2) {
+    private static generatePangaea(grid: Cell[][], width: number, height: number, playerCount: number = 2, spawns: { r: number; c: number }[]) {
         // 1. Start with Land, then carve edge water inward until ~30% water
         this.fillGrid(grid, 'plain');
         const minDim = Math.min(width, height);
@@ -626,10 +725,9 @@ export class MapGenerator {
         const centerY = Math.floor(height / 2);
 
         // 2. Spawn Clusters (Anchor Points)
-        const spawnPoints: { r: number, c: number }[] = [];
+        const spawnPoints = spawns;
         for (let i = 0; i < playerCount; i++) {
-            const spawn = this.getSpawnPoint(i, playerCount, width, height);
-            spawnPoints.push(spawn);
+            const spawn = spawns[i] ?? this.getSpawnPoint(i, playerCount, width, height, 'pangaea');
             // Large cluster at spawn to guarantee start area
             const spawnClusterSize = Math.max(8, Math.floor((width * height) / playerCount / 5));
             this.growClusterAt(grid, spawn.r, spawn.c, 'plain', spawnClusterSize, 'water');
@@ -1020,9 +1118,9 @@ export class MapGenerator {
         }
     }
 
-    private static generateMountains(grid: Cell[][], width: number, height: number, playerCount: number) {
+    private static generateMountains(grid: Cell[][], width: number, height: number, playerCount: number, spawns: { r: number; c: number }[]) {
         // Default land gen (with zone balance)
-        this.generateDefault(grid, width, height, playerCount);
+        this.generateDefault(grid, width, height, playerCount, 'mountains', undefined, spawns);
 
         // Heavy Hills
         // Add ranges? Or just high density scatter?
@@ -1036,14 +1134,12 @@ export class MapGenerator {
         this.scatterTerrain(grid, 'hill', 0.2, 'plain');
 
         // Gold Mines: Fair distribution replacing Hills
-        this.distributeGoldMines(grid, width, height, this.getSpawnPoints(playerCount, width, height));
+        this.distributeGoldMines(grid, width, height, spawns);
     }
 
-    private static generateRivers(grid: Cell[][], width: number, height: number, playerCount: number = 2) {
+    private static generateRivers(grid: Cell[][], width: number, height: number, playerCount: number = 2, spawns: { r: number; c: number }[]) {
         // 1. Base terrain without water: plain + hill only; water is created in step 2
-        this.generateDefault(grid, width, height, playerCount, ['hill', 'plain']);
-
-        const spawns = this.getSpawnPoints(playerCount, width, height);
+        this.generateDefault(grid, width, height, playerCount, 'rivers', ['hill', 'plain'], spawns);
         const area = width * height;
         const zoneRadius = Math.max(3, Math.floor(Math.sqrt(area / playerCount) / 2));
 
@@ -1184,10 +1280,10 @@ export class MapGenerator {
         }
     }
 
-    private static ensureAccessibility(grid: Cell[][], width: number, height: number, playerCount: number) {
+    private static ensureAccessibility(grid: Cell[][], width: number, height: number, playerCount: number, spawns: { r: number; c: number }[]) {
         // Ensure no player is boxed in by Water or Hills immediately
         for (let i = 0; i < playerCount; i++) {
-            const spawn = this.getSpawnPoint(i, playerCount, width, height);
+            const spawn = spawns[i] ?? this.getSpawnPoint(i, playerCount, width, height, 'default');
             const { r, c } = spawn;
 
             // Force spawn itself to be plain (just in case)
@@ -1233,8 +1329,7 @@ export class MapGenerator {
         }
     }
 
-    private static distributeTreasures(grid: Cell[][], width: number, height: number, playerCount: number) {
-        const spawns = this.getSpawnPoints(playerCount, width, height);
+    private static distributeTreasures(grid: Cell[][], width: number, height: number, playerCount: number, spawns: { r: number; c: number }[]) {
         const manhattan = (r1: number, c1: number, r2: number, c2: number) =>
             Math.abs(r1 - r2) + Math.abs(c1 - c2);
 

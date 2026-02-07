@@ -19,6 +19,8 @@ export class GameState {
     private ownedCellsByPlayer: Map<PlayerID, Set<number>> = new Map();
     /** Snapshot of the base map (no bases/ownership). */
     private baseMapSnapshot: ReturnType<Cell['serialize']>[][] = [];
+    /** Spawn points used for current map generation. */
+    private spawnPoints: { r: number; c: number }[] = [];
 
     constructor(playerConfigs: { id: string, isAI: boolean, color: number }[] = [], mapType: MapType = 'default') {
         this.grid = [];
@@ -67,7 +69,13 @@ export class GameState {
         }
 
         // 2. Delegate to Generator
-        MapGenerator.generate(this.grid, this.currentMapType, GameConfig.GRID_WIDTH, GameConfig.GRID_HEIGHT, this.playerOrder.length);
+        this.spawnPoints = MapGenerator.generate(
+            this.grid,
+            this.currentMapType,
+            GameConfig.GRID_WIDTH,
+            GameConfig.GRID_HEIGHT,
+            this.playerOrder.length
+        );
 
         // 2b. Snapshot base map before bases are placed.
         this.storeBaseMapSnapshot();
@@ -127,26 +135,42 @@ export class GameState {
 
         // Inset by 2 tiles
         const margin = 2;
-        const boundedW = w - 2 * margin;
-        const boundedH = h - 2 * margin;
+        const boundedW = Math.max(1, w - 2 * margin);
+        const boundedH = Math.max(1, h - 2 * margin);
+        const perimeter = 2 * ((boundedW - 1) + (boundedH - 1));
+        const usePerimeterSpawns = this.currentMapType === 'pangaea' || this.currentMapType === 'archipelago';
+        const useRandomSpawns = this.currentMapType === 'mountains' || this.currentMapType === 'rivers';
+        const randomSpawns = useRandomSpawns && this.spawnPoints.length === count
+            ? this.spawnPoints
+            : [];
 
         for (let i = 0; i < count; i++) {
             const playerId = this.playerOrder[i];
+            let r = Math.floor(h / 2);
+            let c = Math.floor(w / 2);
+            if (useRandomSpawns && randomSpawns[i]) {
+                r = randomSpawns[i].r;
+                c = randomSpawns[i].c;
+            } else if (usePerimeterSpawns && perimeter > 0) {
+                const spawn = this.getPerimeterSpawnPoint(i, count, w, h, margin);
+                r = spawn.r;
+                c = spawn.c;
+            } else {
+                // Angle fraction
+                const angle = (i / count) * 2 * Math.PI - (Math.PI / 2); // Start top -PI/2
+                // Let's adjust angle so P1 at Top Left: That is roughly -3PI/4 or 5PI/4.
+                const startOffset = -3 * Math.PI / 4;
+                const finalAngle = angle + startOffset;
 
-            // Angle fraction
-            const angle = (i / count) * 2 * Math.PI - (Math.PI / 2); // Start top -PI/2
-            // Let's adjust angle so P1 at Top Left: That is roughly -3PI/4 or 5PI/4.
-            const startOffset = -3 * Math.PI / 4;
-            const finalAngle = angle + startOffset;
+                // Simple Ellipse Projection
+                // x = center + cos(a) * w/2
+                const cx = w / 2;
+                const cy = h / 2;
 
-            // Simple Ellipse Projection
-            // x = center + cos(a) * w/2
-            const cx = w / 2;
-            const cy = h / 2;
-
-            // Use round to snap to grid
-            let r = Math.round(cy + (boundedH / 2) * Math.sin(finalAngle));
-            let c = Math.round(cx + (boundedW / 2) * Math.cos(finalAngle));
+                // Use round to snap to grid
+                r = Math.round(cy + (boundedH / 2) * Math.sin(finalAngle));
+                c = Math.round(cx + (boundedW / 2) * Math.cos(finalAngle));
+            }
 
             // Clamp just in case
             r = Math.max(0, Math.min(h - 1, r));
@@ -166,6 +190,34 @@ export class GameState {
             this.setBuilding(r, c, 'base');
         }
     }
+
+    private getPerimeterSpawnPoint(index: number, total: number, width: number, height: number, margin: number) {
+        const boundedW = Math.max(1, width - 2 * margin);
+        const boundedH = Math.max(1, height - 2 * margin);
+        const perimeter = 2 * ((boundedW - 1) + (boundedH - 1));
+        if (perimeter <= 0) {
+            return { r: Math.floor(height / 2), c: Math.floor(width / 2) };
+        }
+        let t = Math.floor((index / total) * perimeter);
+        const topLen = boundedW - 1;
+        const rightLen = boundedH - 1;
+        const bottomLen = boundedW - 1;
+        let r = margin;
+        let c = margin;
+        if (t < topLen) {
+            c += t;
+        } else if (t < topLen + rightLen) {
+            c += topLen;
+            r += (t - topLen);
+        } else if (t < topLen + rightLen + bottomLen) {
+            c += topLen - (t - topLen - rightLen);
+            r += rightLen;
+        } else {
+            r += rightLen - (t - topLen - rightLen - bottomLen);
+        }
+        return { r, c };
+    }
+
 
     private findNearestPlainNonCitadel(fromR: number, fromC: number): { r: number; c: number } | null {
         const w = GameConfig.GRID_WIDTH;
