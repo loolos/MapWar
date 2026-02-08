@@ -40,6 +40,7 @@ export class AIController {
     // AI Logic (Robust & Strategic)
     playTurn() {
         let actionCounter = 0;
+        let endTurnCalled = false;
         try {
             const aiPlayer = this.engine.state.getCurrentPlayer();
             if (!aiPlayer.isAI) {
@@ -547,6 +548,7 @@ export class AIController {
                         continue;
                     }
                     this.engine.lastAiMoves.push({ r: best.r, c: best.c });
+                    time('ai.commitActions', () => this.engine.commitActions());
                     executed = true;
                 } else if (best.actionId) {
                     const action = this.engine.interactionRegistry.get(best.actionId);
@@ -562,6 +564,7 @@ export class AIController {
                     const before = this.engine.pendingInteractions.length;
                     this.engine.planInteraction(best.r, best.c, best.actionId);
                     if (this.engine.pendingInteractions.length > before) {
+                        time('ai.commitActions', () => this.engine.commitActions());
                         executed = true;
                     } else {
                         skipped.add(key);
@@ -593,13 +596,12 @@ export class AIController {
                 }
             }
 
-            if (actionCounter > 0) {
-                this.engine.endTurn();
-            }
+            endTurnCalled = true;
+            this.engine.endTurn();
         } catch (err) {
             console.error("AI Logic Exception:", err);
         } finally {
-            if (actionCounter === 0) {
+            if (!endTurnCalled) {
                 this.engine.endTurn();
             }
         }

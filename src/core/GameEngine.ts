@@ -1448,7 +1448,7 @@ export class GameEngine {
         this.actedTilesThisTurn.add(`${row},${col}`);
     }
 
-    private commitActions() {
+    commitActions() {
         const pid = this.state.currentPlayerId;
         if (!pid || this.isGameOver) return;
 
