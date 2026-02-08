@@ -39,6 +39,7 @@ export class AIController {
 
     // AI Logic (Robust & Strategic)
     playTurn() {
+        let actionCounter = 0;
         try {
             const aiPlayer = this.engine.state.getCurrentPlayer();
             if (!aiPlayer.isAI) {
@@ -131,15 +132,22 @@ export class AIController {
 
             const buildAffordableList = (remainingGold: number) => {
                 const affordable: ActionCandidate[] = [];
+                const interactionTiles = new Set<string>();
                 let total = 0;
                 let nextUnaffordable: ActionCandidate | null = null;
-                for (const candidate of candidatePool) {
+                for (let i = 0; i < candidatePool.length; i++) {
+                    const candidate = candidatePool[i];
                     const key = makeCandidateKey(candidate);
+                    const tileKey = `${candidate.r},${candidate.c}`;
                     if (skipped.has(key)) continue;
-                    if (actedTiles.has(`${candidate.r},${candidate.c}`)) continue;
+                    if (actedTiles.has(tileKey)) continue;
                     if (candidate.kind === 'interaction') {
+                        if (interactionTiles.has(tileKey)) continue;
                         const action = this.engine.interactionRegistry.get(candidate.actionId || '');
                         if (!action || !action.isAvailable(this.engine, candidate.r, candidate.c, true)) {
+                            candidateKeys.delete(key);
+                            candidatePool.splice(i, 1);
+                            i--;
                             skipped.add(key);
                             continue;
                         }
@@ -150,6 +158,9 @@ export class AIController {
                     }
                     affordable.push(candidate);
                     total += candidate.cost;
+                    if (candidate.kind === 'interaction') {
+                        interactionTiles.add(tileKey);
+                    }
                 }
                 return { affordable, nextUnaffordable };
             };
@@ -498,7 +509,7 @@ export class AIController {
                 return candidates;
             };
 
-            let actionCounter = 0;
+            actionCounter = 0;
             const MAX_ACTIONS = weights.MAX_MOVES_PER_TURN;
             let remainingGold = aiPlayer.gold;
 
@@ -536,18 +547,21 @@ export class AIController {
                         continue;
                     }
                     this.engine.lastAiMoves.push({ r: best.r, c: best.c });
-                    time('ai.commitMoves', () => this.engine.commitMoves());
                     executed = true;
                 } else if (best.actionId) {
                     const action = this.engine.interactionRegistry.get(best.actionId);
                     if (!action || !action.isAvailable(this.engine, best.r, best.c, true)) {
+                        const idx = candidatePool.findIndex((c) => makeCandidateKey(c) === key);
+                        if (idx >= 0) {
+                            candidatePool.splice(idx, 1);
+                            candidateKeys.delete(key);
+                        }
                         skipped.add(key);
                         continue;
                     }
                     const before = this.engine.pendingInteractions.length;
                     this.engine.planInteraction(best.r, best.c, best.actionId);
                     if (this.engine.pendingInteractions.length > before) {
-                        time('ai.commitMoves', () => this.engine.commitMoves());
                         executed = true;
                     } else {
                         skipped.add(key);
@@ -579,10 +593,15 @@ export class AIController {
                 }
             }
 
+            if (actionCounter > 0) {
+                this.engine.endTurn();
+            }
         } catch (err) {
             console.error("AI Logic Exception:", err);
         } finally {
-            this.engine.endTurn();
+            if (actionCounter === 0) {
+                this.engine.endTurn();
+            }
         }
     }
 

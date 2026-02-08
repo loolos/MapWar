@@ -75,7 +75,7 @@ describe('Interaction System', () => {
         const initialGold = engine.state.players['P1'].gold;
         // Cost of Outpost is 50
 
-        engine.commitMoves();
+        engine.endTurn();
 
         // Verify Execution (Log)
         expect(logSpy).toHaveBeenCalledWith(expect.objectContaining({

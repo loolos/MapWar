@@ -328,7 +328,7 @@ export class GameEngine {
         });
         this.pendingMoves = validatedMoves;
         this.revalidatePendingPlan();
-        this.commitMoves();
+        this.commitActions();
         if (this.isGameOver) return;
 
         this.advanceTurn();
@@ -1448,7 +1448,7 @@ export class GameEngine {
         this.actedTilesThisTurn.add(`${row},${col}`);
     }
 
-    commitMoves() {
+    private commitActions() {
         const pid = this.state.currentPlayerId;
         if (!pid || this.isGameOver) return;
 
@@ -1655,9 +1655,17 @@ export class GameEngine {
         // If an interaction relies on ownership, and a move changes ownership...
         // Interaction validity should be checked at execution time too.
 
-        // Filter valid interactions (in case environment changed)
-        // copy pending
-        const interactionsToRun = [...this.pendingInteractions];
+        // Snapshot interaction costs BEFORE execution for consistency with planning.
+        const interactionsWithCost = this.pendingInteractions.map((interaction) => {
+            const action = this.interactionRegistry.get(interaction.actionId);
+            if (!action) {
+                return { interaction, action: null as null, cost: 0 };
+            }
+            const cost = typeof action.cost === 'function'
+                ? action.cost(this, interaction.r, interaction.c)
+                : action.cost;
+            return { interaction, action, cost };
+        });
 
         let baseIncomeUpgrades = 0;
         let baseDefenseUpgrades = 0;
@@ -1668,18 +1676,16 @@ export class GameEngine {
         let farmBuilds = 0;
         let farmUpgrades = 0;
 
-        interactionsToRun.forEach(interaction => {
+        interactionsWithCost.forEach(({ interaction, action, cost }) => {
             // Check if game ended during execution
             if (this.isGameOver) return;
-            
-            const action = this.interactionRegistry.get(interaction.actionId);
+
             if (action) {
                 if (this.hasActedThisTurn(interaction.r, interaction.c)) {
                     return;
                 }
                 // Check Availability
                 if (action.isAvailable(this, interaction.r, interaction.c)) {
-                    const c = typeof action.cost === 'function' ? action.cost(this, interaction.r, interaction.c) : action.cost;
                     action.execute(this, interaction.r, interaction.c);
                     if (interaction.actionId === 'BUILD_WALL') wallBuilds++;
                     if (interaction.actionId === 'BUILD_WATCHTOWER') watchtowerBuilds++;
@@ -1692,8 +1698,8 @@ export class GameEngine {
                         if (cell?.building === 'wall') wallUpgrades++;
                         else if (cell?.building === 'base') baseDefenseUpgrades++;
                     }
-                    this.stateManager.spendGold(pid, c); // Deduct immediately (can go negative)
-                    totalCost += c;
+                    this.stateManager.spendGold(pid, cost); // Deduct immediately (can go negative)
+                    totalCost += cost;
                     this.markActedThisTurn(interaction.r, interaction.c);
                 } else {
                     console.warn(`Interaction ${interaction.actionId} failed validation at commit`);
@@ -1749,7 +1755,7 @@ export class GameEngine {
         if (this.isGameOver) return;
 
         // Commit pending moves/interactions
-        this.commitMoves();
+        this.commitActions();
 
         // Check if game ended in commitMoves
         if (this.isGameOver) return;

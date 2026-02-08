@@ -362,7 +362,7 @@ describe('GameEngine', () => {
             expect(engine.pendingMoves).toHaveLength(1);
 
             // Commit
-            engine.commitMoves();
+            engine.endTurn();
 
             expect(gameOverSpy).toHaveBeenCalledWith('P1');
             expect(engine.isGameOver).toBe(true);
@@ -395,7 +395,7 @@ describe('GameEngine', () => {
 
             // Attack
             engine.togglePlan(9, 9);
-            engine.commitMoves();
+            engine.endTurn();
 
             // P2 should be removed from order
             expect(engine.state.playerOrder).not.toContain('P2');
@@ -687,7 +687,7 @@ describe('GameEngine', () => {
             engine.pendingMoves = [{ r: 0, c: 1 }]; // Manually set pending for P2
 
             // Commit P2 moves
-            engine.commitMoves();
+            engine.endTurn();
 
             // P1's (0,2) is now an enclave. Notification should fire.
             expect(logSpy).toHaveBeenCalledWith(expect.objectContaining({
@@ -719,7 +719,7 @@ describe('GameEngine', () => {
 
         it('transforms water to bridge on commit', () => {
             engine.togglePlan(0, 1);
-            engine.commitMoves();
+            engine.endTurn();
 
             const cell = engine.state.getCell(0, 1)!;
             expect(cell.type).toBe('bridge');
@@ -729,7 +729,7 @@ describe('GameEngine', () => {
         it('bridge provides 0 income', () => {
             // Build bridge at (0,1)
             engine.togglePlan(0, 1);
-            engine.commitMoves();
+            engine.endTurn();
 
             // Check income report
             const report = engine.state.accrueResources('P1')!;
@@ -748,14 +748,15 @@ describe('GameEngine', () => {
 
             // Build bridge
             engine.togglePlan(0, 1);
-            engine.commitMoves(); // Bridge built at (0,1)
+            engine.endTurn(); // Bridge built at (0,1)
 
             // Capture (0,2) via bridge
             // (0,2) is adjacent to (0,1) which is now a bridge owned by P1
+            engine.endTurn(); // Advance back to P1
             engine.togglePlan(0, 2);
             expect(engine.pendingMoves).toHaveLength(1); // Should be valid
 
-            engine.commitMoves();
+            engine.endTurn();
 
             expect(engine.state.getCell(0, 2)?.owner).toBe('P1');
 
@@ -815,7 +816,7 @@ describe('GameEngine', () => {
             engine.pendingMoves = [{ r: 0, c: 0 }];
 
             // Commit
-            engine.commitMoves();
+            engine.endTurn();
 
             // 1. P2 Base Destroyed
             expect(engine.state.getCell(0, 0)?.building).toBe('none');
@@ -879,7 +880,7 @@ describe('GameEngine', () => {
 
             // Toggle Plan acts as planMove if not present
             engine.togglePlan(0, 1);
-            engine.commitMoves();
+            engine.endTurn();
 
             const cell = engine.state.getCell(0, 1);
             expect(cell?.owner).toBe('P1');

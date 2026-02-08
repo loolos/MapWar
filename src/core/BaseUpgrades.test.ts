@@ -58,7 +58,7 @@ describe('Base Upgrades', () => {
         // Verify Plan
         expect(engine.pendingInteractions.length).toBe(1);
 
-        engine.commitMoves();
+        engine.endTurn();
 
         // Check Level
         const cell = engine.state.getCell(0, 0)!;
@@ -81,7 +81,7 @@ describe('Base Upgrades', () => {
 
         // 1. Upgrade Level 1
         engine.planInteraction(0, 0, 'UPGRADE_INCOME');
-        engine.commitMoves();
+        engine.endTurn();
         expect(cell.incomeLevel).toBe(1);
 
         // Calculate Income
@@ -94,9 +94,8 @@ describe('Base Upgrades', () => {
 
         // 2. Upgrade Level 2
         engine.endTurn();
-        engine.endTurn();
         engine.planInteraction(0, 0, 'UPGRADE_INCOME');
-        engine.commitMoves();
+        engine.endTurn();
         expect(cell.incomeLevel).toBe(2);
 
         // Base (10) + Level 1 (1) + Level 2 (2) = 13.
@@ -107,9 +106,8 @@ describe('Base Upgrades', () => {
         // 3. Verify Levels 3, 4, 5
         for (let i = 3; i <= 5; i++) {
             engine.endTurn();
-            engine.endTurn();
             engine.planInteraction(0, 0, 'UPGRADE_INCOME');
-            engine.commitMoves();
+            engine.endTurn();
             expect(cell.incomeLevel).toBe(i);
         }
 
@@ -188,13 +186,12 @@ describe('Base Upgrades', () => {
 
         // Upgrade Lv 1
         engine.planInteraction(0, 0, 'UPGRADE_DEFENSE');
-        engine.commitMoves();
+        engine.endTurn();
 
         // Upgrade Lv 2
         engine.endTurn();
-        engine.endTurn();
         engine.planInteraction(0, 0, 'UPGRADE_DEFENSE');
-        engine.commitMoves();
+        engine.endTurn();
 
         // Switch to P2 to check cost
         engine.state.currentPlayerId = 'P2';
@@ -216,17 +213,15 @@ describe('Base Upgrades', () => {
 
         // Upgrade Income twice
         engine.planInteraction(0, 0, 'UPGRADE_INCOME'); // Lv1
-        engine.commitMoves();
         engine.endTurn();
         engine.endTurn();
         engine.planInteraction(0, 0, 'UPGRADE_INCOME'); // Lv2
-        engine.commitMoves();
+        engine.endTurn();
 
         // Upgrade Defense once
         engine.endTurn();
-        engine.endTurn();
         engine.planInteraction(0, 0, 'UPGRADE_DEFENSE'); // Lv1
-        engine.commitMoves();
+        engine.endTurn();
 
         expect(cell.incomeLevel).toBe(2);
         expect(cell.defenseLevel).toBe(1);

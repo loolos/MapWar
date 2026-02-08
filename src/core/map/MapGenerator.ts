@@ -4,6 +4,10 @@ import { GameConfig } from '../GameConfig';
 export type MapType = 'default' | 'archipelago' | 'pangaea' | 'mountains' | 'rivers';
 
 export class MapGenerator {
+    public static computeSpawnPoints(type: MapType, width: number, height: number, playerCount: number) {
+        return this.getSpawnPoints(playerCount, width, height, type);
+    }
+
     private static getSpawnPoints(count: number, width: number, height: number, mapType?: MapType) {
         if (mapType === 'mountains' || mapType === 'rivers') {
             return this.getRandomSpawnPoints(count, width, height);
@@ -44,7 +48,7 @@ export class MapGenerator {
                 break;
             case 'default':
             default:
-                this.generateDefault(grid, width, height, playerCount, type, undefined, spawns);
+                this.generateDefault(grid, width, height, playerCount, type, ['water', 'hill', 'plain'], spawns);
                 break;
         }
 
@@ -1120,7 +1124,7 @@ export class MapGenerator {
 
     private static generateMountains(grid: Cell[][], width: number, height: number, playerCount: number, spawns: { r: number; c: number }[]) {
         // Default land gen (with zone balance)
-        this.generateDefault(grid, width, height, playerCount, 'mountains', undefined, spawns);
+        this.generateDefault(grid, width, height, playerCount, 'mountains', ['water', 'hill', 'plain'], spawns);
 
         // Heavy Hills
         // Add ranges? Or just high density scatter?

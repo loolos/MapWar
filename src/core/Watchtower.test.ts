@@ -37,21 +37,19 @@ describe('Watchtower Logic', () => {
 
         // 1. Build Watchtower
         engine.planInteraction(0, 1, 'BUILD_WATCHTOWER');
-        engine.commitMoves();
+        engine.endTurn();
         expect(cell.watchtowerLevel).toBe(1);
 
         // 2. Upgrade to Lv 2
         engine.endTurn();
-        engine.endTurn();
         engine.planInteraction(0, 1, 'UPGRADE_WATCHTOWER');
-        engine.commitMoves();
+        engine.endTurn();
         expect(cell.watchtowerLevel).toBe(2);
 
         // 3. Upgrade to Lv 3
         engine.endTurn();
-        engine.endTurn();
         engine.planInteraction(0, 1, 'UPGRADE_WATCHTOWER');
-        engine.commitMoves();
+        engine.endTurn();
         expect(cell.watchtowerLevel).toBe(3);
     });
 
@@ -136,7 +134,7 @@ describe('Watchtower Logic', () => {
 
         // P2 Attacks (0,1)
         engine.planInteraction(0, 1, 'MOVE'); // Attack/Capture
-        engine.commitMoves();
+        engine.endTurn();
 
         // Check Ownership
         expect(cell.owner).toBe('P2');

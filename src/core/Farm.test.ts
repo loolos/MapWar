@@ -43,7 +43,7 @@ describe('Farm Logic', () => {
     it('builds farm and calculates income correctly', () => {
         engine.state.setOwner(0, 1, 'P1');
         engine.planInteraction(0, 1, 'BUILD_FARM');
-        engine.commitMoves();
+        engine.endTurn();
 
         const cell = engine.state.getCell(0, 1) as Cell;
         expect(cell.building).toBe('farm');
@@ -63,13 +63,12 @@ describe('Farm Logic', () => {
         engine.state.setOwner(0, 1, 'P1');
         // Build
         engine.planInteraction(0, 1, 'BUILD_FARM');
-        engine.commitMoves();
+        engine.endTurn();
 
         // Upgrade to Lv 2
         engine.endTurn();
-        engine.endTurn();
         engine.planInteraction(0, 1, 'UPGRADE_FARM');
-        engine.commitMoves();
+        engine.endTurn();
 
         const cell = engine.state.getCell(0, 1) as Cell;
         expect(cell.farmLevel).toBe(2);
@@ -84,10 +83,9 @@ describe('Farm Logic', () => {
         engine.state.setOwner(0, 1, 'P1');
         engine.state.setBuilding(0, 1, 'none'); // Ensure clean slate (no random towns)
         engine.planInteraction(0, 1, 'BUILD_FARM');
-        engine.commitMoves();
+        engine.endTurn();
 
         // P2 Captures
-        engine.endTurn();
         engine.state.players['P2'].gold = 100;
 
         // P2 is at (0,2)
@@ -95,7 +93,7 @@ describe('Farm Logic', () => {
         engine.state.setBuilding(0, 2, 'base'); // Connected
 
         engine.togglePlan(0, 1); // Attack
-        engine.commitMoves();
+        engine.endTurn();
 
         const cell = engine.state.getCell(0, 1) as Cell;
         expect(cell.owner).toBe('P2');

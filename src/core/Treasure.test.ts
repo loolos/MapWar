@@ -238,7 +238,7 @@ describe('Treasure Chest/Flotsam System', () => {
             engine.pendingMoves = [{ r: 0, c: 1 }];
             
             const logSpy = vi.spyOn(engine, 'emit');
-            engine.commitMoves();
+            engine.endTurn();
 
             expect(engine.state.getCell(0, 1)!.owner).toBe('P1');
             expect(engine.state.getCell(0, 1)!.treasureGold).toBe(null); // Treasure removed
@@ -267,7 +267,7 @@ describe('Treasure Chest/Flotsam System', () => {
             engine.pendingMoves = [{ r: 0, c: 1 }];
             
             const logSpy = vi.spyOn(engine, 'emit');
-            engine.commitMoves();
+            engine.endTurn();
 
             expect(engine.state.getCell(0, 1)!.owner).toBe('P1');
             expect(engine.state.getCell(0, 1)!.treasureGold).toBe(null); // Flotsam removed
@@ -297,7 +297,7 @@ describe('Treasure Chest/Flotsam System', () => {
             engine.pendingMoves = [{ r: 0, c: 1 }];
             
             const logSpy = vi.spyOn(engine, 'emit');
-            engine.commitMoves();
+            engine.endTurn();
 
             expect(engine.state.getCell(0, 1)!.owner).toBe('P1');
             // Gold may decrease due to move cost, but should not increase from treasure
@@ -321,7 +321,7 @@ describe('Treasure Chest/Flotsam System', () => {
             // First capture
             const initialGold = engine.state.players['P1'].gold;
             engine.pendingMoves = [{ r: 0, c: 1 }];
-            engine.commitMoves();
+            engine.endTurn();
 
             expect(engine.state.getCell(0, 1)!.treasureGold).toBe(null);
             // Gold = initial + treasure - move cost (typically 5 for adjacent)
@@ -329,7 +329,6 @@ describe('Treasure Chest/Flotsam System', () => {
             expect(finalGold).toBe(initialGold + 100 - 10); // +100 treasure, -10 move cost
 
             // Re-capture by enemy (should not give treasure again)
-            engine.state.setOwner(0, 1, 'P2');
             engine.state.players['P2'].gold = 1000;
             engine.state.currentPlayerId = 'P2';
             engine.state.setOwner(0, 2, 'P2');
@@ -337,10 +336,11 @@ describe('Treasure Chest/Flotsam System', () => {
             engine.state.updateConnectivity('P2');
 
             const p2InitialGold = engine.state.players['P2'].gold;
+            const moveCost = engine.getMoveCost(0, 1);
             engine.pendingMoves = [{ r: 0, c: 1 }];
-            engine.commitMoves();
+            engine.endTurn();
 
-            expect(engine.state.players['P2'].gold).toBe(p2InitialGold); // No treasure bonus
+            expect(engine.state.players['P2'].gold).toBeCloseTo(p2InitialGold - moveCost, 5); // No treasure bonus
         });
 
         it('collects multiple treasures in one turn', () => {
@@ -357,7 +357,7 @@ describe('Treasure Chest/Flotsam System', () => {
                 { r: 0, c: 2 }
             ];
             
-            engine.commitMoves();
+            engine.endTurn();
 
             expect(engine.state.getCell(0, 1)!.treasureGold).toBe(null);
             expect(engine.state.getCell(0, 2)!.treasureGold).toBe(null);

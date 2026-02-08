@@ -139,18 +139,15 @@ export class GameState {
         const boundedH = Math.max(1, h - 2 * margin);
         const perimeter = 2 * ((boundedW - 1) + (boundedH - 1));
         const usePerimeterSpawns = this.currentMapType === 'pangaea' || this.currentMapType === 'archipelago';
-        const useRandomSpawns = this.currentMapType === 'mountains' || this.currentMapType === 'rivers';
-        const randomSpawns = useRandomSpawns && this.spawnPoints.length === count
-            ? this.spawnPoints
-            : [];
+        const useStoredSpawns = this.spawnPoints.length === count;
 
         for (let i = 0; i < count; i++) {
             const playerId = this.playerOrder[i];
             let r = Math.floor(h / 2);
             let c = Math.floor(w / 2);
-            if (useRandomSpawns && randomSpawns[i]) {
-                r = randomSpawns[i].r;
-                c = randomSpawns[i].c;
+            if (useStoredSpawns) {
+                r = this.spawnPoints[i].r;
+                c = this.spawnPoints[i].c;
             } else if (usePerimeterSpawns && perimeter > 0) {
                 const spawn = this.getPerimeterSpawnPoint(i, count, w, h, margin);
                 r = spawn.r;
@@ -314,6 +311,14 @@ export class GameState {
                 }
             }
 
+            if (this.spawnPoints.length !== this.playerOrder.length) {
+                this.spawnPoints = MapGenerator.computeSpawnPoints(
+                    this.currentMapType,
+                    GameConfig.GRID_WIDTH,
+                    GameConfig.GRID_HEIGHT,
+                    this.playerOrder.length
+                );
+            }
             this.setupBases();
             this.cacheCitadelLocation();
             this.cacheLighthouseLocations();
@@ -516,8 +521,8 @@ export class GameState {
     public accrueResources(playerId: PlayerID) {
         if (!playerId) return null;
 
-        // Note: Connectivity should already be up-to-date from commitMoves() in the previous turn.
-        // We only need to recalculate if ownership changed, which is handled in commitMoves().
+        // Note: Connectivity should already be up-to-date from commitActions() in the previous turn.
+        // We only need to recalculate if ownership changed, which is handled in commitActions().
         // No need to update connectivity here for performance optimization.
 
         // Citadel: update turns held for accruing player

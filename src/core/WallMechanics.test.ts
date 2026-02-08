@@ -34,7 +34,7 @@ describe('Wall Mechanics', () => {
         expect(engine.pendingInteractions).toHaveLength(1);
 
         // Commit
-        engine.commitMoves();
+        engine.endTurn();
         const cell = engine.state.getCell(0, 0)!;
         expect(cell.building).toBe('wall');
         expect(cell.defenseLevel).toBe(1);
@@ -82,7 +82,7 @@ describe('Wall Mechanics', () => {
 
         // Plan & Commit
         engine.planInteraction(0, 0, 'UPGRADE_DEFENSE');
-        engine.commitMoves();
+        engine.endTurn();
 
         expect(cell.defenseLevel).toBe(2);
 
@@ -117,7 +117,7 @@ describe('Wall Mechanics', () => {
 
         // P2 attacks (0,0)
         engine.togglePlan(0, 0);
-        engine.commitMoves();
+        engine.endTurn();
 
         // Check Result
         expect(cell.owner).toBe('P2');
@@ -139,7 +139,7 @@ describe('Wall Mechanics', () => {
         engine.state.currentPlayerId = 'P2';
 
         engine.togglePlan(0, 0);
-        engine.commitMoves();
+        engine.endTurn();
 
         // Check Result
         expect(cell.owner).toBe('P2');

@@ -206,7 +206,7 @@ describe('GameEngine - Town Mechanics', () => {
         engine.state.players['P1'].gold = 9999;
         engine.pendingMoves = [{ r: 0, c: 1 }];
 
-        engine.commitMoves();
+        engine.endTurn();
 
         expect(cell.owner).toBe('P1');
         expect(cell.townIncome).toBe(1);

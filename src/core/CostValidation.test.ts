@@ -61,7 +61,7 @@ describe('Cost Validation Bug', () => {
         // Wait, commitMoves doesn't prune COST. It relies on `togglePlan` to prune.
         // But `commitMoves` iterates.
 
-        engine.commitMoves();
+        engine.endTurn();
 
         const cell1 = engine.state.getCell(0, 1);
         const cell2 = engine.state.getCell(0, 2);

@@ -29,7 +29,7 @@ describe('Citadel Mechanics', () => {
 
         // Capture it for P1
         engine.pendingMoves.push({ r, c });
-        engine.commitMoves();
+        engine.endTurn();
         expect(engine.state.grid[r][c].owner).toBe('P1');
         // Manually set connected to avoid x0.7 disconnected penalty
         engine.state.grid[r][c].isConnected = true;
@@ -111,7 +111,7 @@ describe('Citadel Mechanics', () => {
 
         engine.pendingMoves = [];
         engine.pendingMoves.push({ r, c });
-        engine.commitMoves();
+        engine.endTurn();
 
         // P2 should own it
         expect(engine.state.grid[r][c].owner).toBe('P2');

@@ -70,7 +70,7 @@ describe('Cost Discrepancy Reproduction', () => {
         // Cost 3: Base * 3x
 
         // Execute Moves
-        engine.commitMoves();
+        engine.endTurn();
 
         const finalGold = player.gold;
         const deducted = initialGold - finalGold;
@@ -130,7 +130,7 @@ describe('Cost Discrepancy Reproduction', () => {
         // Multiplier: Neutral? No, P2. Attack Multiplier (GameConfig.COST_MULTIPLIER_ATTACK).
         // Let's assume defaults: COST_ATTACK=20. Multiplier might be 1.
 
-        engine.commitMoves();
+        engine.endTurn();
 
         const deducted = initialGold - p1.gold;
 
@@ -144,7 +144,7 @@ describe('Cost Discrepancy Reproduction', () => {
         const engine = new GameEngine();
         const p1 = engine.state.players['P1'];
         // Reset map state deterministically to avoid flakiness from random treasure placement.
-        // commitMoves() will auto-collect treasureGold on capture, which can make deducted != planned.
+        // commitActions() will auto-collect treasureGold on capture, which can make deducted != planned.
         engine.state.grid.forEach(row => row.forEach(cell => {
             cell.type = 'plain';
             cell.owner = null;
@@ -194,7 +194,7 @@ describe('Cost Discrepancy Reproduction', () => {
         console.log(`Debug - Pending moves: ${JSON.stringify(engine.pendingMoves)}`);
 
         const goldBeforeCommit = p1.gold;
-        engine.commitMoves();
+        engine.endTurn();
 
         const deducted = initialGold - p1.gold;
         const goldAfterCommit = p1.gold;

@@ -44,7 +44,7 @@ describe('Gold Mine Feature', () => {
         engine.state.getCell(0, 1)!.owner = null;
 
         engine.pendingMoves = [{ r: 0, c: 1 }];
-        engine.commitMoves();
+        engine.endTurn();
 
         const cell = engine.state.getCell(0, 1)!;
         expect(cell.owner).toBe('P1');
@@ -65,7 +65,7 @@ describe('Gold Mine Feature', () => {
         engine.state.getCell(0, 1)!.owner = null;
 
         engine.pendingMoves = [{ r: 0, c: 1 }];
-        engine.commitMoves();
+        engine.endTurn();
 
         const cell = engine.state.getCell(0, 1)!;
         expect(cell.building).toBe('none');
@@ -82,7 +82,7 @@ describe('Gold Mine Feature', () => {
         engine.state.getCell(0, 1)!.owner = null;
 
         engine.pendingMoves = [{ r: 0, c: 1 }];
-        engine.commitMoves();
+        engine.endTurn();
 
         const cell = engine.state.getCell(0, 1)!;
         expect(cell.building).toBe('none');
