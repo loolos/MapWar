@@ -74,6 +74,15 @@ npm run ai:selfplay:benchmark
 npm run ai:selfplay:tune
 ```
 
+
+## 📚 Documentation
+
+*   `docs/ai_agent_onboarding.md` - entry guide for future AI agents.
+*   `docs/game_architecture.md` - gameplay systems and turn/event model.
+*   `docs/code_architecture.md` - codebase layering, module map, and extension workflow.
+*   `docs/ui_design_principles.md` - responsive UI layout contract.
+*   `docs/logging_policy.md` - user-facing logging standards.
+
 ## 💻 Tech Stack
 *   **Engine**: [Phaser 3](https://phaser.io/)
 *   **Language**: [TypeScript](https://www.typescriptlang.org/)
