@@ -60,6 +60,7 @@ export class GameEngine {
     private bloodMoonActive = false;
     private bloodMoonEndRound: number | null = null;
     private readonly baseAttackMultiplier = GameConfig.COST_MULTIPLIER_ATTACK;
+    private pendingFarmCaptureLoot = 0;
 
     constructor(
         playerConfigs: { id: string, isAI: boolean, color: number }[] = [],
@@ -193,6 +194,7 @@ export class GameEngine {
         this.lastAiMoves = [];
         this.lastError = null;
         this.actedTilesThisTurn.clear();
+        this.pendingFarmCaptureLoot = 0;
         this.floodedCells.clear();
         this.ai.invalidateTreasureCache();
         if (this.peaceDayActive) this.endPeaceDay();
@@ -232,6 +234,7 @@ export class GameEngine {
         this.lastAiMoves = [];
         this.lastError = null;
         this.actedTilesThisTurn.clear();
+        this.pendingFarmCaptureLoot = 0;
         this.isGameOver = false;
 
         // Ensure Config Grid Size matches loaded state?
@@ -335,6 +338,15 @@ export class GameEngine {
     }
 
     private advanceTurn() {
+        const endingPlayerId = this.state.currentPlayerId;
+        if (endingPlayerId && this.pendingFarmCaptureLoot > 0) {
+            const loot = this.pendingFarmCaptureLoot;
+            this.stateManager.addGold(endingPlayerId, loot);
+            this.emit('logMessage', { text: `${endingPlayerId} plundered ${loot}G from captured farms.`, type: 'combat' });
+            this.emit('sfx:gold_found');
+        }
+        this.pendingFarmCaptureLoot = 0;
+
         const incomeReport = this.state.endTurn();
         this.actedTilesThisTurn.clear();
 
@@ -1465,6 +1477,7 @@ export class GameEngine {
         let captureCount = 0;
         let conquerCount = 0;
         let bridgeBuiltCount = 0;
+        let farmCaptureLoot = 0;
         const ownershipChangedPlayers = new Set<string>(); // Track players whose land ownership changed
         const ownershipChanges: OwnershipChange[] = []; // Detailed ownership change records
 
@@ -1552,6 +1565,8 @@ export class GameEngine {
             // Note: If capturing from Neutral, maybe keep it? But Farms are usually built by players.
             // Requirement: "如果被敌军占领则毁掉变会空地平原" (If occupied by enemy, destroyed to plain)
             if (cell.building === 'farm' && cell.owner && cell.owner !== pid) {
+                const farmLevel = Math.max(0, Math.min(cell.farmLevel, GameConfig.FARM_MAX_LEVEL));
+                farmCaptureLoot += GameConfig.FARM_CAPTURE_LOOT[farmLevel] ?? 0;
                 cell.building = 'none';
                 cell.farmLevel = 0;
                 this.emit('logMessage', { text: `Farm at (${move.r}, ${move.c}) destroyed!`, type: 'combat' });
@@ -1629,6 +1644,8 @@ export class GameEngine {
             totalCost += cost;
             this.markActedThisTurn(move.r, move.c);
         }
+
+        this.pendingFarmCaptureLoot += farmCaptureLoot;
 
         // Emit SFX based on priority (Highest impact first)
         const captureTier = captureCount >= 5 ? 'large' : captureCount >= 3 ? 'medium' : captureCount >= 1 ? 'small' : null;

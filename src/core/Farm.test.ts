@@ -79,6 +79,52 @@ describe('Farm Logic', () => {
         expect(income).toBeCloseTo(5.2, 5);
     });
 
+
+    it('awards farm capture loot at end of attacker turn', () => {
+        engine.state.setOwner(0, 1, 'P1');
+        engine.state.setBuilding(0, 1, 'farm');
+        const target = engine.state.getCell(0, 1)!;
+        target.farmLevel = 3;
+
+        // End P1 turn so P2 can attack.
+        engine.endTurn();
+
+        engine.state.players['P2'].gold = 200;
+        engine.state.setOwner(0, 2, 'P2');
+        engine.state.setBuilding(0, 2, 'base');
+
+        const attackCost = engine.getMoveCost(0, 1);
+        engine.togglePlan(0, 1);
+        engine.endTurn();
+
+        expect(engine.state.players['P2'].gold).toBe(200 - attackCost + 30);
+    });
+
+    it('settles farm capture loot when the attacker turn ends (not during commit)', () => {
+        engine.state.setOwner(0, 1, 'P1');
+        engine.state.setBuilding(0, 1, 'farm');
+        const target = engine.state.getCell(0, 1)!;
+        target.farmLevel = 2;
+
+        // End P1 turn so P2 can attack.
+        engine.endTurn();
+
+        engine.state.players['P2'].gold = 200;
+        engine.state.setOwner(0, 2, 'P2');
+        engine.state.setBuilding(0, 2, 'base');
+
+        const attackCost = engine.getMoveCost(0, 1);
+        engine.togglePlan(0, 1);
+        engine.commitActions();
+
+        // Loot has not settled yet.
+        expect(engine.state.players['P2'].gold).toBe(200 - attackCost);
+
+        (engine as any).advanceTurn();
+
+        expect(engine.state.players['P2'].gold).toBe(200 - attackCost + 20);
+    });
+
     it('destroys farm on capture', () => {
         engine.state.setOwner(0, 1, 'P1');
         engine.state.setBuilding(0, 1, 'none'); // Ensure clean slate (no random towns)
