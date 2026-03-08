@@ -37,6 +37,8 @@ export const GameConfig = {
     COST_UPGRADE_FARM: 20,
     FARM_INCOME: [0, 2, 4, 6], // Lv 1=2, Lv 2=4, Lv 3=6
     FARM_MAX_LEVEL: 3,
+    FARM_CAPTURE_LOOT: [0, 10, 20, 30], // Capturing enemy farm Lv 1/2/3
+    FARM_CAPTURE_LOOT_VARIANCE: 0.10, // ±10% random variance
     // Base Support Configs (New)
     BASE_SUPPORT_RANGE_BASE: 2,
     BASE_SUPPORT_DISCOUNT_BASE: 0.20,
