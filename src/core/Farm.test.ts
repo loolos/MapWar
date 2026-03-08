@@ -6,7 +6,7 @@ describe('Farm Logic', () => {
     let engine: GameEngine;
 
     beforeEach(() => {
-        engine = new GameEngine();
+        engine = new GameEngine([], 'default', () => 0.5);
         engine.state.players['P2'].isAI = false;
         engine.startGame();
         // P1 Base at 0,0
@@ -80,7 +80,10 @@ describe('Farm Logic', () => {
     });
 
 
-    it('awards farm capture loot at end of attacker turn', () => {
+    it('awards farm capture loot with deterministic variance at end of attacker turn', () => {
+        const logs: string[] = [];
+        engine.on('logMessage', (event) => logs.push(event.text));
+
         engine.state.setOwner(0, 1, 'P1');
         engine.state.setBuilding(0, 1, 'farm');
         const target = engine.state.getCell(0, 1)!;
@@ -98,9 +101,10 @@ describe('Farm Logic', () => {
         engine.endTurn();
 
         expect(engine.state.players['P2'].gold).toBe(200 - attackCost + 30);
+        expect(logs.some(msg => msg.includes('captured 1 enemy farm and plundered 30G.'))).toBe(true);
     });
 
-    it('settles farm capture loot when the attacker turn ends (not during commit)', () => {
+    it('settles farm capture loot only when attacker turn ends (not during commit)', () => {
         engine.state.setOwner(0, 1, 'P1');
         engine.state.setBuilding(0, 1, 'farm');
         const target = engine.state.getCell(0, 1)!;
@@ -123,6 +127,34 @@ describe('Farm Logic', () => {
         (engine as any).advanceTurn();
 
         expect(engine.state.players['P2'].gold).toBe(200 - attackCost + 20);
+    });
+
+    it('applies ±10% loot variance for farm capture', () => {
+        const runCapture = (randomValue: number) => {
+            const local = new GameEngine([], 'default', () => randomValue);
+            local.state.players['P2'].isAI = false;
+            local.startGame();
+            local.state.setOwner(0, 0, 'P1');
+            local.state.setBuilding(0, 0, 'base');
+            local.state.currentPlayerId = 'P1';
+
+            local.state.setOwner(0, 1, 'P1');
+            local.state.setBuilding(0, 1, 'farm');
+            local.state.getCell(0, 1)!.farmLevel = 3;
+
+            local.endTurn();
+            local.state.players['P2'].gold = 200;
+            local.state.setOwner(0, 2, 'P2');
+            local.state.setBuilding(0, 2, 'base');
+
+            const attackCost = local.getMoveCost(0, 1);
+            local.togglePlan(0, 1);
+            local.endTurn();
+            return local.state.players['P2'].gold - (200 - attackCost);
+        };
+
+        expect(runCapture(0)).toBe(27);
+        expect(runCapture(1)).toBe(33);
     });
 
     it('destroys farm on capture', () => {
