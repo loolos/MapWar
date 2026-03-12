@@ -62,6 +62,25 @@ describe('Declaration of War mode', () => {
         expect(actions).toContain('DECLARE_WAR');
     });
 
+    it('costs 10 gold to declare war', () => {
+        warEngine.state.players.P1.gold = 10;
+        warEngine.planInteraction(0, 2, 'DECLARE_WAR');
+        expect(warEngine.pendingInteractions).toHaveLength(1);
+
+        warEngine.endTurn();
+
+        expect(warEngine.state.players.P1.gold).toBe(0);
+        expect(warEngine.isAtWar('P1', 'P2')).toBe(true);
+    });
+
+    it('blocks declare war when player has less than 10 gold', () => {
+        warEngine.state.players.P1.gold = 9;
+        warEngine.planInteraction(0, 2, 'DECLARE_WAR');
+
+        expect(warEngine.pendingInteractions).toHaveLength(0);
+        expect(warEngine.lastError).toContain('Not enough gold');
+    });
+
     it('activates war only after end turn and makes it bilateral', () => {
         warEngine.planInteraction(0, 2, 'DECLARE_WAR');
         expect(warEngine.isAtWar('P1', 'P2')).toBe(false);
@@ -136,5 +155,22 @@ describe('Declaration of War mode', () => {
         expect(engine.state.currentPlayerId).toBe('P3');
         const canCaptureEliminatedLand = engine.validateMove(0, 3, true);
         expect(canCaptureEliminatedLand.valid).toBe(true);
+    });
+
+    it('lets AI proactively declare war in war mode', () => {
+        const engine = new GameEngine([
+            { id: 'P1', isAI: true, color: GameConfig.COLORS.P1 },
+            { id: 'P2', isAI: false, color: GameConfig.COLORS.P2 }
+        ], 'default', () => 0.5, { declarationOfWarModeEnabled: true, randomizeAiProfiles: false });
+
+        setupTwoPlayerWarBoard(engine);
+        engine.state.players.P1.gold = 200;
+        engine.state.currentPlayerId = 'P1';
+        engine.state.updateConnectivity('P1');
+        engine.state.updateConnectivity('P2');
+
+        engine.ai.playTurn();
+
+        expect(engine.isAtWar('P1', 'P2')).toBe(true);
     });
 });

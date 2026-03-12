@@ -349,16 +349,10 @@ export class AIController {
                     const enemyIds = this.engine.state.playerOrder.filter(id => id !== aiPlayer.id);
                     enemyIds.forEach((enemyId) => {
                         if (this.engine.isAtWar(aiPlayer.id as string, enemyId)) return;
-                        for (let r = 0; r < gridHeight; r++) {
-                            for (let c = 0; c < gridWidth; c++) {
-                                const cell = grid[r][c];
-                                if (cell.building === 'base' && cell.owner === enemyId) {
-                                    const score = weights.SCORE_ENEMY_LAND + weights.STRATEGY_ENDGAME_ATTACK_BONUS;
-                                    addInteraction(r, c, 'DECLARE_WAR', score, 'attack');
-                                    return;
-                                }
-                            }
-                        }
+                        const baseLocation = this.engine.state.getBaseLocation(enemyId);
+                        if (!baseLocation) return;
+                        const score = weights.SCORE_ENEMY_LAND + weights.STRATEGY_ENDGAME_ATTACK_BONUS;
+                        addInteraction(baseLocation.r, baseLocation.c, 'DECLARE_WAR', score, 'attack');
                     });
                 }
 

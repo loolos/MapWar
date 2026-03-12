@@ -15,6 +15,8 @@ export class GameState {
     citadelLocation: { r: number; c: number } | null = null;
     /** Cached lighthouse locations (static map features). */
     lighthouseLocations: { r: number; c: number }[] = [];
+    /** Cached per-player base positions for fast lookups. */
+    baseLocations: Map<string, { r: number; c: number }> = new Map();
     /** Per-player owned cell index: Map<PlayerID, Set<cellKey>> where cellKey = r*width + c */
     private ownedCellsByPlayer: Map<PlayerID, Set<number>> = new Map();
     /** Snapshot of the base map (no bases/ownership). */
@@ -29,6 +31,7 @@ export class GameState {
         this.allPlayerIds = [];
         this.currentMapType = mapType;
         this.ownedCellsByPlayer = new Map();
+        this.baseLocations = new Map();
 
         // specific default for 2 players if none provided (Backwards compatibility)
         if (playerConfigs.length === 0) {
@@ -85,6 +88,7 @@ export class GameState {
         this.cacheLighthouseLocations();
 
         this.setupBases();
+        this.cacheBaseLocations();
     }
 
     private storeBaseMapSnapshot() {
@@ -119,6 +123,20 @@ export class GameState {
             for (let c = 0; c < w; c++) {
                 if (this.grid[r][c].building === 'lighthouse') {
                     this.lighthouseLocations.push({ r, c });
+                }
+            }
+        }
+    }
+
+    private cacheBaseLocations() {
+        this.baseLocations.clear();
+        const h = this.grid.length;
+        const w = h > 0 ? this.grid[0].length : 0;
+        for (let r = 0; r < h; r++) {
+            for (let c = 0; c < w; c++) {
+                const cell = this.grid[r][c];
+                if (cell.building === 'base' && cell.owner) {
+                    this.baseLocations.set(cell.owner, { r, c });
                 }
             }
         }
@@ -279,6 +297,7 @@ export class GameState {
 
         // Clear owned cells index
         this.ownedCellsByPlayer.clear();
+        this.baseLocations.clear();
         
         if (keepMap) {
             // Restore base map snapshot (terrain + static buildings + treasure)
@@ -322,6 +341,7 @@ export class GameState {
             this.setupBases();
             this.cacheCitadelLocation();
             this.cacheLighthouseLocations();
+            this.cacheBaseLocations();
         } else {
             // Full Map Regenerate
             this.grid = [];
@@ -461,6 +481,7 @@ export class GameState {
     setOwner(row: number, col: number, owner: PlayerID) {
         const cell = this.getCell(row, col);
         if (!cell) return;
+        const previousOwner = cell.owner;
         
         const width = this.grid.length > 0 ? this.grid[0].length : 0;
         const cellKey = row * width + col;
@@ -483,11 +504,66 @@ export class GameState {
             }
             this.ownedCellsByPlayer.get(owner)!.add(cellKey);
         }
+
+        if (cell.building === 'base') {
+            if (previousOwner) {
+                const cached = this.baseLocations.get(previousOwner);
+                if (cached && cached.r === row && cached.c === col) {
+                    this.baseLocations.delete(previousOwner);
+                }
+            }
+            if (owner) {
+                this.baseLocations.set(owner, { r: row, c: col });
+            }
+        }
     }
 
     setBuilding(row: number, col: number, type: 'base' | 'town' | 'gold_mine' | 'wall' | 'farm' | 'citadel' | 'lighthouse' | 'none') {
         const cell = this.getCell(row, col);
-        if (cell) cell.building = type;
+        if (!cell) return;
+
+        const previousBuilding = cell.building;
+        const owner = cell.owner;
+        if (previousBuilding === 'base' && type !== 'base' && owner) {
+            const cached = this.baseLocations.get(owner);
+            if (cached && cached.r === row && cached.c === col) {
+                this.baseLocations.delete(owner);
+            }
+        }
+
+        cell.building = type;
+
+        if (type === 'base' && owner) {
+            this.baseLocations.set(owner, { r: row, c: col });
+        }
+    }
+
+    public getBaseLocation(playerId: PlayerID): { r: number; c: number } | null {
+        if (!playerId) return null;
+        const cached = this.baseLocations.get(playerId);
+        if (cached) {
+            const cell = this.getCell(cached.r, cached.c);
+            if (cell && cell.building === 'base' && cell.owner === playerId) {
+                return { r: cached.r, c: cached.c };
+            }
+            this.baseLocations.delete(playerId);
+        }
+
+        // Fallback for tests that directly mutate cell fields.
+        const h = this.grid.length;
+        const w = h > 0 ? this.grid[0].length : 0;
+        for (let r = 0; r < h; r++) {
+            for (let c = 0; c < w; c++) {
+                const cell = this.grid[r][c];
+                if (cell.building === 'base' && cell.owner === playerId) {
+                    const location = { r, c };
+                    this.baseLocations.set(playerId, location);
+                    return location;
+                }
+            }
+        }
+
+        return null;
     }
 
     getCurrentPlayer(): Player {
@@ -890,6 +966,7 @@ export class GameState {
         // Rebuild static map feature caches after load
         this.cacheCitadelLocation();
         this.cacheLighthouseLocations();
+        this.cacheBaseLocations();
     }
     getNeighbors(r: number, c: number): Cell[] {
         const neighbors: Cell[] = [];

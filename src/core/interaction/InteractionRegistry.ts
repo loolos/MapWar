@@ -220,7 +220,7 @@ export class InteractionRegistry {
             id: 'DECLARE_WAR',
             label: 'Declare War',
             description: 'Declare war on this player. War begins after your turn ends.',
-            cost: 0,
+            cost: GameConfig.COST_DECLARE_WAR,
             isAvailable: (engine, r, c) => {
                 if (!engine.isDeclarationOfWarModeEnabled()) return false;
                 const cell = engine.state.getCell(r, c);
