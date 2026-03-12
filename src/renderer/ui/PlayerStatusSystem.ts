@@ -122,10 +122,10 @@ export class PlayerStatusSystem {
         this.playerRows.forEach((row) => {
             const pid = (row as any).playerId;
             const player = state.players[pid];
-            const goldTxt = row.getAt(4) as Phaser.GameObjects.Text;
+            const goldTxt = (row as any).goldText as Phaser.GameObjects.Text;
             goldTxt.setText(Math.floor(player.gold).toString());
 
-            const incomeTxt = row.getAt(5) as Phaser.GameObjects.Text;
+            const incomeTxt = (row as any).incomeText as Phaser.GameObjects.Text;
             const income = engine.state.calculateIncome(pid);
             // Show decimal if non-integer, otherwise int
             const incomeStr = Number.isInteger(income) ? income.toString() : income.toFixed(1);
@@ -137,7 +137,7 @@ export class PlayerStatusSystem {
             // To get left edge: goldTxt.x - goldTxt.displayWidth
             incomeTxt.setX(goldTxt.x - goldTxt.displayWidth - 10);
 
-            const dominanceTxt = row.getAt(6) as Phaser.GameObjects.Text;
+            const dominanceTxt = (row as any).dominanceText as Phaser.GameObjects.Text;
             const attackFactor = Math.max(1, player.attackCostFactor ?? 1);
             const showDominance = attackFactor > 1;
             if (showDominance) {
@@ -151,6 +151,8 @@ export class PlayerStatusSystem {
             const currentId = state.currentPlayerId || '';
             const pAlpha = currentId === pid ? 1 : 0.4;
             row.setAlpha(pAlpha);
+
+            this.renderWarChips(row, engine, pid);
         });
     }
 
@@ -171,7 +173,7 @@ export class PlayerStatusSystem {
         let rowH = idealH;
         if (neededH > availableH && order.length > 5) {
             // Compress slightly
-            rowH = Math.max(28, availableH / order.length - gap);
+            rowH = Math.max(34, availableH / order.length - gap);
         }
 
         order.forEach(pid => {
@@ -281,7 +283,49 @@ export class PlayerStatusSystem {
         dominanceText.setVisible(false);
         row.add(dominanceText);
 
+        const warChipsContainer = scene.add.container(0, 0);
+        row.add(warChipsContainer);
+
+        (row as any).goldText = goldText;
+        (row as any).incomeText = incomeText;
+        (row as any).dominanceText = dominanceText;
+        (row as any).warChipsContainer = warChipsContainer;
+        (row as any).rowWidth = W;
+        (row as any).rowHeight = h;
+
         return row;
+    }
+
+    private renderWarChips(row: Phaser.GameObjects.Container, engine: GameEngine, playerId: string) {
+        const warChipsContainer = (row as any).warChipsContainer as Phaser.GameObjects.Container | undefined;
+        const rowWidth = (row as any).rowWidth as number | undefined;
+        const rowHeight = (row as any).rowHeight as number | undefined;
+        if (!warChipsContainer || !rowWidth || !rowHeight) return;
+
+        warChipsContainer.removeAll(true);
+        if (!engine.isDeclarationOfWarModeEnabled()) return;
+
+        const opponents = engine.getWarOpponents(playerId);
+        if (opponents.length === 0) return;
+
+        const chipSize = Math.max(6, Math.min(10, Math.floor(rowHeight * 0.22)));
+        const chipGap = 3;
+        const y = rowHeight - chipSize - 4;
+        const maxX = rowWidth - 8;
+        let x = 8;
+
+        opponents.forEach((opponentId) => {
+            const opponent = engine.state.players[opponentId];
+            if (!opponent) return;
+            if (x + chipSize > maxX) return;
+            const chip = this.container.scene.add.graphics();
+            chip.fillStyle(opponent.color, 1);
+            chip.fillRoundedRect(x, y, chipSize, chipSize, 2);
+            chip.lineStyle(1, 0xffffff, 0.7);
+            chip.strokeRoundedRect(x, y, chipSize, chipSize, 2);
+            warChipsContainer.add(chip);
+            x += chipSize + chipGap;
+        });
     }
 
     public setPosition(x: number, y: number) {

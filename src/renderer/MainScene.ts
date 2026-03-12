@@ -144,7 +144,11 @@ export class MainScene extends Phaser.Scene {
         const mapType = data && data.mapType ? data.mapType : 'default';
         const playerConfigs = data && data.playerConfigs ? data.playerConfigs : [];
         const randomizeAiProfiles = !(data && data.tutorial);
-        this.engine = new GameEngine(playerConfigs, mapType, Math.random, { randomizeAiProfiles });
+        const declarationOfWarModeEnabled = !!(data && data.declarationOfWarModeEnabled);
+        this.engine = new GameEngine(playerConfigs, mapType, Math.random, {
+            randomizeAiProfiles,
+            declarationOfWarModeEnabled
+        });
 
         // 2. Check for Preset Load
         if (data && data.loadPreset) {

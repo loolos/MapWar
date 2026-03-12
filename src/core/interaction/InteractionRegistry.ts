@@ -215,6 +215,38 @@ export class InteractionRegistry {
             }
         });
 
+        // 7.5 Declare War (enemy base interaction)
+        this.register({
+            id: 'DECLARE_WAR',
+            label: 'Declare War',
+            description: 'Declare war on this player. War begins after your turn ends.',
+            cost: 0,
+            isAvailable: (engine, r, c) => {
+                if (!engine.isDeclarationOfWarModeEnabled()) return false;
+                const cell = engine.state.getCell(r, c);
+                const pid = engine.state.currentPlayerId;
+                if (!cell || !pid) return false;
+                if (cell.building !== 'base') return false;
+                if (!cell.owner || cell.owner === pid) return false;
+                if (!engine.state.playerOrder.includes(cell.owner)) return false;
+                if (engine.isAtWar(pid, cell.owner)) return false;
+                if (engine.hasPendingWarDeclaration(pid, cell.owner)) return false;
+                return true;
+            },
+            execute: (engine, r, c) => {
+                const cell = engine.state.getCell(r, c);
+                const pid = engine.state.currentPlayerId;
+                const targetId = cell?.owner;
+                if (!pid || !targetId || targetId === pid) return;
+                const queued = engine.queueWarDeclaration(pid, targetId);
+                if (!queued) return;
+                engine.emit('logMessage', {
+                    text: `${pid} declared war on ${targetId}. War starts after this turn ends.`,
+                    type: 'combat'
+                });
+            }
+        });
+
         // 5. Move / Capture / Attack (Land Only)
         this.register({
             id: 'MOVE',
@@ -252,6 +284,15 @@ export class InteractionRegistry {
                 // Rule: NOT Owned (Self-ownership prevents move)
                 // Note: Re-clicking owned tile is handled by UI/Engine as "Cancel" or "Menu", 
                 // but as an "Available Action" in the menu, "Move" shouldn't appear for self.
+                if (
+                    engine.isDeclarationOfWarModeEnabled() &&
+                    cell.owner &&
+                    cell.owner !== pid &&
+                    engine.state.playerOrder.includes(cell.owner) &&
+                    !engine.isAtWar(pid, cell.owner)
+                ) {
+                    return false;
+                }
                 return cell.owner !== pid;
             },
             immediate: true,
