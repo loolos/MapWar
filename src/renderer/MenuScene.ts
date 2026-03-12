@@ -205,6 +205,17 @@ export class MenuScene extends Phaser.Scene {
                         </div>
                     </div>
 
+                    <div class="control-group">
+                        <label style="font-weight:bold; text-align:center;">RULES</label>
+                        <div class="control-row">
+                            <span>Declaration Mode:</span>
+                            <select id="declarationModeSelect" style="width: 8em;">
+                                <option value="off" selected>OFF</option>
+                                <option value="on">ON</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <div class="preset-section">
                         <label style="display:block; margin-bottom:5px;">Load Preset:</label>
                         <select id="presetSelect" style="width: 100%; padding: 8px;">
@@ -360,9 +371,14 @@ export class MenuScene extends Phaser.Scene {
             btn.addEventListener('click', () => {
                 playMenuFanfareFromUserGesture();
                 const presetVal = (this.domElement.getChildByID('presetSelect') as HTMLSelectElement).value;
+                const declarationModeSelect = this.domElement.getChildByID('declarationModeSelect') as HTMLSelectElement;
+                const declarationOfWarModeEnabled = declarationModeSelect?.value === 'on';
 
                 if (presetVal) {
-                    this.scene.start('MainScene', { loadPreset: presetVal });
+                    this.scene.start('MainScene', {
+                        loadPreset: presetVal,
+                        declarationOfWarModeEnabled
+                    });
                     return;
                 }
 
@@ -390,7 +406,11 @@ export class MenuScene extends Phaser.Scene {
                     configs.push({ id: `P${i}`, isAI, color });
                 }
 
-                this.scene.start('MainScene', { playerConfigs: configs, mapType: mapType });
+                this.scene.start('MainScene', {
+                    playerConfigs: configs,
+                    mapType: mapType,
+                    declarationOfWarModeEnabled
+                });
             });
         }
 
@@ -412,7 +432,8 @@ export class MenuScene extends Phaser.Scene {
                 this.scene.start('MainScene', {
                     playerConfigs: tutorialPlayers,
                     mapType: 'default',
-                    tutorial: true
+                    tutorial: true,
+                    declarationOfWarModeEnabled: false
                 });
             });
         }

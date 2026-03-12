@@ -341,9 +341,20 @@ export class AIController {
                     if (!action) return;
                     if (!action.isAvailable(this.engine, r, c, true)) return;
                     const cost = typeof action.cost === 'function' ? action.cost(this.engine, r, c) : action.cost;
-                    if (cost <= 0) return;
+                    if (cost < 0) return;
                     candidates.push({ kind: 'interaction', category, r, c, score, cost, actionId });
                 };
+
+                if (this.engine.isDeclarationOfWarModeEnabled()) {
+                    const enemyIds = this.engine.state.playerOrder.filter(id => id !== aiPlayer.id);
+                    enemyIds.forEach((enemyId) => {
+                        if (this.engine.isAtWar(aiPlayer.id as string, enemyId)) return;
+                        const baseLocation = this.engine.state.getBaseLocation(enemyId);
+                        if (!baseLocation) return;
+                        const score = weights.SCORE_ENEMY_LAND + weights.STRATEGY_ENDGAME_ATTACK_BONUS;
+                        addInteraction(baseLocation.r, baseLocation.c, 'DECLARE_WAR', score, 'attack');
+                    });
+                }
 
                 // Build candidate positions: owned tiles and their neighbors
                 // Use numeric keys (r*width + c) to avoid string split/alloc in hot loop.

@@ -20,6 +20,17 @@ type OwnershipChange = {
     newOwner: string | null;
 };
 
+type WarState = {
+    playerA: string;
+    playerB: string;
+    lastCaptureRound: number;
+};
+
+type GameEngineOptions = {
+    randomizeAiProfiles?: boolean;
+    declarationOfWarModeEnabled?: boolean;
+};
+
 export class GameEngine {
     stateManager: GameStateManager;
     events: TypedEventEmitter;
@@ -62,12 +73,15 @@ export class GameEngine {
     private readonly baseAttackMultiplier = GameConfig.COST_MULTIPLIER_ATTACK;
     private pendingFarmCaptureLoot = 0;
     private pendingFarmCaptureCount = 0;
+    private declarationOfWarModeEnabled: boolean = false;
+    private activeWars: Map<string, WarState> = new Map();
+    private pendingWarDeclarations: Set<string> = new Set();
 
     constructor(
         playerConfigs: { id: string, isAI: boolean, color: number }[] = [],
         mapType: MapType = 'default',
         randomFn: () => number = Math.random,
-        options?: { randomizeAiProfiles?: boolean }
+        options?: GameEngineOptions
     ) {
         this.stateManager = new GameStateManager(playerConfigs, mapType);
         this.events = new TypedEventEmitter();
@@ -89,10 +103,48 @@ export class GameEngine {
             ok: !this.peaceDayActive,
             onFail: 'defer'
         }));
+        this.declarationOfWarModeEnabled = !!options?.declarationOfWarModeEnabled;
 
         if (options?.randomizeAiProfiles !== false) {
             this.assignRandomAiProfiles(playerConfigs);
         }
+    }
+
+    public isDeclarationOfWarModeEnabled(): boolean {
+        return this.declarationOfWarModeEnabled;
+    }
+
+    public getWarOpponents(playerId: string): string[] {
+        if (!playerId) return [];
+        const opponents: string[] = [];
+        this.activeWars.forEach((war) => {
+            if (war.playerA === playerId) opponents.push(war.playerB);
+            else if (war.playerB === playerId) opponents.push(war.playerA);
+        });
+        return opponents.sort();
+    }
+
+    public isAtWar(playerA: string, playerB: string): boolean {
+        const key = this.getWarPairKey(playerA, playerB);
+        if (!key) return false;
+        return this.activeWars.has(key);
+    }
+
+    public queueWarDeclaration(initiatorId: string, targetId: string): boolean {
+        if (!this.declarationOfWarModeEnabled) return false;
+        const key = this.getWarPairKey(initiatorId, targetId);
+        if (!key) return false;
+        if (this.isAtWar(initiatorId, targetId)) return false;
+        if (this.isPlayerEliminated(initiatorId) || this.isPlayerEliminated(targetId)) return false;
+        if (this.pendingWarDeclarations.has(key)) return false;
+        this.pendingWarDeclarations.add(key);
+        return true;
+    }
+
+    public hasPendingWarDeclaration(playerA: string, playerB: string): boolean {
+        const key = this.getWarPairKey(playerA, playerB);
+        if (!key) return false;
+        return this.pendingWarDeclarations.has(key);
     }
 
     public setAiProfiles(profiles: Record<string, AIProfile | undefined>) {
@@ -197,6 +249,8 @@ export class GameEngine {
         this.actedTilesThisTurn.clear();
         this.pendingFarmCaptureLoot = 0;
         this.pendingFarmCaptureCount = 0;
+        this.activeWars.clear();
+        this.pendingWarDeclarations.clear();
         this.floodedCells.clear();
         this.ai.invalidateTreasureCache();
         if (this.peaceDayActive) this.endPeaceDay();
@@ -238,6 +292,8 @@ export class GameEngine {
         this.actedTilesThisTurn.clear();
         this.pendingFarmCaptureLoot = 0;
         this.pendingFarmCaptureCount = 0;
+        this.activeWars.clear();
+        this.pendingWarDeclarations.clear();
         this.isGameOver = false;
 
         // Ensure Config Grid Size matches loaded state?
@@ -356,6 +412,8 @@ export class GameEngine {
         this.pendingFarmCaptureCount = 0;
 
         const incomeReport = this.state.endTurn();
+        this.activatePendingWars();
+        this.endExpiredWars();
         this.actedTilesThisTurn.clear();
 
         // Turn Change -> Re-evaluate Music
@@ -1317,6 +1375,20 @@ export class GameEngine {
         if (!cell) return { valid: false, reason: "Out of bounds" };
         if (cell.owner === playerId) return { valid: false, reason: "Already owned" }; // Self-own check
 
+        if (
+            this.declarationOfWarModeEnabled &&
+            cell.owner &&
+            cell.owner !== playerId &&
+            !this.isPlayerEliminated(cell.owner) &&
+            !this.isAtWar(playerId, cell.owner)
+        ) {
+            const reason = `Declare war on ${cell.owner} before attacking their territory`;
+            if (isAction && !player.isAI) {
+                this.emit('logMessage', { text: reason, type: 'warning' });
+            }
+            return { valid: false, reason };
+        }
+
         // 2. Adjacency Check (Supply Line Rule)
         // must be adjacent to CONNECTED territory or PENDING
         const isAdjToConnected = this.state.isAdjacentToConnected(row, col, playerId);
@@ -1534,6 +1606,7 @@ export class GameEngine {
 
                     // Remove loser from order (stops them from getting turns)
                     this.stateManager.eliminatePlayer(loserId);
+                    this.endWarsInvolving(loserId, 'elimination');
 
 
 
@@ -1549,6 +1622,7 @@ export class GameEngine {
             if (cell.owner && cell.owner !== pid) {
                 hasCombat = true;
                 hasConquer = true; // Capturing enemy land
+                this.markWarCapture(pid, cell.owner);
                 ownershipChangedPlayers.add(cell.owner); // Track player who lost land
                 ownershipChangedPlayers.add(pid); // Track attacker who gained land
                 conquerCount++;
@@ -1891,5 +1965,90 @@ export class GameEngine {
         const unitComponent = Math.min(totalUnits / GameConfig.INTENSITY_UNIT_CAP, GameConfig.INTENSITY_UNIT_MAX);
 
         return turnComponent + unitComponent;
+    }
+
+    private getWarPairKey(playerA: string, playerB: string): string | null {
+        if (!playerA || !playerB || playerA === playerB) return null;
+        return [playerA, playerB].sort().join('|');
+    }
+
+    private isPlayerEliminated(playerId: string): boolean {
+        if (!playerId) return false;
+        return !this.state.playerOrder.includes(playerId);
+    }
+
+    private activatePendingWars(): void {
+        if (this.pendingWarDeclarations.size === 0) return;
+
+        this.pendingWarDeclarations.forEach((key) => {
+            const [playerA, playerB] = key.split('|');
+            if (!playerA || !playerB) return;
+            if (this.isPlayerEliminated(playerA) || this.isPlayerEliminated(playerB)) return;
+            if (this.activeWars.has(key)) return;
+
+            this.activeWars.set(key, {
+                playerA,
+                playerB,
+                lastCaptureRound: this.state.turnCount
+            });
+
+            this.emit('logMessage', {
+                text: `War declared! ${playerA} and ${playerB} are now at war.`,
+                type: 'combat'
+            });
+        });
+
+        this.pendingWarDeclarations.clear();
+    }
+
+    private markWarCapture(attackerId: string, defenderId: string): void {
+        if (!this.declarationOfWarModeEnabled) return;
+        const key = this.getWarPairKey(attackerId, defenderId);
+        if (!key) return;
+        const war = this.activeWars.get(key);
+        if (!war) return;
+        war.lastCaptureRound = this.state.turnCount;
+    }
+
+    private endExpiredWars(): void {
+        if (!this.declarationOfWarModeEnabled) return;
+        const toEnd: string[] = [];
+        this.activeWars.forEach((war, key) => {
+            if (this.state.turnCount - war.lastCaptureRound >= 5) {
+                toEnd.push(key);
+            }
+        });
+
+        toEnd.forEach((key) => {
+            const war = this.activeWars.get(key);
+            if (!war) return;
+            this.activeWars.delete(key);
+            this.emit('logMessage', {
+                text: `War ended between ${war.playerA} and ${war.playerB}: no territorial captures in 5 rounds.`,
+                type: 'info'
+            });
+        });
+    }
+
+    private endWarsInvolving(playerId: string, reason: 'elimination'): void {
+        if (!playerId) return;
+        const toEnd: string[] = [];
+        this.activeWars.forEach((war, key) => {
+            if (war.playerA === playerId || war.playerB === playerId) {
+                toEnd.push(key);
+            }
+        });
+
+        toEnd.forEach((key) => {
+            const war = this.activeWars.get(key);
+            if (!war) return;
+            this.activeWars.delete(key);
+            if (reason === 'elimination') {
+                this.emit('logMessage', {
+                    text: `War ended between ${war.playerA} and ${war.playerB}: ${playerId} was eliminated.`,
+                    type: 'info'
+                });
+            }
+        });
     }
 }
