@@ -351,8 +351,10 @@ export class AIController {
                         if (this.engine.isAtWar(aiPlayer.id as string, enemyId)) return;
                         const baseLocation = this.engine.state.getBaseLocation(enemyId);
                         if (!baseLocation) return;
-                        const score = weights.SCORE_ENEMY_LAND + weights.STRATEGY_ENDGAME_ATTACK_BONUS;
-                        addInteraction(baseLocation.r, baseLocation.c, 'DECLARE_WAR', score, 'attack');
+                        const score = this.scoreDeclareWar(enemyId, aiPlayer.id as string, weights);
+                        if (score >= weights.DECLARE_WAR_MIN_SCORE) {
+                            addInteraction(baseLocation.r, baseLocation.c, 'DECLARE_WAR', score, 'attack');
+                        }
                     });
                 }
 
@@ -883,6 +885,60 @@ export class AIController {
         if (adjacentDisconnected > 1) {
             score += (adjacentDisconnected - 1) * weights.RECONNECT_MULTI_BONUS;
         }
+        return score;
+    }
+
+    private scoreDeclareWar(targetId: string, aiPlayerId: string, weights: AIWeights): number {
+        let myBorderTiles = 0;
+        let enemyBorderTiles = 0;
+
+        for (const { r, c } of this.engine.state.getOwnedCells(aiPlayerId)) {
+            const neighbors = [
+                { r: r + 1, c },
+                { r: r - 1, c },
+                { r, c: c + 1 },
+                { r, c: c - 1 }
+            ];
+            if (neighbors.some((n) => {
+                const cell = this.engine.state.getCell(n.r, n.c);
+                return !!cell && cell.owner === targetId;
+            })) {
+                myBorderTiles++;
+            }
+        }
+
+        const targetOwnedCells = this.engine.state.getOwnedCells(targetId);
+        for (const { r, c } of targetOwnedCells) {
+            const neighbors = [
+                { r: r + 1, c },
+                { r: r - 1, c },
+                { r, c: c + 1 },
+                { r, c: c - 1 }
+            ];
+            if (neighbors.some((n) => {
+                const cell = this.engine.state.getCell(n.r, n.c);
+                return !!cell && cell.owner === aiPlayerId;
+            })) {
+                enemyBorderTiles++;
+            }
+        }
+
+        const totalEnemyTiles = targetOwnedCells.length;
+        const borderRatio = totalEnemyTiles > 0 ? enemyBorderTiles / totalEnemyTiles : 0;
+
+        const targetStrength = Math.max(0, this.engine.state.calculateIncome(targetId));
+        const cost = GameConfig.COST_DECLARE_WAR;
+
+        let score = weights.DECLARE_WAR_BASE_SCORE;
+        score += myBorderTiles * weights.DECLARE_WAR_BORDER_BONUS;
+        score += borderRatio * weights.DECLARE_WAR_BORDER_RATIO_MULTIPLIER;
+        score -= cost * weights.DECLARE_WAR_COST_PENALTY;
+        score -= targetStrength * weights.DECLARE_WAR_TARGET_STRENGTH_MULTIPLIER;
+
+        if (myBorderTiles === 0 || enemyBorderTiles === 0) {
+            score -= weights.DECLARE_WAR_NON_BORDER_PENALTY;
+        }
+
         return score;
     }
 }

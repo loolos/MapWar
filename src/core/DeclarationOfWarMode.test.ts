@@ -157,6 +157,45 @@ describe('Declaration of War mode', () => {
         expect(canCaptureEliminatedLand.valid).toBe(true);
     });
 
+
+    it('AI evaluates declare-war per target and skips non-border players', () => {
+        const engine = new GameEngine([
+            { id: 'P1', isAI: true, color: GameConfig.COLORS.P1 },
+            { id: 'P2', isAI: false, color: GameConfig.COLORS.P2 },
+            { id: 'P3', isAI: false, color: GameConfig.COLORS.P3 }
+        ], 'default', () => 0.5, { declarationOfWarModeEnabled: true, randomizeAiProfiles: false });
+
+        clearBoard(engine);
+        engine.state.playerOrder = ['P1', 'P2', 'P3'];
+        engine.state.currentPlayerId = 'P1';
+        engine.state.players.P1.gold = 200;
+        engine.state.players.P2.gold = 200;
+        engine.state.players.P3.gold = 200;
+
+        // P1 borders P2
+        engine.state.setOwner(0, 0, 'P1');
+        engine.state.setBuilding(0, 0, 'base');
+        engine.state.setOwner(0, 1, 'P1');
+
+        engine.state.setOwner(0, 2, 'P2');
+        engine.state.setBuilding(0, 2, 'base');
+        engine.state.setOwner(1, 2, 'P2');
+
+        // P3 is far away with no border contact to P1
+        engine.state.setOwner(5, 5, 'P3');
+        engine.state.setBuilding(5, 5, 'base');
+        engine.state.setOwner(5, 4, 'P3');
+
+        engine.state.updateConnectivity('P1');
+        engine.state.updateConnectivity('P2');
+        engine.state.updateConnectivity('P3');
+
+        engine.ai.playTurn();
+
+        expect(engine.isAtWar('P1', 'P2')).toBe(true);
+        expect(engine.isAtWar('P1', 'P3')).toBe(false);
+    });
+
     it('lets AI proactively declare war in war mode', () => {
         const engine = new GameEngine([
             { id: 'P1', isAI: true, color: GameConfig.COLORS.P1 },
