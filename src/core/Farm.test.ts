@@ -102,6 +102,7 @@ describe('Farm Logic', () => {
 
         expect(engine.state.players['P2'].gold).toBe(200 - attackCost + 30);
         expect(logs.some(msg => msg.includes('captured 1 enemy farm and plundered 30G.'))).toBe(true);
+        expect(logs.some(msg => msg.includes('P2 turn summary:') && msg.includes('Farm Plunder +30G'))).toBe(true);
     });
 
     it('settles farm capture loot only when attacker turn ends (not during commit)', () => {

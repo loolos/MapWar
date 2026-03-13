@@ -69,4 +69,41 @@ describe('AIController Logic', () => {
         const capturedTown = engine.state.grid[townLoc.r][townLoc.c].owner === 'P1';
         expect(capturedTown).toBe(true);
     });
+
+    it('AI cannot bypass long-range attack distance penalty in one turn', () => {
+        // P1 AI base
+        engine.state.setOwner(0, 0, 'P1');
+        engine.state.setBuilding(0, 0, 'base');
+        engine.state.getCell(0, 0)!.isConnected = true;
+
+        // Enemy chain target at distance 3 from connected land
+        engine.state.setOwner(0, 3, 'P2');
+        engine.state.setOwner(0, 4, 'P2');
+        engine.state.setBuilding(0, 4, 'base');
+        engine.state.updateConnectivity('P2');
+
+        // Neutral bridge cells that make the attack legal as a planned chain
+        engine.state.setOwner(0, 1, null);
+        engine.state.setOwner(0, 2, null);
+
+        // Block all other options so the scenario is deterministic.
+        const gridH = engine.state.grid.length;
+        const gridW = gridH > 0 ? engine.state.grid[0].length : 0;
+        for (let r = 0; r < gridH; r++) {
+            for (let c = 0; c < gridW; c++) {
+                const keep = (r === 0 && c >= 0 && c <= 4);
+                if (!keep) {
+                    engine.state.grid[r][c].type = 'water';
+                }
+            }
+        }
+
+        // 20 gold allows two neutral captures but not the long-range enemy attack.
+        // Enemy at (0,3) attack cost should be heavily distance-penalized (x4 at distance 3).
+        engine.state.players['P1'].gold = 20;
+
+        ai.playTurn();
+
+        expect(engine.state.grid[0][3].owner).toBe('P2');
+    });
 });
