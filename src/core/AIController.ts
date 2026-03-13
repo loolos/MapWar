@@ -347,12 +347,68 @@ export class AIController {
 
                 if (this.engine.isDeclarationOfWarModeEnabled()) {
                     const enemyIds = this.engine.state.playerOrder.filter(id => id !== aiPlayer.id);
+                    const myOwnedCells = this.engine.state.getOwnedCells(aiPlayer.id as string);
+                    const enemyOwnedCount = new Map<string, number>();
+                    const enemyStrength = new Map<string, number>();
+                    const myBorderTilesByEnemy = new Map<string, number>();
+                    const enemyBorderTileKeys = new Map<string, Set<number>>();
+
+                    for (const enemyId of enemyIds) {
+                        enemyOwnedCount.set(enemyId, this.engine.state.getOwnedCells(enemyId).length);
+                        enemyStrength.set(enemyId, Math.max(0, this.engine.state.calculateIncome(enemyId)));
+                    }
+
+                    for (const { r, c } of myOwnedCells) {
+                        const neighbors = [
+                            { r: r + 1, c },
+                            { r: r - 1, c },
+                            { r, c: c + 1 },
+                            { r, c: c - 1 }
+                        ];
+                        const touchedEnemies = new Set<string>();
+                        for (const n of neighbors) {
+                            const nCell = this.engine.state.getCell(n.r, n.c);
+                            const enemyId = nCell?.owner;
+                            if (!enemyId || enemyId === aiPlayer.id) continue;
+                            touchedEnemies.add(enemyId);
+                            const key = n.r * gridWidth + n.c;
+                            let enemyTiles = enemyBorderTileKeys.get(enemyId);
+                            if (!enemyTiles) {
+                                enemyTiles = new Set<number>();
+                                enemyBorderTileKeys.set(enemyId, enemyTiles);
+                            }
+                            enemyTiles.add(key);
+                        }
+                        for (const enemyId of touchedEnemies) {
+                            myBorderTilesByEnemy.set(enemyId, (myBorderTilesByEnemy.get(enemyId) || 0) + 1);
+                        }
+                    }
+
+                    const declareWarCost = GameConfig.COST_DECLARE_WAR;
                     enemyIds.forEach((enemyId) => {
                         if (this.engine.isAtWar(aiPlayer.id as string, enemyId)) return;
-                        const baseLocation = this.engine.state.getBaseLocation(enemyId);
+                        const baseLocation = this.engine.state.baseLocations.get(enemyId) || this.engine.state.getBaseLocation(enemyId) || undefined;
                         if (!baseLocation) return;
-                        const score = weights.SCORE_ENEMY_LAND + weights.STRATEGY_ENDGAME_ATTACK_BONUS;
-                        addInteraction(baseLocation.r, baseLocation.c, 'DECLARE_WAR', score, 'attack');
+
+                        const myBorderTiles = myBorderTilesByEnemy.get(enemyId) || 0;
+                        const enemyBorderTiles = enemyBorderTileKeys.get(enemyId)?.size || 0;
+                        const totalEnemyTiles = enemyOwnedCount.get(enemyId) || 0;
+                        const borderRatio = totalEnemyTiles > 0 ? enemyBorderTiles / totalEnemyTiles : 0;
+                        const targetStrength = enemyStrength.get(enemyId) || 0;
+
+                        let score = weights.DECLARE_WAR_BASE_SCORE;
+                        score += myBorderTiles * weights.DECLARE_WAR_BORDER_BONUS;
+                        score += borderRatio * weights.DECLARE_WAR_BORDER_RATIO_MULTIPLIER;
+                        score -= declareWarCost * weights.DECLARE_WAR_COST_PENALTY;
+                        score -= targetStrength * weights.DECLARE_WAR_TARGET_STRENGTH_MULTIPLIER;
+
+                        if (myBorderTiles === 0 || enemyBorderTiles === 0) {
+                            score -= weights.DECLARE_WAR_NON_BORDER_PENALTY;
+                        }
+
+                        if (score >= weights.DECLARE_WAR_MIN_SCORE) {
+                            addInteraction(baseLocation.r, baseLocation.c, 'DECLARE_WAR', score, 'attack');
+                        }
                     });
                 }
 
@@ -885,4 +941,5 @@ export class AIController {
         }
         return score;
     }
+
 }
