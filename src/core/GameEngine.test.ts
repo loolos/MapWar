@@ -988,6 +988,31 @@ describe('GameEngine', () => {
             });
         });
 
+
+        it('emits end-of-turn action summary log with captures and spending', () => {
+            const spy = vi.fn();
+            engine.on('logMessage', spy);
+
+            const target = engine.state.getCell(0, 1)!;
+            target.type = 'plain';
+            target.owner = null;
+            target.building = 'none';
+
+            engine.togglePlan(0, 1);
+            engine.endTurn();
+
+            const summaryCall = spy.mock.calls.find((call: any[]) =>
+                call[0]?.text?.includes('P1 turn summary:')
+            );
+            expect(summaryCall).toBeDefined();
+            if (!summaryCall) throw new Error('Missing turn summary log');
+            expect(summaryCall[0].type).toBe('combat');
+            expect(summaryCall[0].text).toContain('Start Gold');
+            expect(summaryCall[0].text).toContain('Captured 1 tile');
+            expect(summaryCall[0].text).toContain('Spent 10G');
+            expect(summaryCall[0].text).toContain('Farm Plunder +0G');
+        });
+
         it('emits income summary log on turn start', () => {
             const spy = vi.fn();
             engine.on('logMessage', spy);

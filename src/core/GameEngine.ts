@@ -26,6 +26,13 @@ type WarState = {
     lastCaptureRound: number;
 };
 
+type TurnActionSummary = {
+    playerId: string;
+    capturedTiles: number;
+    goldSpent: number;
+    farmLoot: number;
+};
+
 type GameEngineOptions = {
     randomizeAiProfiles?: boolean;
     declarationOfWarModeEnabled?: boolean;
@@ -76,6 +83,8 @@ export class GameEngine {
     private declarationOfWarModeEnabled: boolean = false;
     private activeWars: Map<string, WarState> = new Map();
     private pendingWarDeclarations: Set<string> = new Set();
+    private turnStartGoldByPlayerId: Map<string, number> = new Map();
+    private lastTurnActionSummary: TurnActionSummary | null = null;
 
     constructor(
         playerConfigs: { id: string, isAI: boolean, color: number }[] = [],
@@ -104,6 +113,10 @@ export class GameEngine {
             onFail: 'defer'
         }));
         this.declarationOfWarModeEnabled = !!options?.declarationOfWarModeEnabled;
+
+        if (this.state.currentPlayerId) {
+            this.turnStartGoldByPlayerId.set(this.state.currentPlayerId, this.state.players[this.state.currentPlayerId].gold);
+        }
 
         if (options?.randomizeAiProfiles !== false) {
             this.assignRandomAiProfiles(playerConfigs);
@@ -211,6 +224,7 @@ export class GameEngine {
         const firstPlayer = this.state.playerOrder[0];
         if (firstPlayer) {
             this.state.accrueResources(firstPlayer);
+            this.turnStartGoldByPlayerId.set(firstPlayer, this.state.players[firstPlayer].gold);
         }
 
         this.emit('gameStart');
@@ -251,6 +265,8 @@ export class GameEngine {
         this.pendingFarmCaptureCount = 0;
         this.activeWars.clear();
         this.pendingWarDeclarations.clear();
+        this.turnStartGoldByPlayerId.clear();
+        this.lastTurnActionSummary = null;
         this.floodedCells.clear();
         this.ai.invalidateTreasureCache();
         if (this.peaceDayActive) this.endPeaceDay();
@@ -272,6 +288,7 @@ export class GameEngine {
         const firstPlayer = this.state.playerOrder[0];
         if (firstPlayer) {
             this.state.accrueResources(firstPlayer);
+            this.turnStartGoldByPlayerId.set(firstPlayer, this.state.players[firstPlayer].gold);
         }
 
         this.emit('mapUpdate'); // Redraw grid
@@ -294,6 +311,8 @@ export class GameEngine {
         this.pendingFarmCaptureCount = 0;
         this.activeWars.clear();
         this.pendingWarDeclarations.clear();
+        this.turnStartGoldByPlayerId.clear();
+        this.lastTurnActionSummary = null;
         this.isGameOver = false;
 
         // Ensure Config Grid Size matches loaded state?
@@ -408,6 +427,12 @@ export class GameEngine {
             });
             this.emit('sfx:gold_found');
         }
+        const farmLootThisTurn = this.pendingFarmCaptureLoot;
+        if (endingPlayerId) {
+            this.logTurnActionSummary(endingPlayerId, farmLootThisTurn);
+        }
+        this.lastTurnActionSummary = null;
+
         this.pendingFarmCaptureLoot = 0;
         this.pendingFarmCaptureCount = 0;
 
@@ -429,12 +454,28 @@ export class GameEngine {
         const nextPlayer = this.state.getCurrentPlayer();
         const nextPlayerId = this.state.currentPlayerId;
         if (nextPlayerId) {
+            this.turnStartGoldByPlayerId.set(nextPlayerId, nextPlayer.gold);
+        }
+        if (nextPlayerId) {
             this.checkForEnclaves(nextPlayerId);
         }
         this.maybeTriggerTurnEvent();
         if (nextPlayer.isAI) {
             this.triggerAiTurn();
         }
+    }
+
+    private logTurnActionSummary(playerId: string, farmLoot: number) {
+        const summary = this.lastTurnActionSummary && this.lastTurnActionSummary.playerId === playerId
+            ? this.lastTurnActionSummary
+            : { playerId, capturedTiles: 0, goldSpent: 0, farmLoot: 0 };
+        const turnStartGold = this.turnStartGoldByPlayerId.get(playerId) ?? this.state.players[playerId]?.gold ?? 0;
+        const totalFarmLoot = Math.max(0, Math.max(summary.farmLoot, farmLoot));
+
+        this.emit('logMessage', {
+            text: `${playerId} turn summary: Start Gold ${this.formatLogNumber(turnStartGold)}G, Captured ${summary.capturedTiles} tile${summary.capturedTiles === 1 ? '' : 's'}, Spent ${this.formatLogNumber(summary.goldSpent)}G, Farm Plunder +${this.formatLogNumber(totalFarmLoot)}G.`,
+            type: 'combat'
+        });
     }
 
     private maybeTriggerTurnEvent() {
@@ -1852,6 +1893,13 @@ export class GameEngine {
                 ownershipChanges
             );
         }
+
+        this.lastTurnActionSummary = {
+            playerId: pid,
+            capturedTiles: captureCount,
+            goldSpent: totalCost,
+            farmLoot: farmCaptureLoot
+        };
 
         if (totalCost > 0) {
             // Already spent incrementally.
