@@ -1894,11 +1894,15 @@ export class GameEngine {
             );
         }
 
+        const previousSummary = this.lastTurnActionSummary && this.lastTurnActionSummary.playerId === pid
+            ? this.lastTurnActionSummary
+            : { playerId: pid, capturedTiles: 0, goldSpent: 0, farmLoot: 0 };
+
         this.lastTurnActionSummary = {
             playerId: pid,
-            capturedTiles: captureCount,
-            goldSpent: totalCost,
-            farmLoot: farmCaptureLoot
+            capturedTiles: previousSummary.capturedTiles + captureCount,
+            goldSpent: previousSummary.goldSpent + totalCost,
+            farmLoot: previousSummary.farmLoot + farmCaptureLoot
         };
 
         if (totalCost > 0) {
