@@ -1013,6 +1013,38 @@ describe('GameEngine', () => {
             expect(summaryCall[0].text).toContain('Farm Plunder +0G');
         });
 
+        it('accumulates turn summary across multiple commitActions in the same turn', () => {
+            const spy = vi.fn();
+            engine.on('logMessage', spy);
+
+            const t1 = engine.state.getCell(0, 1)!;
+            t1.type = 'plain';
+            t1.owner = null;
+            t1.building = 'none';
+
+            const t2 = engine.state.getCell(0, 2)!;
+            t2.type = 'plain';
+            t2.owner = null;
+            t2.building = 'none';
+
+            engine.togglePlan(0, 1);
+            engine.commitActions();
+
+            engine.togglePlan(0, 2);
+            engine.commitActions();
+
+            engine.endTurn();
+
+            const summaryCall = spy.mock.calls.find((call: any[]) =>
+                call[0]?.text?.includes('P1 turn summary:')
+            );
+            expect(summaryCall).toBeDefined();
+            if (!summaryCall) throw new Error('Missing turn summary log');
+            expect(summaryCall[0].text).toContain('Captured 2 tiles');
+            expect(summaryCall[0].text).toContain('Spent 20G');
+        });
+
+
         it('emits income summary log on turn start', () => {
             const spy = vi.fn();
             engine.on('logMessage', spy);
