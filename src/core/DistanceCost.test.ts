@@ -67,8 +67,8 @@ describe('Distance Cost Logic', () => {
         engine.state.setOwner(2, 2, 'P2');
         engine.state.getCell(2, 2)!.isConnected = true; // Force connected
         costDetails = engine.getCostDetails(2, 2);
-        expect(costDetails.breakdown).toContain('Distance(x4)');
-        expect(costDetails.cost).toBe(Math.floor(GameConfig.COST_ATTACK * GameConfig.COST_MULTIPLIER_ATTACK * 4));
+        expect(costDetails.breakdown).toContain('Distance(x8)');
+        expect(costDetails.cost).toBe(Math.floor(GameConfig.COST_ATTACK * GameConfig.COST_MULTIPLIER_ATTACK * 8));
     });
 
     it('uses nearest connected cell for distance', () => {
@@ -89,6 +89,6 @@ describe('Distance Cost Logic', () => {
         engine.state.currentPlayerId = 'P1';
 
         const costDetails = engine.getCostDetails(5, 6);
-        expect(costDetails.breakdown).toContain('Distance(x11)');
+        expect(costDetails.breakdown).toContain('Distance(x1024)');
     });
 });
