@@ -99,8 +99,8 @@ export class CostSystem {
         if (multiplier !== 1) breakdownParts.push(`x${multiplier}`);
 
         // 4. Distance-Based Cost Multiplier (Attack Only)
-        // User Request: Cost multiplied by N where N is Manhattan Distance to nearest connected own cell.
-        // "Manhattan Diamond" = Manhattan Distance.
+        // Exponential by Manhattan distance to nearest connected own cell:
+        // dist 1 => x1, dist 2 => x2, dist 3 => x4, dist 4 => x8...
         if (isAttack && curr) {
             const dist = this.getDistanceToNearestConnected(state, row, col, curr, pendingMoves);
 
@@ -111,13 +111,10 @@ export class CostSystem {
             // But let's cap it or just use it.
 
             if (dist > 0 && dist < Infinity) {
-                // Should we Replace the multiplier or Append?
-                // Logic: "Cost ... flipped N times" (Fan N Bei -> Multiplied by N).
-                // So baseCost = baseCost * dist.
-
-                baseCost = Math.floor(baseCost * dist);
-                if (dist > 1) {
-                    breakdownParts.push(`Distance(x${dist})`);
+                const distanceMultiplier = Math.pow(2, Math.max(0, dist - 1));
+                baseCost = Math.floor(baseCost * distanceMultiplier);
+                if (distanceMultiplier > 1) {
+                    breakdownParts.push(`Distance(x${distanceMultiplier})`);
                 }
             } else if (dist === Infinity) {
                 // Fallback if no connected land found (shouldn't happen in valid state)
