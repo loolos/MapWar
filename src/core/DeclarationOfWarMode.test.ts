@@ -212,4 +212,33 @@ describe('Declaration of War mode', () => {
 
         expect(engine.isAtWar('P1', 'P2')).toBe(true);
     });
+
+    it('declares war when blocked from expansion and top interaction is unaffordable', () => {
+        const engine = new GameEngine([
+            { id: 'P1', isAI: true, color: GameConfig.COLORS.P1 },
+            { id: 'P2', isAI: false, color: GameConfig.COLORS.P2 }
+        ], 'default', () => 0.5, { declarationOfWarModeEnabled: true, randomizeAiProfiles: false });
+
+        clearBoard(engine);
+        engine.state.players.P1.gold = 15;
+        engine.state.players.P2.gold = 200;
+        engine.state.currentPlayerId = 'P1';
+
+        engine.state.setOwner(0, 0, 'P1');
+        engine.state.setBuilding(0, 0, 'base');
+        engine.state.setOwner(0, 1, 'P2');
+        engine.state.setOwner(1, 0, 'P2');
+        engine.state.setOwner(0, 2, 'P2');
+        engine.state.setBuilding(0, 2, 'base');
+
+        engine.state.updateConnectivity('P1');
+        engine.state.updateConnectivity('P2');
+
+        expect(engine.validateMove(0, 1, true).valid).toBe(false);
+        expect(engine.validateMove(1, 0, true).valid).toBe(false);
+
+        engine.ai.playTurn();
+
+        expect(engine.isAtWar('P1', 'P2')).toBe(true);
+    });
 });

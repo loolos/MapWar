@@ -154,6 +154,15 @@ export class AIController {
                         }
                     }
                     if (total + candidate.cost > remainingGold) {
+                        // If the top-ranked candidate is too expensive, keep scanning: otherwise a
+                        // cheaper high-value action (e.g. DECLARE_WAR) is never considered and
+                        // the AI can end the turn without spending despite having valid options.
+                        if (affordable.length === 0) {
+                            if (nextUnaffordable === null) {
+                                nextUnaffordable = candidate;
+                            }
+                            continue;
+                        }
                         nextUnaffordable = candidate;
                         break;
                     }
