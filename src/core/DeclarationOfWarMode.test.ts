@@ -241,4 +241,46 @@ describe('Declaration of War mode', () => {
 
         expect(engine.isAtWar('P1', 'P2')).toBe(true);
     });
+
+    it('does not keep saving when declare war is the only actionable option', () => {
+        const engine = new GameEngine([
+            { id: 'P1', isAI: true, color: GameConfig.COLORS.P1 },
+            { id: 'P2', isAI: false, color: GameConfig.COLORS.P2 }
+        ], 'default', () => 0.5, { declarationOfWarModeEnabled: true, randomizeAiProfiles: false });
+
+        clearBoard(engine);
+        engine.state.currentPlayerId = 'P1';
+        engine.state.players.P1.gold = 19; // Can declare war (10), but not upgrade income (20)
+        engine.state.players.P2.gold = 200;
+
+        // P1 is boxed in with no legal expansion/capture until war is declared.
+        engine.state.setOwner(0, 0, 'P1');
+        engine.state.setBuilding(0, 0, 'base');
+        const p1Base = engine.state.getCell(0, 0)!;
+        p1Base.defenseLevel = GameConfig.UPGRADE_DEFENSE_MAX; // Remove affordable defense upgrade.
+
+        engine.state.setOwner(0, 1, 'P2');
+        engine.state.setOwner(1, 0, 'P2');
+
+        // Enemy base plus extra economy so DECLARE_WAR scores below expensive upgrades.
+        engine.state.setOwner(0, 2, 'P2');
+        engine.state.setBuilding(0, 2, 'base');
+        for (let c = 3; c <= 9; c++) {
+            engine.state.setOwner(0, c, 'P2');
+        }
+        for (let c = 0; c <= 3; c++) {
+            engine.state.setOwner(1, c, 'P2');
+        }
+
+        engine.state.updateConnectivity('P1');
+        engine.state.updateConnectivity('P2');
+
+        expect(engine.validateMove(0, 1, true).valid).toBe(false);
+        expect(engine.validateMove(1, 0, true).valid).toBe(false);
+        expect(engine.state.players.P1.gold).toBe(19);
+
+        engine.ai.playTurn();
+
+        expect(engine.isAtWar('P1', 'P2')).toBe(true);
+    });
 });

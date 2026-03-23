@@ -354,6 +354,7 @@ export class AIController {
                     candidates.push({ kind: 'interaction', category, r, c, score, cost, actionId });
                 };
 
+                const declareWarFallbackTargets: { r: number; c: number; score: number }[] = [];
                 if (this.engine.isDeclarationOfWarModeEnabled()) {
                     const enemyIds = this.engine.state.playerOrder.filter(id => id !== aiPlayer.id);
                     const myOwnedCells = this.engine.state.getOwnedCells(aiPlayer.id as string);
@@ -417,6 +418,8 @@ export class AIController {
 
                         if (score >= weights.DECLARE_WAR_MIN_SCORE) {
                             addInteraction(baseLocation.r, baseLocation.c, 'DECLARE_WAR', score, 'attack');
+                        } else {
+                            declareWarFallbackTargets.push({ r: baseLocation.r, c: baseLocation.c, score });
                         }
                     });
                 }
@@ -589,6 +592,41 @@ export class AIController {
                     }
                 });
 
+                if (this.engine.isDeclarationOfWarModeEnabled()) {
+                    const hasAffordableMoveCandidate = candidates.some(
+                        (candidate) => candidate.kind === 'move' && candidate.cost <= aiPlayer.gold
+                    );
+                    const hasAffordableNonWarInteraction = candidates.some(
+                        (candidate) =>
+                            candidate.kind === 'interaction' &&
+                            candidate.actionId !== 'DECLARE_WAR' &&
+                            candidate.cost <= aiPlayer.gold
+                    );
+                    const hasDeclareWarCandidate = candidates.some(
+                        (candidate) => candidate.kind === 'interaction' && candidate.actionId === 'DECLARE_WAR'
+                    );
+                    if (
+                        !hasAffordableMoveCandidate &&
+                        !hasAffordableNonWarInteraction &&
+                        !hasDeclareWarCandidate &&
+                        declareWarFallbackTargets.length > 0
+                    ) {
+                        let bestFallback = declareWarFallbackTargets[0];
+                        for (let i = 1; i < declareWarFallbackTargets.length; i++) {
+                            if (declareWarFallbackTargets[i].score > bestFallback.score) {
+                                bestFallback = declareWarFallbackTargets[i];
+                            }
+                        }
+                        addInteraction(
+                            bestFallback.r,
+                            bestFallback.c,
+                            'DECLARE_WAR',
+                            Math.max(weights.DECLARE_WAR_MIN_SCORE, bestFallback.score),
+                            'attack'
+                        );
+                    }
+                }
+
                 return candidates;
             };
 
@@ -604,6 +642,10 @@ export class AIController {
                 const { affordable, nextUnaffordable } = buildAffordableList(remainingGold);
                 if (affordable.length === 0) break;
                 const best = affordable[0];
+                const bestIsDeclareWar = best.kind === 'interaction' && best.actionId === 'DECLARE_WAR';
+                const hasAffordableNonDeclareWar = affordable.some(
+                    (candidate) => candidate.kind !== 'interaction' || candidate.actionId !== 'DECLARE_WAR'
+                );
                 if (nextUnaffordable && nextUnaffordable.score >= weights.SAVE_FOR_TARGET_MIN_SCORE) {
                     const income = this.engine.state.calculateIncome(aiPlayer.id as string);
                     const incomePerTurn = Math.max(income || 0, 1);
@@ -612,7 +654,16 @@ export class AIController {
                     if (turnsToAfford > 0 && turnsToAfford <= weights.SAVE_FOR_TARGET_MAX_TURNS) {
                         const scoreDiff = nextUnaffordable.score - best.score;
                         if (scoreDiff >= weights.SAVE_FOR_TARGET_SCORE_DIFF) {
+                            if (
+                                this.engine.isDeclarationOfWarModeEnabled() &&
+                                bestIsDeclareWar &&
+                                !hasAffordableNonDeclareWar
+                            ) {
+                                // In war mode, if DECLARE_WAR is the only actionable option,
+                                // do not hoard for a pricier target and stall forever.
+                            } else {
                             return;
+                            }
                         }
                     }
                 }
