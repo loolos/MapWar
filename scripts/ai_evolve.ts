@@ -59,7 +59,8 @@ const parseArgs = (): CliOptions => {
         diversityWeight: 0.1,
         outDir: 'reports',
         quiet: false,
-        writeProfile: false
+        writeProfile: false,
+        declarationOfWarModeEnabled: false
     };
 
     for (let i = 0; i < args.length; i++) {
@@ -162,6 +163,9 @@ const parseArgs = (): CliOptions => {
             case '--verbose':
                 options.quiet = false;
                 break;
+            case '--declare-war':
+                options.declarationOfWarModeEnabled = true;
+                break;
             default:
                 break;
         }
@@ -223,7 +227,8 @@ const buildQualifiedVariant = (
         const qualifierOpts: QualifierOptions = {
             numMaps: options.qualifierNumMaps,
             minWinsToQualify: options.qualifierMinWins,
-            rotationsPerMap: options.qualifierRotationsPerMap
+            rotationsPerMap: options.qualifierRotationsPerMap,
+            declarationOfWarModeEnabled: options.declarationOfWarModeEnabled
         };
         const qualified = qualifiesCandidate(candidate, baseProfile, options.mapTypes, qualifierSeedBase, aiSeedBase, qualifierOpts);
         if (qualified) {
@@ -275,7 +280,8 @@ const generateDiversityProfiles = (
             const qualifierOpts: QualifierOptions = {
                 numMaps: options.qualifierNumMaps,
                 minWinsToQualify: options.qualifierMinWins,
-                rotationsPerMap: options.qualifierRotationsPerMap
+                rotationsPerMap: options.qualifierRotationsPerMap,
+                declarationOfWarModeEnabled: options.declarationOfWarModeEnabled
             };
             if (qualifiesCandidate(candidate, opponent, options.mapTypes, qualifierSeedBase, aiSeedBase, qualifierOpts)) {
                 diversity.push(candidate);
@@ -711,6 +717,7 @@ const main = async () => {
         console.log(`Rounds: ${options.rounds}, Matches per AI: 2p=${options.matchesPerAi2p}, 4p=${options.matchesPerAi4p}, 8p=${options.matchesPerAi8p}`);
         console.log(`Max turns: 2p=${options.maxTurns2p}, 4p=${options.maxTurns4p}, 8p=${options.maxTurns8p}`);
         console.log(`Maps: ${options.mapTypes.join(', ')}`);
+        console.log(`Declaration of war mode: ${options.declarationOfWarModeEnabled ? 'ON' : 'OFF'}`);
     }
 
     const activeModes = {

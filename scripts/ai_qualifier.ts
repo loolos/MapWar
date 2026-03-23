@@ -11,12 +11,15 @@ export type QualifierOptions = {
     minWinsToQualify?: number;
     /** Rotations (P1/P2 swap) per map (default 2). */
     rotationsPerMap?: number;
+    /** Same as tournament / in-game declaration-of-war mode. */
+    declarationOfWarModeEnabled?: boolean;
 };
 
 const DEFAULT_QUALIFIER_OPTIONS: Required<QualifierOptions> = {
     numMaps: 2,
     minWinsToQualify: 3,
-    rotationsPerMap: 2
+    rotationsPerMap: 2,
+    declarationOfWarModeEnabled: false
 };
 
 const pickNDistinctMapTypes = (mapTypes: MapType[], n: number, seed: number): MapType[] => {
@@ -48,7 +51,8 @@ const runQualifierMatch = (
     mapSeed: number,
     aiSeed: number,
     mapType: MapType,
-    positionRotation: number
+    positionRotation: number,
+    declarationOfWarModeEnabled: boolean
 ): { winnerProfileId: string } => {
     const width = 10;
     const height = 10;
@@ -80,7 +84,10 @@ const runQualifierMatch = (
             rotatedProfilesByPlayer[rotatedPlayerId] = profilesByPlayer[originalPlayerId];
         }
 
-        const engine = new GameEngine(players, mapType, mapRng, { randomizeAiProfiles: false });
+        const engine = new GameEngine(players, mapType, mapRng, {
+            randomizeAiProfiles: false,
+            declarationOfWarModeEnabled
+        });
         (engine as any).triggerAiTurn = () => {};
         engine.setAiProfiles(rotatedProfilesByPlayer);
         engine.startGame();
@@ -162,7 +169,8 @@ export const qualifiesCandidate = (
                 maps[mapIndex].seed,
                 aiSeedBase + mapIndex * 10 + rotation,
                 maps[mapIndex].type,
-                rotation
+                rotation,
+                opts.declarationOfWarModeEnabled
             );
             if (result.winnerProfileId === candidate.id) {
                 wins += 1;

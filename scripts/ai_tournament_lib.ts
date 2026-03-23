@@ -17,6 +17,8 @@ export type TournamentOptions = {
     mapTypes: MapType[];
     diversityWeight: number;
     quiet: boolean;
+    /** When true, matches use declaration-of-war rules (same as in-game menu). */
+    declarationOfWarModeEnabled?: boolean;
 };
 
 export type TournamentActiveModes = {
@@ -212,7 +214,8 @@ const runMatch = (
     height: number,
     playerCount: number,
     maxTurns: number,
-    positionRotation: number = 0
+    positionRotation: number = 0,
+    declarationOfWarModeEnabled: boolean = false
 ): MatchResult => {
     return withSeededRandom(seed, (rng) => {
         (GameConfig as any).GRID_WIDTH = width;
@@ -239,7 +242,10 @@ const runMatch = (
             rotatedProfilesByPlayer[rotatedPlayerId] = profilesByPlayer[originalPlayerId];
         }
 
-        const engine = new GameEngine(players, mapType, rng, { randomizeAiProfiles: false });
+        const engine = new GameEngine(players, mapType, rng, {
+            randomizeAiProfiles: false,
+            declarationOfWarModeEnabled
+        });
         (engine as any).triggerAiTurn = () => {};
         engine.setAiProfiles(rotatedProfilesByPlayer);
         engine.startGame();
@@ -428,7 +434,8 @@ export const evaluateTournament = (
                         mode.height,
                         mode.players,
                         mode.maxTurns,
-                        rotation
+                        rotation,
+                        !!options.declarationOfWarModeEnabled
                     );
                     modeMatchCounts[mode.key] += 1;
                     modeMatchMs[mode.key] += Date.now() - matchStart;
