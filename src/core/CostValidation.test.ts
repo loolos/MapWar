@@ -57,11 +57,9 @@ describe('Cost Validation Bug', () => {
         // If togglePlan logic is broken, maybe we can inject?
         engine.pendingMoves = [{ r: 0, c: 1 }, { r: 0, c: 2 }];
 
-        // commitMoves should prune or fail?
-        // Wait, commitMoves doesn't prune COST. It relies on `togglePlan` to prune.
-        // But `commitMoves` iterates.
-
-        engine.endTurn();
+        // Use commitActions directly to avoid endTurn income side effects
+        // and only validate commit-time over-budget behavior.
+        engine.commitActions();
 
         const cell1 = engine.state.getCell(0, 1);
         const cell2 = engine.state.getCell(0, 2);
@@ -72,8 +70,8 @@ describe('Cost Validation Bug', () => {
         expect(cell1?.owner).toBe('P1');
         expect(cell2?.owner).toBe('P1');
 
-        // Verify Gold
-        // 15 - 20 = -5.
+        // Verify Gold (only spending from commitActions, no turn income applied)
+        // 15 - 20 = -5
         expect(engine.state.players['P1'].gold).toBe(-5);
     });
 });
