@@ -1591,11 +1591,17 @@ export class GameEngine {
     commitActions() {
         const pid = this.state.currentPlayerId;
         if (!pid || this.isGameOver) return;
+        const player = this.state.players[pid];
+        if (!player) return;
 
         // Snapshot costs BEFORE execution to ensure consistency with the Plan
 
         let totalCost = 0;
         let gameWon = false;
+        let availableGold = player.gold;
+        let deferredGoldGain = 0;
+        let skippedActionsDueToBudget = 0;
+        let budgetExhausted = false;
 
         let hasCombat = false;
         let hasTownCapture = false;
@@ -1618,10 +1624,26 @@ export class GameEngine {
             move: m,
             cost: this.getMoveCost(m.r, m.c) // Snapshot
         }));
+        const interactionsWithCost = this.pendingInteractions.map((interaction) => {
+            const action = this.interactionRegistry.get(interaction.actionId);
+            if (!action) {
+                return { interaction, action: null as null, cost: 0 };
+            }
+            const cost = typeof action.cost === 'function'
+                ? action.cost(this, interaction.r, interaction.c)
+                : action.cost;
+            return { interaction, action, cost };
+        });
 
-        for (const { move, cost } of movesWithCost) {
+        for (let idx = 0; idx < movesWithCost.length; idx++) {
+            const { move, cost } = movesWithCost[idx];
             // Check if game ended during execution
             if (this.isGameOver) break;
+            if (cost > availableGold) {
+                skippedActionsDueToBudget += (movesWithCost.length - idx) + interactionsWithCost.length;
+                budgetExhausted = true;
+                break;
+            }
             
             if (this.hasActedThisTurn(move.r, move.c)) {
                 continue;
@@ -1752,7 +1774,7 @@ export class GameEngine {
             // Treasure Chest/Flotsam Collection
             if (cell.treasureGold !== null && cell.treasureGold > 0) {
                 const gold = cell.treasureGold;
-                this.stateManager.addGold(pid, gold);
+                deferredGoldGain += gold;
                 const terrainType = wasWater ? 'flotsam' : 'treasure chest';
                 this.emit('logMessage', {
                     text: `${pid} found ${gold}G in a ${terrainType} at (${move.r}, ${move.c})!`,
@@ -1774,6 +1796,7 @@ export class GameEngine {
 
             // Deduct cost immediately to prevent overspending in subsequent iterations
             this.stateManager.spendGold(pid, cost);
+            availableGold = Math.max(0, availableGold - cost);
             totalCost += cost;
             this.markActedThisTurn(move.r, move.c);
         }
@@ -1807,16 +1830,6 @@ export class GameEngine {
         // Interaction validity should be checked at execution time too.
 
         // Snapshot interaction costs BEFORE execution for consistency with planning.
-        const interactionsWithCost = this.pendingInteractions.map((interaction) => {
-            const action = this.interactionRegistry.get(interaction.actionId);
-            if (!action) {
-                return { interaction, action: null as null, cost: 0 };
-            }
-            const cost = typeof action.cost === 'function'
-                ? action.cost(this, interaction.r, interaction.c)
-                : action.cost;
-            return { interaction, action, cost };
-        });
 
         let baseIncomeUpgrades = 0;
         let baseDefenseUpgrades = 0;
@@ -1827,13 +1840,20 @@ export class GameEngine {
         let farmBuilds = 0;
         let farmUpgrades = 0;
 
-        interactionsWithCost.forEach(({ interaction, action, cost }) => {
+        for (let idx = 0; idx < interactionsWithCost.length; idx++) {
+            const { interaction, action, cost } = interactionsWithCost[idx];
             // Check if game ended during execution
-            if (this.isGameOver) return;
+            if (this.isGameOver) break;
+            if (budgetExhausted) break;
+            if (cost > availableGold) {
+                skippedActionsDueToBudget += (interactionsWithCost.length - idx);
+                budgetExhausted = true;
+                break;
+            }
 
             if (action) {
                 if (this.hasActedThisTurn(interaction.r, interaction.c)) {
-                    return;
+                    continue;
                 }
                 // Check Availability
                 if (action.isAvailable(this, interaction.r, interaction.c)) {
@@ -1849,14 +1869,25 @@ export class GameEngine {
                         if (cell?.building === 'wall') wallUpgrades++;
                         else if (cell?.building === 'base') baseDefenseUpgrades++;
                     }
-                    this.stateManager.spendGold(pid, cost); // Deduct immediately (can go negative)
+                    this.stateManager.spendGold(pid, cost);
+                    availableGold = Math.max(0, availableGold - cost);
                     totalCost += cost;
                     this.markActedThisTurn(interaction.r, interaction.c);
                 } else {
                     console.warn(`Interaction ${interaction.actionId} failed validation at commit`);
                 }
             }
-        });
+        }
+
+        if (deferredGoldGain > 0) {
+            this.stateManager.addGold(pid, deferredGoldGain);
+        }
+        if (skippedActionsDueToBudget > 0) {
+            this.emit('logMessage', {
+                text: `Insufficient funds during settlement: cancelled ${skippedActionsDueToBudget} planned action${skippedActionsDueToBudget > 1 ? 's' : ''}.`,
+                type: 'warning'
+            });
+        }
 
         if (bridgeBuiltCount > 0) this.emit('sfx:bridge_build');
         if (farmBuilds > 0) this.emit('sfx:farm_build');

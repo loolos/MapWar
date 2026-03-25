@@ -669,6 +669,7 @@ export class AIController {
                 }
                 const key = makeCandidateKey(best);
                 let executed = false;
+                let spentGold = 0;
 
                 if (best.kind === 'move') {
                     const validation = this.engine.validateMove(best.r, best.c);
@@ -677,6 +678,7 @@ export class AIController {
                         skipped.add(key);
                         continue;
                     }
+                    spentGold = this.engine.getMoveCost(best.r, best.c);
                     this.engine.togglePlan(best.r, best.c);
                     if (this.engine.lastError) {
                         skipped.add(key);
@@ -696,6 +698,9 @@ export class AIController {
                         skipped.add(key);
                         continue;
                     }
+                    spentGold = typeof action.cost === 'function'
+                        ? action.cost(this.engine, best.r, best.c)
+                        : action.cost;
                     const before = this.engine.pendingInteractions.length;
                     this.engine.planInteraction(best.r, best.c, best.actionId);
                     if (this.engine.pendingInteractions.length > before) {
@@ -708,7 +713,7 @@ export class AIController {
 
                 if (!executed) continue;
                 actedTiles.add(`${best.r},${best.c}`);
-                remainingGold = this.engine.state.getCurrentPlayer().gold;
+                remainingGold = Math.max(0, remainingGold - Math.max(0, spentGold));
                 actionCounter++;
 
                 if (best.kind === 'move') {

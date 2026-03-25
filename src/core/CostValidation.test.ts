@@ -49,7 +49,7 @@ describe('Cost Validation Bug', () => {
         expect(engine.pendingMoves[0].c).toBe(1); // Make sure it kept the first one
     });
 
-    it('allows committing over-budget moves', () => {
+    it('commits actions only until gold runs out, then drops remaining planned actions', () => {
         engine.state.players['P1'].gold = 15;
 
         // Force inject pending moves 
@@ -68,10 +68,9 @@ describe('Cost Validation Bug', () => {
         console.log("Cell 2 Owner:", cell2?.owner);
 
         expect(cell1?.owner).toBe('P1');
-        expect(cell2?.owner).toBe('P1');
+        expect(cell2?.owner).not.toBe('P1');
 
-        // Verify Gold (only spending from commitActions, no turn income applied)
-        // 15 - 20 = -5
-        expect(engine.state.players['P1'].gold).toBe(-5);
+        // Verify Gold never goes negative and only one move is paid/executed.
+        expect(engine.state.players['P1'].gold).toBe(5);
     });
 });

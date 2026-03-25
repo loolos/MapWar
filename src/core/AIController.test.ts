@@ -106,4 +106,42 @@ describe('AIController Logic', () => {
 
         expect(engine.state.grid[0][3].owner).toBe('P2');
     });
+
+    it('AI cannot spend treasure gained during the same turn', () => {
+        engine.state.setOwner(0, 0, 'P1');
+        engine.state.setBuilding(0, 0, 'base');
+        const baseCell = engine.state.getCell(0, 0)!;
+        baseCell.isConnected = true;
+        baseCell.incomeLevel = 5;
+        baseCell.defenseLevel = 3;
+
+        engine.state.setOwner(0, 1, null);
+        engine.state.grid[0][1].type = 'plain';
+        engine.state.grid[0][1].building = 'none';
+        engine.state.grid[0][1].treasureGold = 200;
+
+        engine.state.setOwner(0, 2, null);
+        engine.state.grid[0][2].type = 'plain';
+        engine.state.grid[0][2].building = 'town';
+        engine.state.grid[0][2].treasureGold = null;
+
+        const gridH = engine.state.grid.length;
+        const gridW = gridH > 0 ? engine.state.grid[0].length : 0;
+        for (let r = 0; r < gridH; r++) {
+            for (let c = 0; c < gridW; c++) {
+                const keep = (r === 0 && (c === 0 || c === 1 || c === 2));
+                if (!keep) {
+                    engine.state.grid[r][c].type = 'water';
+                }
+            }
+        }
+
+        const firstMoveCost = engine.getMoveCost(0, 1);
+        engine.state.players['P1'].gold = firstMoveCost;
+
+        ai.playTurn();
+
+        expect(engine.state.grid[0][1].owner).toBe('P1');
+        expect(engine.state.grid[0][2].owner).not.toBe('P1');
+    });
 });
