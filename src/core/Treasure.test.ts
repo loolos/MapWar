@@ -92,12 +92,17 @@ describe('Treasure Chest/Flotsam System', () => {
         });
 
         it('does not place treasures on owned cells', () => {
-            // Pre-own some cells
+            // Pre-own some cells and run treasure distribution without full map reset.
             grid[5][5].owner = 'P1';
             grid[6][6].owner = 'P2';
-            
-            MapGenerator.generate(grid, 'default', width, height, 2);
-            
+            for (let r = 0; r < height; r++) {
+                for (let c = 0; c < width; c++) {
+                    grid[r][c].treasureGold = null;
+                }
+            }
+            const spawns = MapGenerator.computeSpawnPoints('default', width, height, 2);
+            (MapGenerator as any).distributeTreasures(grid, width, height, 2, spawns);
+
             expect(grid[5][5].treasureGold).toBe(null);
             expect(grid[6][6].treasureGold).toBe(null);
         });
@@ -364,6 +369,37 @@ describe('Treasure Chest/Flotsam System', () => {
             // Gold = initial + treasures - move costs (2 moves, each typically 5 for adjacent)
             const finalGold = engine.state.players['P1'].gold;
             expect(finalGold).toBe(initialGold + 50 + 200 - 10 - 10); // +250 treasure, -20 move costs
+        });
+
+        it('does not let later planned actions spend treasure gained earlier in the same settlement', () => {
+            engine.state.setOwner(0, 0, 'P1');
+            engine.state.setBuilding(0, 0, 'base');
+            engine.state.updateConnectivity('P1');
+
+            engine.state.getCell(0, 1)!.type = 'plain';
+            engine.state.getCell(0, 1)!.building = 'none';
+            engine.state.getCell(0, 1)!.owner = null;
+            engine.state.getCell(0, 1)!.treasureGold = 100;
+
+            engine.state.getCell(0, 2)!.type = 'plain';
+            engine.state.getCell(0, 2)!.building = 'town';
+            engine.state.getCell(0, 2)!.owner = null;
+            engine.state.getCell(0, 2)!.treasureGold = null;
+
+            const firstMoveCost = engine.getMoveCost(0, 1);
+            engine.state.players['P1'].gold = firstMoveCost;
+            const initialGold = engine.state.players['P1'].gold;
+
+            engine.pendingMoves = [
+                { r: 0, c: 1 },
+                { r: 0, c: 2 }
+            ];
+
+            engine.endTurn();
+
+            expect(engine.state.getCell(0, 1)!.owner).toBe('P1');
+            expect(engine.state.getCell(0, 2)!.owner).not.toBe('P1');
+            expect(engine.state.players['P1'].gold).toBe(initialGold - firstMoveCost + 100);
         });
     });
 });
