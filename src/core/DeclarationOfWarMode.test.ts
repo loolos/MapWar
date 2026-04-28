@@ -283,4 +283,43 @@ describe('Declaration of War mode', () => {
 
         expect(engine.isAtWar('P1', 'P2')).toBe(true);
     });
+
+    it('does not force declare war against non-border opponents in fallback mode', () => {
+        const engine = new GameEngine([
+            { id: 'P1', isAI: true, color: GameConfig.COLORS.P1 },
+            { id: 'P2', isAI: false, color: GameConfig.COLORS.P2 }
+        ], 'default', () => 0.5, { declarationOfWarModeEnabled: true, randomizeAiProfiles: false });
+
+        clearBoard(engine);
+        engine.state.currentPlayerId = 'P1';
+        engine.state.players.P1.gold = 19;
+        engine.state.players.P2.gold = 200;
+
+        // Isolated islands: no border contact.
+        engine.state.setOwner(0, 0, 'P1');
+        engine.state.setBuilding(0, 0, 'base');
+        const p1Base = engine.state.getCell(0, 0)!;
+        p1Base.defenseLevel = GameConfig.UPGRADE_DEFENSE_MAX;
+
+        engine.state.setOwner(9, 9, 'P2');
+        engine.state.setBuilding(9, 9, 'base');
+
+        // Keep both bases valid land while everything else is water.
+        for (let r = 0; r < engine.state.grid.length; r++) {
+            for (let c = 0; c < engine.state.grid[0].length; c++) {
+                const isP1Base = r === 0 && c === 0;
+                const isP2Base = r === 9 && c === 9;
+                if (!isP1Base && !isP2Base) {
+                    engine.state.grid[r][c].type = 'water';
+                }
+            }
+        }
+
+        engine.state.updateConnectivity('P1');
+        engine.state.updateConnectivity('P2');
+
+        engine.ai.playTurn();
+
+        expect(engine.isAtWar('P1', 'P2')).toBe(false);
+    });
 });
