@@ -418,7 +418,9 @@ export class AIController {
 
                         if (score >= weights.DECLARE_WAR_MIN_SCORE) {
                             addInteraction(baseLocation.r, baseLocation.c, 'DECLARE_WAR', score, 'attack');
-                        } else {
+                        } else if (myBorderTiles > 0 && enemyBorderTiles > 0) {
+                            // Fallback should only consider reachable rivals; declaring on non-border
+                            // players creates pointless wars and breaks target-selection intent.
                             declareWarFallbackTargets.push({ r: baseLocation.r, c: baseLocation.c, score });
                         }
                     });
