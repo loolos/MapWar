@@ -926,8 +926,15 @@ export class GameEngine {
     }
 
     /**
-     * BFS from a starting cell, marking all owned tiles reachable from it
-     * as connected for the given player.
+     * BFS from a newly connected cell, marking owned tiles that reach the base
+     * *through it* as connected.
+     *
+     * Only tiles currently flagged disconnected are expanded into. That is exact for the
+     * additive case this serves: every other owned tile's flag was already correct, so a
+     * tile reachable via an already-connected neighbour was already connected itself.
+     * Skipping them turns this from a walk of the player's whole territory — repeated
+     * after every committed action — into a walk of just the pocket being reconnected,
+     * which is usually empty.
      */
     /**
      * Scratch "visited" buffer for markConnectedFrom, reused across calls.
@@ -962,6 +969,9 @@ export class GameEngine {
             if (visited[key] === mark) return;
             const cell = this.state.grid[nr][nc];
             if (cell.owner !== playerId) return;
+            // Already-connected tiles reach the base without us; nothing beyond them can
+            // be newly connected by this addition.
+            if (cell.isConnected) return;
 
             cell.isConnected = true;
             visited[key] = mark;
@@ -1562,24 +1572,29 @@ export class GameEngine {
         let conflict = false;
         let tension = false;
 
-        // Only the current player's own tiles can raise doom or tension, so walk the
-        // ownership index rather than the whole grid — this runs after every committed
-        // action, which for an AI turn means dozens of times.
-        this.state.forEachOwnedCell(pid, (cell, r, c) => {
-            if (doom) return;
-
-            const hasEnemyNeighbor = this.hasEnemyNeighbor(r, c, pid);
-            if (!hasEnemyNeighbor) return;
-
-            // Conflict: Recent skirmishes?
-            // We can track lastTurnAttacks. For now, check if I am adjacent to Enemy everywhere (Frontline density)
-            tension = true;
-
-            // Doom: Enemy adjacent to My Base
-            if (cell.building === 'base') {
+        // Doom: Enemy adjacent to My Base. The base position is already cached, so this
+        // costs four neighbour reads rather than a search.
+        const base = this.state.baseLocations.get(pid ?? '') ?? null;
+        if (base) {
+            const baseCell = this.state.getCell(base.r, base.c);
+            if (baseCell && baseCell.owner === pid && this.hasEnemyNeighbor(base.r, base.c, pid)) {
                 doom = true;
             }
-        });
+        }
+
+        // Tension: am I adjacent to an enemy anywhere? Only my own tiles can be, and one
+        // is enough — this runs after every committed action, dozens of times per AI turn.
+        if (!doom) {
+            this.state.forEachOwnedCell(pid, (_cell, r, c) => {
+                // Conflict: Recent skirmishes?
+                // We can track lastTurnAttacks. For now, check if I am adjacent to Enemy everywhere (Frontline density)
+                if (this.hasEnemyNeighbor(r, c, pid)) {
+                    tension = true;
+                    return false;
+                }
+                return true;
+            });
+        }
 
         // Check recent history for Conflict
         // If last player action was Attack, or lost units

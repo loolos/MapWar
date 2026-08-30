@@ -482,8 +482,11 @@ export class GameState {
     /**
      * Visit every cell a player owns without allocating an intermediate array.
      * Preferred over `getOwnedCells` in per-turn hot paths.
+     *
+     * Returning `false` from `visit` stops the walk, for callers that only need to know
+     * whether some tile qualifies.
      */
-    public forEachOwnedCell(playerId: PlayerID, visit: (cell: Cell, r: number, c: number) => void): void {
+    public forEachOwnedCell(playerId: PlayerID, visit: (cell: Cell, r: number, c: number) => void | boolean): void {
         const ownedSet = this.ownedCellsByPlayer.get(playerId);
         if (!ownedSet || ownedSet.size === 0) return;
 
@@ -491,7 +494,7 @@ export class GameState {
         for (const cellKey of ownedSet) {
             const r = Math.floor(cellKey / width);
             const c = cellKey % width;
-            visit(this.grid[r][c], r, c);
+            if (visit(this.grid[r][c], r, c) === false) return;
         }
     }
     
