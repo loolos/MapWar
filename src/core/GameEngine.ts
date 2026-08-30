@@ -929,41 +929,55 @@ export class GameEngine {
      * BFS from a starting cell, marking all owned tiles reachable from it
      * as connected for the given player.
      */
+    /**
+     * Scratch "visited" buffer for markConnectedFrom, reused across calls.
+     * Each pass writes a fresh generation number instead of clearing the buffer.
+     */
+    private connectivityStamps: Int32Array = new Int32Array(0);
+    private connectivityGeneration: number = 0;
+
     private markConnectedFrom(startR: number, startC: number, playerId: string): void {
         const startCell = this.state.getCell(startR, startC);
         if (!startCell || startCell.owner !== playerId) return;
 
         const height = this.state.grid.length;
         const width = height > 0 ? this.state.grid[0].length : 0;
-        const queue: { r: number; c: number }[] = [{ r: startR, c: startC }];
-        const visited = new Set<string>([`${startR},${startC}`]);
+
+        // Numeric cell keys (r*width + c) keep this allocation-free: it runs for every
+        // committed action, which is dozens of times per AI turn.
+        const queue: number[] = [startR * width + startC];
+        const cellCount = height * width;
+        if (this.connectivityStamps.length < cellCount) {
+            this.connectivityStamps = new Int32Array(cellCount);
+            this.connectivityGeneration = 0;
+        }
+        const visited = this.connectivityStamps;
+        const mark = ++this.connectivityGeneration;
+        visited[queue[0]] = mark;
 
         startCell.isConnected = true;
 
-        const dirs = [
-            { r: -1, c: 0 }, { r: 1, c: 0 },
-            { r: 0, c: -1 }, { r: 0, c: 1 }
-        ];
+        const visit = (nr: number, nc: number) => {
+            const key = nr * width + nc;
+            if (visited[key] === mark) return;
+            const cell = this.state.grid[nr][nc];
+            if (cell.owner !== playerId) return;
+
+            cell.isConnected = true;
+            visited[key] = mark;
+            queue.push(key);
+        };
 
         let head = 0;
         while (head < queue.length) {
             const curr = queue[head++];
+            const r = (curr / width) | 0;
+            const c = curr - r * width;
 
-            for (const d of dirs) {
-                const nr = curr.r + d.r;
-                const nc = curr.c + d.c;
-                if (nr < 0 || nr >= height || nc < 0 || nc >= width) continue;
-
-                const key = `${nr},${nc}`;
-                if (visited.has(key)) continue;
-
-                const cell = this.state.getCell(nr, nc);
-                if (!cell || cell.owner !== playerId) continue;
-
-                cell.isConnected = true;
-                visited.add(key);
-                queue.push({ r: nr, c: nc });
-            }
+            if (r > 0) visit(r - 1, c);
+            if (r < height - 1) visit(r + 1, c);
+            if (c > 0) visit(r, c - 1);
+            if (c < width - 1) visit(r, c + 1);
         }
     }
 
@@ -1513,6 +1527,22 @@ export class GameEngine {
         this.emit('musicState', tensionState);
     }
 
+    /**
+     * True when any of the four orthogonal neighbours is owned by someone other than
+     * `playerId`. Avoids the array getNeighbors() allocates on every call.
+     */
+    private hasEnemyNeighbor(r: number, c: number, playerId: string | null): boolean {
+        const up = this.state.getCell(r - 1, c);
+        if (up && up.owner && up.owner !== playerId) return true;
+        const down = this.state.getCell(r + 1, c);
+        if (down && down.owner && down.owner !== playerId) return true;
+        const left = this.state.getCell(r, c - 1);
+        if (left && left.owner && left.owner !== playerId) return true;
+        const right = this.state.getCell(r, c + 1);
+        if (right && right.owner && right.owner !== playerId) return true;
+        return false;
+    }
+
     private calculateTensionState(): 'PEACE' | 'TENSION' | 'CONFLICT' | 'DOOM' {
         // 1. DOOM: Any owned Base under direct threat (HP < Max) OR very low total units/land count compared to enemy?
         // Simple Doom Check: My Base HP < 100? (Base HP not fully implemented yet, let's assume HP checks or Enemy Adjacency to Base)
@@ -1522,34 +1552,24 @@ export class GameEngine {
         let conflict = false;
         let tension = false;
 
-        // Scan Grid for critical states
-        const height = this.state.grid.length;
-        const width = height > 0 ? this.state.grid[0].length : 0;
-        for (let r = 0; r < height; r++) {
-            for (let c = 0; c < width; c++) {
-                const cell = this.state.grid[r][c];
+        // Only the current player's own tiles can raise doom or tension, so walk the
+        // ownership index rather than the whole grid — this runs after every committed
+        // action, which for an AI turn means dozens of times.
+        this.state.forEachOwnedCell(pid, (cell, r, c) => {
+            if (doom) return;
 
-                // Doom: Enemy adjacent to My Base
-                if (cell.owner === pid && cell.building === 'base') {
-                    const neighbors = this.state.getNeighbors(r, c);
-                    if (neighbors.some((n: any) => n.owner && n.owner !== pid)) {
-                        doom = true;
-                    }
-                }
+            const hasEnemyNeighbor = this.hasEnemyNeighbor(r, c, pid);
+            if (!hasEnemyNeighbor) return;
 
-                // Conflict: Recent skirmishes? 
-                // We can track lastTurnAttacks. For now, check if I am adjacent to Enemy everywhere (Frontline density)
-                if (cell.owner === pid) {
-                    const neighbors = this.state.getNeighbors(r, c);
-                    if (neighbors.some((n: any) => {
-                        const isEnemy = n.owner && n.owner !== pid;
-                        return isEnemy;
-                    })) {
-                        tension = true;
-                    }
-                }
+            // Conflict: Recent skirmishes?
+            // We can track lastTurnAttacks. For now, check if I am adjacent to Enemy everywhere (Frontline density)
+            tension = true;
+
+            // Doom: Enemy adjacent to My Base
+            if (cell.building === 'base') {
+                doom = true;
             }
-        }
+        });
 
         // Check recent history for Conflict
         // If last player action was Attack, or lost units
@@ -2010,19 +2030,13 @@ export class GameEngine {
 
         let enclaveFound = false;
 
-        // Iterate grid to find disconnected cells owned by playerId
-        const height = this.state.grid.length;
-        const width = height > 0 ? this.state.grid[0].length : 0;
-        for (let r = 0; r < height; r++) {
-            for (let c = 0; c < width; c++) {
-                const cell = this.state.getCell(r, c);
-                if (!cell) continue;
-                // If I own it, and it is NOT connected
-                if (cell.owner === playerId && !cell.isConnected) {
-                    enclaveFound = true;
-                }
+        // Only this player's own tiles can be enclaves, so walk the ownership index
+        // instead of the grid.
+        this.state.forEachOwnedCell(playerId, (cell) => {
+            if (!cell.isConnected) {
+                enclaveFound = true;
             }
-        }
+        });
 
         if (enclaveFound) {
             this.emit('logMessage', { text: `Supply line cut! Enclaves detected for ${playerId}.`, type: 'warning' });

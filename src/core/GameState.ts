@@ -21,6 +21,12 @@ export class GameState {
     private ownedCellsByPlayer: Map<PlayerID, Set<number>> = new Map();
     /** Grid width the keys in `ownedCellsByPlayer` were built with. */
     private indexWidth: number = 0;
+    /**
+     * Scratch "visited" buffer for connectivity flood fills, reused across calls.
+     * Each pass writes a fresh generation number instead of clearing the buffer.
+     */
+    private visitStamps: Int32Array = new Int32Array(0);
+    private visitGeneration: number = 0;
     /** Snapshot of the base map (no bases/ownership). */
     private baseMapSnapshot: ReturnType<Cell['serialize']>[][] = [];
     /** Spawn points used for current map generation. */
@@ -570,6 +576,16 @@ export class GameState {
         if (type === 'base' && owner) {
             this.baseLocations.set(owner, { r: row, c: col });
         }
+
+        // Keep the cached citadel position in step, the same way base positions are cached.
+        if (type === 'citadel') {
+            this.citadelLocation = { r: row, c: col };
+        } else if (previousBuilding === 'citadel') {
+            const cached = this.citadelLocation;
+            if (cached && cached.r === row && cached.c === col) {
+                this.cacheCitadelLocation();
+            }
+        }
     }
 
     public getBaseLocation(playerId: PlayerID): { r: number; c: number } | null {
@@ -635,16 +651,10 @@ export class GameState {
         // We only need to recalculate if ownership changed, which is handled in commitActions().
         // No need to update connectivity here for performance optimization.
 
-        // Citadel: update turns held for accruing player
-        for (let r = 0; r < this.grid.length; r++) {
-            for (let c = 0; c < (this.grid[0]?.length ?? 0); c++) {
-                const cell = this.grid[r][c];
-                if (cell.building === 'citadel' && cell.owner === playerId) {
-                    const held = (this.players[playerId].citadelTurnsHeld ?? 0) + 1;
-                    this.players[playerId].citadelTurnsHeld = held;
-                    break;
-                }
-            }
+        // Citadel: update turns held for accruing player (position is cached at map load)
+        const citadel = this.citadelLocation ? this.getCell(this.citadelLocation.r, this.citadelLocation.c) : null;
+        if (citadel && citadel.building === 'citadel' && citadel.owner === playerId) {
+            this.players[playerId].citadelTurnsHeld = (this.players[playerId].citadelTurnsHeld ?? 0) + 1;
         }
 
         const previousAttackFactor = Math.max(1, this.players[playerId].attackCostFactor ?? 1);
@@ -784,14 +794,9 @@ export class GameState {
 
         let totalIncome = 0;
 
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
-                const cell = this.grid[r][c];
-                if (cell.owner === playerId) {
-                    totalIncome += this.getTileIncome(r, c);
-                }
-            }
-        }
+        this.forEachOwnedCell(playerId, (_cell, r, c) => {
+            totalIncome += this.getTileIncome(r, c);
+        });
 
         return totalIncome; // Return float for precise display
     }
@@ -805,58 +810,66 @@ export class GameState {
         const width = height > 0 ? this.grid[0].length : 0;
         if (height === 0 || width === 0) return;
 
-        // 1. Find Base(s) and Reset Connectivity
-        const queue: { r: number, c: number }[] = [];
-        const ownedCells: { r: number, c: number }[] = [];
+        // 1. Find Base(s) and Reset Connectivity.
+        // Only this player's tiles are involved, so walk the ownership index.
+        // The BFS queue and visited set use numeric cell keys (r*width + c) to avoid
+        // allocating a pair of objects and a string per visited tile.
+        const queue: number[] = [];
 
-        for (let r = 0; r < height; r++) {
-            for (let c = 0; c < width; c++) {
-                const cell = this.grid[r][c];
-                if (cell.owner === playerId) {
-                    ownedCells.push({ r, c });
-                    // Default to false first, we will mark true if found
-                    cell.isConnected = false;
+        this.forEachOwnedCell(playerId, (cell, r, c) => {
+            // Default to false first, we will mark true if found
+            cell.isConnected = false;
 
-                    if (cell.building === 'base') {
-                        cell.isConnected = true; // Base is always connected to itself
-                        queue.push({ r, c });
-                    }
-                }
+            if (cell.building === 'base') {
+                cell.isConnected = true; // Base is always connected to itself
+                queue.push(r * width + c);
             }
-        }
+        });
 
         // 2. BFS
-        const visited = new Set<string>();
-        queue.forEach(q => visited.add(`${q.r},${q.c}`));
-
-        // Directions: Up, Down, Left, Right
-        const dirs = [
-            { r: -1, c: 0 }, { r: 1, c: 0 },
-            { r: 0, c: -1 }, { r: 0, c: 1 }
-        ];
+        const cellCount = height * width;
+        if (this.visitStamps.length < cellCount) {
+            this.visitStamps = new Int32Array(cellCount);
+            this.visitGeneration = 0;
+        }
+        const visited = this.visitStamps;
+        const mark = ++this.visitGeneration;
+        for (const key of queue) visited[key] = mark;
 
         let head = 0;
         while (head < queue.length) {
             const curr = queue[head++];
+            const r = (curr / width) | 0;
+            const c = curr - r * width;
 
-            for (const d of dirs) {
-                const nr = curr.r + d.r;
-                const nc = curr.c + d.c;
-
-                // Bounds Check using dynamic dimensions
-                if (nr >= 0 && nr < height && nc >= 0 && nc < width) {
-                    const key = `${nr},${nc}`;
-                    const neighbor = this.grid[nr][nc];
-
-                    // If owned by same player and not visited
-                    if (neighbor.owner === playerId && !visited.has(key)) {
-                        visited.add(key);
-                        neighbor.isConnected = true;
-                        queue.push({ r: nr, c: nc });
-                    }
-                }
-            }
+            // Neighbours: Up, Down, Left, Right
+            if (r > 0) this.enqueueIfOwned(queue, visited, mark, r - 1, c, width, playerId);
+            if (r < height - 1) this.enqueueIfOwned(queue, visited, mark, r + 1, c, width, playerId);
+            if (c > 0) this.enqueueIfOwned(queue, visited, mark, r, c - 1, width, playerId);
+            if (c < width - 1) this.enqueueIfOwned(queue, visited, mark, r, c + 1, width, playerId);
         }
+    }
+
+    /**
+     * BFS step shared by connectivity flood fills: mark an in-bounds neighbour connected
+     * and queue it when this player owns it and it has not been seen yet.
+     */
+    private enqueueIfOwned(
+        queue: number[],
+        visited: Int32Array,
+        mark: number,
+        r: number,
+        c: number,
+        width: number,
+        playerId: PlayerID
+    ): void {
+        const key = r * width + c;
+        if (visited[key] === mark) return;
+        const neighbor = this.grid[r][c];
+        if (neighbor.owner !== playerId) return;
+        visited[key] = mark;
+        neighbor.isConnected = true;
+        queue.push(key);
     }
 
     public isAdjacentToOwned(row: number, col: number, playerId: PlayerID): boolean {
