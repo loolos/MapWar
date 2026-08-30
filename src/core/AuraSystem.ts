@@ -5,6 +5,36 @@ import { Cell } from './Cell';
 export class AuraSystem {
 
     /**
+     * Largest Manhattan radius any support aura (base or watchtower/lighthouse) can reach.
+     * Sources farther away than this can never apply, so scans only need to cover the
+     * diamond of this radius around the target instead of the whole grid.
+     */
+    private static maxSupportRange(): number {
+        const baseRange = GameConfig.BASE_SUPPORT_RANGE_BASE
+            + (GameConfig.UPGRADE_DEFENSE_MAX * GameConfig.BASE_SUPPORT_RANGE_PER_LEVEL);
+        let towerRange = 0;
+        for (const range of GameConfig.WATCHTOWER_RANGES) {
+            if (range > towerRange) towerRange = range;
+        }
+        return Math.max(baseRange, towerRange);
+    }
+
+    /**
+     * Largest Manhattan radius a base income aura can reach.
+     */
+    private static maxIncomeRange(): number {
+        return GameConfig.UPGRADE_INCOME_MAX;
+    }
+
+    /**
+     * Largest Manhattan radius a base defence aura can reach.
+     */
+    private static maxDefenseRange(): number {
+        return GameConfig.BASE_SUPPORT_RANGE_BASE
+            + (GameConfig.UPGRADE_DEFENSE_MAX * GameConfig.BASE_SUPPORT_RANGE_PER_LEVEL);
+    }
+
+    /**
      * Calculates the maximum discount available for an attack on a specific target tile.
      * The discount is provided by nearby friendly Bases or Watchtowers.
      * 
@@ -20,11 +50,21 @@ export class AuraSystem {
         let maxDiscount = 0;
         let bestSource: Cell | null = null;
 
-        // Optimization: Could scan only nearby tiles, but Grid scan is fine for 10x10.
-        // We scan for SOURCES owned by ATTACKER.
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
-                const cell = state.getCell(r, c);
+        // Only tiles within the largest possible aura radius can contribute, so we walk
+        // that diamond in row-major order instead of scanning the whole grid.
+        const height = state.grid.length;
+        const width = height > 0 ? state.grid[0].length : 0;
+        const maxRange = this.maxSupportRange();
+        const rowStart = Math.max(0, targetRow - maxRange);
+        const rowEnd = Math.min(height - 1, targetRow + maxRange);
+
+        for (let r = rowStart; r <= rowEnd; r++) {
+            const rowSpan = maxRange - Math.abs(r - targetRow);
+            const colStart = Math.max(0, targetCol - rowSpan);
+            const colEnd = Math.min(width - 1, targetCol + rowSpan);
+            const gridRow = state.grid[r];
+            for (let c = colStart; c <= colEnd; c++) {
+                const cell = gridRow[c];
                 if (!cell || cell.owner !== attackerId || !cell.isConnected) continue;
 
                 // Check for Aura Sources
@@ -123,9 +163,21 @@ export class AuraSystem {
     static getIncomeAuraBonus(state: GameState, r: number, c: number, playerId: string): number {
         let maxBonus = 0;
 
-        for (let row = 0; row < GameConfig.GRID_HEIGHT; row++) {
-            for (let col = 0; col < GameConfig.GRID_WIDTH; col++) {
-                const cell = state.getCell(row, col);
+        // A base can only reach `incomeLevel` tiles away, so bases outside the maximum
+        // upgrade radius are irrelevant: walk that diamond instead of the whole grid.
+        const height = state.grid.length;
+        const width = height > 0 ? state.grid[0].length : 0;
+        const maxRange = this.maxIncomeRange();
+        const rowStart = Math.max(0, r - maxRange);
+        const rowEnd = Math.min(height - 1, r + maxRange);
+
+        for (let row = rowStart; row <= rowEnd; row++) {
+            const rowSpan = maxRange - Math.abs(row - r);
+            const colStart = Math.max(0, c - rowSpan);
+            const colEnd = Math.min(width - 1, c + rowSpan);
+            const gridRow = state.grid[row];
+            for (let col = colStart; col <= colEnd; col++) {
+                const cell = gridRow[col];
                 // Check for own Base with Income Level > 0
                 if (cell && cell.owner === playerId && cell.building === 'base' && cell.incomeLevel > 0) {
                     const dist = Math.abs(row - r) + Math.abs(col - c);
@@ -183,11 +235,21 @@ export class AuraSystem {
         }
 
         // 2. Base Defense (Range based on Support Range)
-        // Iterate grid to find owned Bases
-        // Optimization: Could limit loop if grid is large, but 10x10 is fine.
-        for (let row = 0; row < GameConfig.GRID_HEIGHT; row++) {
-            for (let col = 0; col < GameConfig.GRID_WIDTH; col++) {
-                const cell = state.getCell(row, col);
+        // Only bases within the maximum possible support radius can cover this tile,
+        // so we walk that diamond rather than the whole grid.
+        const height = state.grid.length;
+        const width = height > 0 ? state.grid[0].length : 0;
+        const maxRange = this.maxDefenseRange();
+        const rowStart = Math.max(0, r - maxRange);
+        const rowEnd = Math.min(height - 1, r + maxRange);
+
+        for (let row = rowStart; row <= rowEnd; row++) {
+            const rowSpan = maxRange - Math.abs(row - r);
+            const colStart = Math.max(0, c - rowSpan);
+            const colEnd = Math.min(width - 1, c + rowSpan);
+            const gridRow = state.grid[row];
+            for (let col = colStart; col <= colEnd; col++) {
+                const cell = gridRow[col];
                 if (cell && cell.owner === ownerId && cell.building === 'base' && cell.isConnected) {
                     // Range Logic: Same as Support Range?
                     // User Request: "Range and ... same as [Support Aura]"
