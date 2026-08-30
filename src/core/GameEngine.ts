@@ -1479,12 +1479,22 @@ export class GameEngine {
 
     // New: Explicit Cost Check
     checkMoveCost(row: number, col: number, isAction: boolean = false): { valid: boolean; reason?: string } {
+        return this.checkMoveAffordable(row, col, this.getMoveCost(row, col), isAction);
+    }
+
+    /**
+     * Same check as checkMoveCost, for callers that already know the move's cost.
+     *
+     * Computing a move cost means walking the aura and distance rules, so the AI —
+     * which needs the number itself for scoring — would otherwise pay for it twice
+     * per candidate tile.
+     */
+    checkMoveAffordable(row: number, col: number, thisMoveCost: number, isAction: boolean = false): { valid: boolean; reason?: string } {
         const playerId = this.state.currentPlayerId;
         if (!playerId) return { valid: false, reason: "No active player" };
         const player = this.state.getCurrentPlayer();
 
         const plannedCost = this.calculatePlannedCost();
-        const thisMoveCost = this.getMoveCost(row, col);
 
         if (player.gold < plannedCost + thisMoveCost) {
             let reason = `Not enough gold(Need ${this.formatLogNumber(thisMoveCost)})`;
