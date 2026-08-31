@@ -2,10 +2,14 @@ import type { PlayerID } from './GameConfig';
 
 import { type CellType } from './GameConfig';
 
+/**
+ * Notified whenever a cell's owner changes, so owners can keep derived indexes in sync.
+ */
+export type CellOwnerObserver = (cell: Cell, previousOwner: PlayerID, nextOwner: PlayerID) => void;
+
 export class Cell {
     row: number;
     col: number;
-    owner: PlayerID;
     unit: any | null; // Placeholder for Unit class
     building: 'base' | 'town' | 'gold_mine' | 'wall' | 'farm' | 'citadel' | 'lighthouse' | 'none';
     isConnected: boolean;
@@ -28,10 +32,35 @@ export class Cell {
     /** Treasure/flotsam overlay: null = none, number = gold amount (50–200). */
     treasureGold: number | null;
 
+    private _owner: PlayerID;
+
+    /**
+     * Hook used by GameState to mirror ownership into its per-player index.
+     *
+     * Ownership is exposed as an accessor rather than a plain field so that the index
+     * stays exact no matter how the owner is set — `GameState.setOwner()`, deserialization,
+     * or a direct `cell.owner = 'P1'` assignment. Hot paths can therefore iterate a
+     * player's tiles from the index instead of scanning the whole grid.
+     */
+    ownerObserver: CellOwnerObserver | null;
+
+    /** The player owning this cell, or null when unowned. */
+    get owner(): PlayerID {
+        return this._owner;
+    }
+
+    set owner(next: PlayerID) {
+        const previous = this._owner;
+        if (previous === next) return;
+        this._owner = next;
+        if (this.ownerObserver) this.ownerObserver(this, previous, next);
+    }
+
     constructor(row: number, col: number) {
         this.row = row;
         this.col = col;
-        this.owner = null;
+        this._owner = null;
+        this.ownerObserver = null;
         this.unit = null;
         this.building = 'none';
         this.isConnected = true;

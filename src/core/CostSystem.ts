@@ -171,22 +171,23 @@ export class CostSystem {
     }
 
     static getDistanceToNearestConnected(state: GameState, targetR: number, targetC: number, playerId: string, _pendingMoves: { r: number, c: number }[] = []): number {
+        // Fast paths: the two smallest distances cover the overwhelming majority of calls
+        // (attacks are almost always launched from the front line), so check them directly
+        // before touching the rest of the player's territory.
+        const targetCell = state.getCell(targetR, targetC);
+        if (targetCell && targetCell.owner === playerId && targetCell.isConnected) return 0;
+        if (state.isAdjacentToConnected(targetR, targetC, playerId)) return 1;
+
         let minDist = Infinity;
 
-        // Iterate all cells to find owned & connected ones
-        const height = state.grid.length;
-        const width = height > 0 ? state.grid[0].length : 0;
-        for (let r = 0; r < height; r++) {
-            for (let c = 0; c < width; c++) {
-                const cell = state.getCell(r, c);
-                if (cell && cell.owner === playerId && cell.isConnected) {
-                    const dist = Math.abs(r - targetR) + Math.abs(c - targetC);
-                    if (dist < minDist) {
-                        minDist = dist;
-                    }
-                }
+        // Walk only the player's own tiles via the ownership index, not the whole grid.
+        state.forEachOwnedCell(playerId, (cell, r, c) => {
+            if (!cell.isConnected) return;
+            const dist = Math.abs(r - targetR) + Math.abs(c - targetC);
+            if (dist < minDist) {
+                minDist = dist;
             }
-        }
+        });
 
         // Also check Pending Moves?
         // User Requirement: "Manhattan Distance to nearest connected own cell"

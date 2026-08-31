@@ -67,14 +67,57 @@ Primary facade for gameplay operations:
 ### 4.4 `CostSystem`
 - Central place for cost computation and multipliers (terrain, distance, defense, events, etc.).
 - Should remain source-of-truth for both UI estimates and execution-time checks.
+- `getCostDetails` runs once per AI candidate tile, so it is a hot path. Callers that
+  need both the cost and an affordability verdict should call `getMoveCost` once and pass
+  the result to `GameEngine.checkMoveAffordable` rather than calling `checkMoveCost`,
+  which prices the move itself.
 
 ### 4.5 `AuraSystem`
 - Evaluates local support/defense effects (e.g., walls/watchtowers/base aura).
 - Used by cost/validation and strategic overlays.
+- Its three lookups scan only the diamond of the largest radius an aura of that kind can
+  reach, not the whole grid. If a config change lets an aura reach further, update the
+  matching `maxSupportRange` / `maxIncomeRange` / `maxDefenseRange` helper or the lookup
+  will silently miss distant sources.
 
 ### 4.6 `TurnEventSystem`
 - Schedules and resolves random/forced/persistent events by round.
 - Supports prechecks, deferral behavior, and selected-player targeting.
+
+### 4.7 Derived caches and the AI's cost of thinking
+
+`GameState` keeps several indexes that the engine and AI read instead of scanning the
+grid. They are what keeps an AI turn cheap, and they are only useful while they are exact:
+
+- `ownedCellsByPlayer` — every tile each player owns. Read via `getOwnedCells`,
+  `getOwnedCellCount` or `forEachOwnedCell` (allocation-free, and stops early if the
+  visitor returns `false`). Kept exact by `Cell.owner` being an accessor that reports
+  changes back through `attachOwnershipIndex`, so it survives direct
+  `cell.owner = ...` writes such as the flood event's.
+- `baseLocations`, `citadelLocation`, `lighthouseLocations` — static-ish positions,
+  maintained in `setOwner` / `setBuilding`. Any new code path that changes a cell's
+  building must go through `setBuilding` or refresh these itself.
+
+If you replace the `grid` array, call `attachOwnershipIndex()` afterwards — `setupBases()`
+and `deserialize()` already do.
+
+The AI commits one action at a time, so everything `commitActions` does runs dozens of
+times per turn. Keep that path proportional to what changed, not to the grid: connectivity
+updates expand only into tiles currently flagged disconnected, flood fills mark visits in a
+reusable generation-stamped `Int32Array`, and the tension check stops at the first answer.
+
+`npm run ai:selfplay:benchmark -- --full` enforces the budget (avg ≤ 15ms, max ≤ 100ms)
+across sizes and map types. The tightest case is the largest supported map, which the
+matrix does not cover:
+
+```bash
+npm run ai:selfplay:benchmark -- --width 40 --height 40 --players 8 --turns 60
+```
+
+`npm run ai:trace` replays 20 seeded self-play scenarios with `Math.random` stubbed and
+prints a hash per scenario. Capture it before a performance change and diff it after: an
+identical hash means the AI makes exactly the same decisions, so the change was pure
+speed. A differing hash means the change altered play and needs justifying on its own.
 
 ## 5. UI System Decomposition
 

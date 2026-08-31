@@ -1,4 +1,4 @@
-import { Cell } from './Cell';
+import { Cell, type CellOwnerObserver } from './Cell';
 import { GameConfig, type Player, type PlayerID } from './GameConfig';
 import { MapGenerator, type MapType } from './map/MapGenerator';
 import { AuraSystem } from './AuraSystem';
@@ -19,6 +19,14 @@ export class GameState {
     baseLocations: Map<string, { r: number; c: number }> = new Map();
     /** Per-player owned cell index: Map<PlayerID, Set<cellKey>> where cellKey = r*width + c */
     private ownedCellsByPlayer: Map<PlayerID, Set<number>> = new Map();
+    /** Grid width the keys in `ownedCellsByPlayer` were built with. */
+    private indexWidth: number = 0;
+    /**
+     * Scratch "visited" buffer for connectivity flood fills, reused across calls.
+     * Each pass writes a fresh generation number instead of clearing the buffer.
+     */
+    private visitStamps: Int32Array = new Int32Array(0);
+    private visitGeneration: number = 0;
     /** Snapshot of the base map (no bases/ownership). */
     private baseMapSnapshot: ReturnType<Cell['serialize']>[][] = [];
     /** Spawn points used for current map generation. */
@@ -142,7 +150,59 @@ export class GameState {
         }
     }
 
+    /**
+     * Keeps `ownedCellsByPlayer` in step with a single cell's ownership change.
+     */
+    private readonly onCellOwnerChanged: CellOwnerObserver = (cell, previousOwner, nextOwner) => {
+        const key = cell.row * this.indexWidth + cell.col;
+        if (previousOwner) {
+            this.ownedCellsByPlayer.get(previousOwner)?.delete(key);
+        }
+        if (nextOwner) {
+            let ownedSet = this.ownedCellsByPlayer.get(nextOwner);
+            if (!ownedSet) {
+                ownedSet = new Set();
+                this.ownedCellsByPlayer.set(nextOwner, ownedSet);
+            }
+            ownedSet.add(key);
+        }
+    };
+
+    /**
+     * Rebuild the ownership index from the grid and subscribe to every cell.
+     *
+     * After this runs the index is exact and stays exact, because Cell reports every
+     * ownership change back to us — including direct `cell.owner = 'P1'` assignments.
+     * Hot paths (income, connectivity, distance, tension) can therefore iterate a player's
+     * tiles from the index instead of scanning the whole grid.
+     *
+     * Must be called whenever the `grid` array is rebuilt or reloaded.
+     */
+    private attachOwnershipIndex(): void {
+        const height = this.grid.length;
+        this.indexWidth = height > 0 ? this.grid[0].length : 0;
+        this.ownedCellsByPlayer.clear();
+
+        for (let r = 0; r < height; r++) {
+            const row = this.grid[r];
+            for (let c = 0; c < this.indexWidth; c++) {
+                const cell = row[c];
+                cell.ownerObserver = this.onCellOwnerChanged;
+                if (cell.owner) {
+                    let ownedSet = this.ownedCellsByPlayer.get(cell.owner);
+                    if (!ownedSet) {
+                        ownedSet = new Set();
+                        this.ownedCellsByPlayer.set(cell.owner, ownedSet);
+                    }
+                    ownedSet.add(r * this.indexWidth + c);
+                }
+            }
+        }
+    }
+
     private setupBases() {
+        this.attachOwnershipIndex();
+
         // Distributed Spawning Logic
         // Place players evenly along an inset rectangle/ellipse
         const count = this.playerOrder.length;
@@ -385,7 +445,7 @@ export class GameState {
         if (!playerId) return;
         const ownedSet = this.ownedCellsByPlayer.get(playerId);
         if (!ownedSet) return;
-        const width = this.grid.length > 0 ? this.grid[0].length : 0;
+        const width = this.indexWidth;
         for (const cellKey of ownedSet) {
             const r = Math.floor(cellKey / width);
             const c = cellKey % width;
@@ -397,43 +457,45 @@ export class GameState {
     }
     
     /**
-     * Get owned cells for a player (O(1) lookup via index, no full grid scan).
+     * Get owned cells for a player from the ownership index (no grid scan).
      * Returns array of {r, c} positions.
-     * If index is empty but cells exist (e.g., from direct cell.owner assignment in tests),
-     * rebuilds the index automatically by scanning the grid once.
      */
     public getOwnedCells(playerId: PlayerID): { r: number; c: number }[] {
-        let ownedSet = this.ownedCellsByPlayer.get(playerId);
-        const width = this.grid.length > 0 ? this.grid[0].length : 0;
-        
-        // If index is empty, check if we need to rebuild (for test compatibility)
-        // This happens when tests directly set cell.owner without calling setOwner()
-        if (!ownedSet || ownedSet.size === 0) {
-            // Quick check: scan grid to see if index might be stale
-            const height = this.grid.length;
-            let foundAny = false;
-            for (let r = 0; r < height && !foundAny; r++) {
-                for (let c = 0; c < width && !foundAny; c++) {
-                    if (this.grid[r][c].owner === playerId) {
-                        foundAny = true;
-                    }
-                }
-            }
-            
-            // If we found owned cells but index is empty, rebuild index for this player
-            if (foundAny) {
-                this.rebuildOwnedCellsIndexForPlayer(playerId);
-                ownedSet = this.ownedCellsByPlayer.get(playerId);
-            }
-        }
-        
+        const ownedSet = this.ownedCellsByPlayer.get(playerId);
         if (!ownedSet || ownedSet.size === 0) return [];
-        
+
+        const width = this.indexWidth;
         const result: { r: number; c: number }[] = [];
         for (const cellKey of ownedSet) {
             result.push({ r: Math.floor(cellKey / width), c: cellKey % width });
         }
         return result;
+    }
+
+    /**
+     * Number of cells a player owns, without materialising the list.
+     */
+    public getOwnedCellCount(playerId: PlayerID): number {
+        return this.ownedCellsByPlayer.get(playerId)?.size ?? 0;
+    }
+
+    /**
+     * Visit every cell a player owns without allocating an intermediate array.
+     * Preferred over `getOwnedCells` in per-turn hot paths.
+     *
+     * Returning `false` from `visit` stops the walk, for callers that only need to know
+     * whether some tile qualifies.
+     */
+    public forEachOwnedCell(playerId: PlayerID, visit: (cell: Cell, r: number, c: number) => void | boolean): void {
+        const ownedSet = this.ownedCellsByPlayer.get(playerId);
+        if (!ownedSet || ownedSet.size === 0) return;
+
+        const width = this.indexWidth;
+        for (const cellKey of ownedSet) {
+            const r = Math.floor(cellKey / width);
+            const c = cellKey % width;
+            if (visit(this.grid[r][c], r, c) === false) return;
+        }
     }
     
     /**
@@ -441,7 +503,7 @@ export class GameState {
      * Public for test compatibility when tests directly set cell.owner.
      */
     public rebuildOwnedCellsIndexForPlayer(playerId: PlayerID): void {
-        const width = this.grid.length > 0 ? this.grid[0].length : 0;
+        const width = this.indexWidth;
         const ownedSet = new Set<number>();
         const height = this.grid.length;
         
@@ -461,8 +523,8 @@ export class GameState {
      * Public for test compatibility.
      */
     public rebuildAllOwnedCellsIndex(): void {
-        this.ownedCellsByPlayer.clear();
-        const width = this.grid.length > 0 ? this.grid[0].length : 0;
+        this.attachOwnershipIndex();
+        const width = this.indexWidth;
         const height = this.grid.length;
         
         for (let r = 0; r < height; r++) {
@@ -482,28 +544,9 @@ export class GameState {
         const cell = this.getCell(row, col);
         if (!cell) return;
         const previousOwner = cell.owner;
-        
-        const width = this.grid.length > 0 ? this.grid[0].length : 0;
-        const cellKey = row * width + col;
-        
-        // Remove from previous owner's set
-        if (cell.owner) {
-            const prevSet = this.ownedCellsByPlayer.get(cell.owner);
-            if (prevSet) {
-                prevSet.delete(cellKey);
-            }
-        }
-        
-        // Update cell
+
+        // The ownership index is kept in sync by the cell's owner observer.
         cell.owner = owner;
-        
-        // Add to new owner's set
-        if (owner) {
-            if (!this.ownedCellsByPlayer.has(owner)) {
-                this.ownedCellsByPlayer.set(owner, new Set());
-            }
-            this.ownedCellsByPlayer.get(owner)!.add(cellKey);
-        }
 
         if (cell.building === 'base') {
             if (previousOwner) {
@@ -535,6 +578,16 @@ export class GameState {
 
         if (type === 'base' && owner) {
             this.baseLocations.set(owner, { r: row, c: col });
+        }
+
+        // Keep the cached citadel position in step, the same way base positions are cached.
+        if (type === 'citadel') {
+            this.citadelLocation = { r: row, c: col };
+        } else if (previousBuilding === 'citadel') {
+            const cached = this.citadelLocation;
+            if (cached && cached.r === row && cached.c === col) {
+                this.cacheCitadelLocation();
+            }
         }
     }
 
@@ -601,16 +654,10 @@ export class GameState {
         // We only need to recalculate if ownership changed, which is handled in commitActions().
         // No need to update connectivity here for performance optimization.
 
-        // Citadel: update turns held for accruing player
-        for (let r = 0; r < this.grid.length; r++) {
-            for (let c = 0; c < (this.grid[0]?.length ?? 0); c++) {
-                const cell = this.grid[r][c];
-                if (cell.building === 'citadel' && cell.owner === playerId) {
-                    const held = (this.players[playerId].citadelTurnsHeld ?? 0) + 1;
-                    this.players[playerId].citadelTurnsHeld = held;
-                    break;
-                }
-            }
+        // Citadel: update turns held for accruing player (position is cached at map load)
+        const citadel = this.citadelLocation ? this.getCell(this.citadelLocation.r, this.citadelLocation.c) : null;
+        if (citadel && citadel.building === 'citadel' && citadel.owner === playerId) {
+            this.players[playerId].citadelTurnsHeld = (this.players[playerId].citadelTurnsHeld ?? 0) + 1;
         }
 
         const previousAttackFactor = Math.max(1, this.players[playerId].attackCostFactor ?? 1);
@@ -750,14 +797,9 @@ export class GameState {
 
         let totalIncome = 0;
 
-        for (let r = 0; r < GameConfig.GRID_HEIGHT; r++) {
-            for (let c = 0; c < GameConfig.GRID_WIDTH; c++) {
-                const cell = this.grid[r][c];
-                if (cell.owner === playerId) {
-                    totalIncome += this.getTileIncome(r, c);
-                }
-            }
-        }
+        this.forEachOwnedCell(playerId, (_cell, r, c) => {
+            totalIncome += this.getTileIncome(r, c);
+        });
 
         return totalIncome; // Return float for precise display
     }
@@ -771,58 +813,66 @@ export class GameState {
         const width = height > 0 ? this.grid[0].length : 0;
         if (height === 0 || width === 0) return;
 
-        // 1. Find Base(s) and Reset Connectivity
-        const queue: { r: number, c: number }[] = [];
-        const ownedCells: { r: number, c: number }[] = [];
+        // 1. Find Base(s) and Reset Connectivity.
+        // Only this player's tiles are involved, so walk the ownership index.
+        // The BFS queue and visited set use numeric cell keys (r*width + c) to avoid
+        // allocating a pair of objects and a string per visited tile.
+        const queue: number[] = [];
 
-        for (let r = 0; r < height; r++) {
-            for (let c = 0; c < width; c++) {
-                const cell = this.grid[r][c];
-                if (cell.owner === playerId) {
-                    ownedCells.push({ r, c });
-                    // Default to false first, we will mark true if found
-                    cell.isConnected = false;
+        this.forEachOwnedCell(playerId, (cell, r, c) => {
+            // Default to false first, we will mark true if found
+            cell.isConnected = false;
 
-                    if (cell.building === 'base') {
-                        cell.isConnected = true; // Base is always connected to itself
-                        queue.push({ r, c });
-                    }
-                }
+            if (cell.building === 'base') {
+                cell.isConnected = true; // Base is always connected to itself
+                queue.push(r * width + c);
             }
-        }
+        });
 
         // 2. BFS
-        const visited = new Set<string>();
-        queue.forEach(q => visited.add(`${q.r},${q.c}`));
-
-        // Directions: Up, Down, Left, Right
-        const dirs = [
-            { r: -1, c: 0 }, { r: 1, c: 0 },
-            { r: 0, c: -1 }, { r: 0, c: 1 }
-        ];
+        const cellCount = height * width;
+        if (this.visitStamps.length < cellCount) {
+            this.visitStamps = new Int32Array(cellCount);
+            this.visitGeneration = 0;
+        }
+        const visited = this.visitStamps;
+        const mark = ++this.visitGeneration;
+        for (const key of queue) visited[key] = mark;
 
         let head = 0;
         while (head < queue.length) {
             const curr = queue[head++];
+            const r = (curr / width) | 0;
+            const c = curr - r * width;
 
-            for (const d of dirs) {
-                const nr = curr.r + d.r;
-                const nc = curr.c + d.c;
-
-                // Bounds Check using dynamic dimensions
-                if (nr >= 0 && nr < height && nc >= 0 && nc < width) {
-                    const key = `${nr},${nc}`;
-                    const neighbor = this.grid[nr][nc];
-
-                    // If owned by same player and not visited
-                    if (neighbor.owner === playerId && !visited.has(key)) {
-                        visited.add(key);
-                        neighbor.isConnected = true;
-                        queue.push({ r: nr, c: nc });
-                    }
-                }
-            }
+            // Neighbours: Up, Down, Left, Right
+            if (r > 0) this.enqueueIfOwned(queue, visited, mark, r - 1, c, width, playerId);
+            if (r < height - 1) this.enqueueIfOwned(queue, visited, mark, r + 1, c, width, playerId);
+            if (c > 0) this.enqueueIfOwned(queue, visited, mark, r, c - 1, width, playerId);
+            if (c < width - 1) this.enqueueIfOwned(queue, visited, mark, r, c + 1, width, playerId);
         }
+    }
+
+    /**
+     * BFS step shared by connectivity flood fills: mark an in-bounds neighbour connected
+     * and queue it when this player owns it and it has not been seen yet.
+     */
+    private enqueueIfOwned(
+        queue: number[],
+        visited: Int32Array,
+        mark: number,
+        r: number,
+        c: number,
+        width: number,
+        playerId: PlayerID
+    ): void {
+        const key = r * width + c;
+        if (visited[key] === mark) return;
+        const neighbor = this.grid[r][c];
+        if (neighbor.owner !== playerId) return;
+        visited[key] = mark;
+        neighbor.isConnected = true;
+        queue.push(key);
     }
 
     public isAdjacentToOwned(row: number, col: number, playerId: PlayerID): boolean {
@@ -936,9 +986,6 @@ export class GameState {
 
         // Reset grid to new size
         this.grid = [];
-        
-        // Rebuild owned cells index
-        this.ownedCellsByPlayer.clear();
 
         for (let r = 0; r < height; r++) {
             this.grid[r] = [];
@@ -950,18 +997,11 @@ export class GameState {
                     throw new Error(`Invalid grid data at row ${r}, col ${c}`);
                 }
                 this.grid[r][c] = Cell.deserialize(data.grid[r][c]);
-                
-                // Rebuild owned cells index
-                const cell = this.grid[r][c];
-                if (cell.owner) {
-                    const cellKey = r * width + c;
-                    if (!this.ownedCellsByPlayer.has(cell.owner)) {
-                        this.ownedCellsByPlayer.set(cell.owner, new Set());
-                    }
-                    this.ownedCellsByPlayer.get(cell.owner)!.add(cellKey);
-                }
             }
         }
+
+        // Index the freshly built cells and subscribe to their ownership changes
+        this.attachOwnershipIndex();
 
         // Rebuild static map feature caches after load
         this.cacheCitadelLocation();
